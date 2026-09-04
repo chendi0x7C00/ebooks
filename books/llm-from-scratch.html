@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Build and test a compact GPT-style language model from first token to instruction tuning.">
+  <title>Build a Tiny LLM from Scratch — an executable field guide</title>
+  <style>
+    :root {
+      --ink:#143b35; --ink-2:#47625d; --paper:#fbf8f1; --card:#fffdf8;
+      --line:#d8d0c3; --mint:#dcebe6; --green:#2d7c6d; --coral:#de6b48;
+      --peach:#f5dfd5; --code:#102c28; --code-ink:#e8f5ef; --shadow:0 20px 54px #173c3420;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;color:var(--ink);background:var(--paper);font:17px/1.72 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body::before{content:"";position:fixed;inset:0 0 auto;height:4px;z-index:20;background:linear-gradient(90deg,var(--coral),#eba75f,var(--green));transform-origin:left;transform:scaleX(var(--reading,0))}
+    a{color:var(--green);text-underline-offset:3px}
+    a:hover{color:var(--coral)}
+    img{max-width:100%;display:block}
+    code,kbd{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+    .skip{position:absolute;left:-999px;top:8px;padding:.7rem 1rem;background:white;z-index:30}.skip:focus{left:8px}
+    .topbar{max-width:1180px;margin:auto;padding:22px 28px;display:flex;justify-content:space-between;align-items:center;gap:24px}
+    .brand{font-weight:800;letter-spacing:-.02em;color:var(--ink);text-decoration:none}.brand span{color:var(--coral)}
+    .topbar nav{display:flex;gap:22px;align-items:center;font-size:14px;font-weight:700}
+    .topbar nav a{text-decoration:none;color:var(--ink-2)}
+    .pill{border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:#ffffffaa}
+    .hero{max-width:1180px;margin:38px auto 72px;padding:0 28px;display:grid;grid-template-columns:1.2fr .8fr;gap:68px;align-items:center}
+    .eyebrow{font-size:13px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--coral)}
+    h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(46px,7.2vw,91px);line-height:.96;letter-spacing:-.055em;margin:18px 0 26px;font-weight:700}
+    h1 em{font-weight:400;color:var(--green)}
+    .lede{font-size:21px;line-height:1.55;color:var(--ink-2);max-width:720px}
+    .hero-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:34px;font-size:14px;color:var(--ink-2)}
+    .hero-meta strong{color:var(--ink)}
+    .terminal{background:var(--code);color:var(--code-ink);border-radius:24px;padding:24px;box-shadow:var(--shadow);transform:rotate(1.2deg)}
+    .terminal-head{display:flex;gap:8px;padding-bottom:18px;border-bottom:1px solid #ffffff22}.dot{width:10px;height:10px;border-radius:50%;background:var(--coral)}.dot:nth-child(2){background:#eab45c}.dot:nth-child(3){background:#6ab39f}
+    .terminal pre{margin:22px 0 0;white-space:pre-wrap;font-size:13px;line-height:1.8}.prompt{color:#8bd9c4}.value{color:#ffd39d}
+    .layout{max-width:1180px;margin:auto;padding:0 28px;display:grid;grid-template-columns:230px minmax(0,760px);gap:70px;align-items:start}
+    .toc{position:sticky;top:26px;border-left:1px solid var(--line);padding-left:20px;font-size:14px}
+    .toc strong{display:block;margin-bottom:12px}.toc a{display:block;padding:5px 0;color:var(--ink-2);text-decoration:none}.toc a:hover{color:var(--coral)}
+    main{min-width:0}
+    section{padding:12px 0 88px;scroll-margin-top:32px}
+    h2{font-family:Georgia,"Times New Roman",serif;font-size:clamp(34px,5vw,54px);line-height:1.05;letter-spacing:-.035em;margin:0 0 22px}
+    h3{font-size:23px;line-height:1.3;margin:38px 0 12px;letter-spacing:-.02em}
+    .kicker{color:var(--coral);font-weight:800;font-size:13px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:12px}
+    .section-intro{font-size:20px;color:var(--ink-2);margin-bottom:34px}
+    .callout{border-left:4px solid var(--coral);background:var(--peach);padding:18px 22px;border-radius:0 14px 14px 0;margin:28px 0}
+    .callout strong{display:block;margin-bottom:4px}
+    .diagram{margin:34px 0;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:white;box-shadow:0 12px 36px #173c3411}
+    .caption{font-size:13px;color:var(--ink-2);padding:12px 16px;border-top:1px solid var(--line)}
+    .shape-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:26px 0}
+    .shape{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.shape b{display:block;font-family:ui-monospace,monospace;color:var(--coral);font-size:14px}.shape span{font-size:14px;color:var(--ink-2)}
+    .equation{margin:24px 0;padding:24px;border-radius:16px;background:var(--mint);font:600 18px/1.6 ui-monospace,monospace;overflow:auto}.equation small{display:block;font:14px/1.6 Inter,system-ui,sans-serif;color:var(--ink-2);margin-top:8px}
+    .codebox{margin:28px 0;background:var(--code);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+    .codehead{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:11px 16px;border-bottom:1px solid #ffffff20;color:#b8d5cc;font-size:12px}.codehead button{border:0;border-radius:999px;background:#ffffff17;color:white;padding:7px 11px;cursor:pointer}
+    pre{margin:0;padding:20px;overflow:auto;color:var(--code-ink);font-size:13px;line-height:1.65}pre .cm{color:#83a69c}pre .kw{color:#ffb48f}pre .fn{color:#a7e2d0}
+    .checklist{list-style:none;padding:0;margin:24px 0}.checklist li{position:relative;padding:10px 0 10px 34px;border-bottom:1px solid var(--line)}.checklist li::before{content:"✓";position:absolute;left:4px;color:var(--green);font-weight:900}
+    .lab{border:1px solid var(--line);border-radius:20px;padding:22px;background:var(--card);margin:30px 0}.lab h3{margin-top:0}.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.controls label{font-size:13px;font-weight:800}.controls input{width:100%;margin-top:8px;accent-color:var(--coral)}.result{margin-top:20px;padding:16px;border-radius:12px;background:var(--mint);font-family:ui-monospace,monospace;font-size:14px}
+    .steps{counter-reset:step;display:grid;gap:14px}.step{counter-increment:step;display:grid;grid-template-columns:42px 1fr;gap:14px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--card)}.step::before{content:counter(step);width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:white;font-weight:800}.step b{display:block}.step p{margin:4px 0 0;color:var(--ink-2);font-size:15px}
+    table{width:100%;border-collapse:collapse;margin:24px 0;font-size:15px}th,td{text-align:left;vertical-align:top;padding:13px;border-bottom:1px solid var(--line)}th{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-2)}
+    .next{padding:34px;border-radius:24px;background:var(--ink);color:white}.next h2{color:white}.next p{color:#c6ddd5}.next a{display:inline-block;margin-top:10px;background:var(--coral);color:white;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:800}
+    footer{max-width:1180px;margin:30px auto 0;padding:34px 28px 60px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:30px;color:var(--ink-2);font-size:14px}
+    @media(max-width:850px){.hero{grid-template-columns:1fr;gap:32px}.terminal{transform:none}.layout{grid-template-columns:1fr}.toc{position:static;columns:2;border-left:0;border-top:1px solid var(--line);padding:18px 0}.shape-grid,.controls{grid-template-columns:1fr}.topbar nav a:not(.pill){display:none}}
+    @media(max-width:520px){body{font-size:16px}.topbar,.hero,.layout,footer{padding-left:18px;padding-right:18px}.toc{columns:1}.hero{margin-top:18px}.terminal{padding:17px}.next{padding:24px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.terminal{transform:none}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#article">Skip to tutorial</a>
+  <header class="topbar">
+    <a class="brand" href="#top">tiny<span>gpt</span>.fieldnotes</a>
+    <nav aria-label="Primary">
+      <a href="#run">Run it</a><a href="#sources">Sources</a>
+      <a class="pill" href="reasoning-model-from-scratch.html">Article 2 → Reasoning</a>
+    </nav>
+  </header>
+
+  <div class="hero" id="top">
+    <div>
+      <div class="eyebrow">Article 1 · executable tutorial · ~30 min</div>
+      <h1>Build a tiny <em>language model</em> from scratch.</h1>
+      <p class="lede">Not a toy diagram and not a training recipe for a billion-dollar cluster. This is the smallest complete path from UTF-8 bytes to causal attention, next-token loss, generation, and response-only instruction tuning.</p>
+      <div class="hero-meta"><span><strong>70,560</strong> parameters</span><span><strong>5</strong> correctness tests</span><span><strong>1</strong> dependency: PyTorch</span></div>
+    </div>
+    <aside class="terminal" aria-label="Example terminal output">
+      <div class="terminal-head"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+      <pre><span class="prompt">$</span> python examples/llm/train.py \
+    --steps 20 --device cpu
+
+{
+  "device": <span class="value">"cpu"</span>,
+  "parameters": <span class="value">70560</span>,
+  "initial_loss": <span class="value">5.5538</span>,
+  "final_loss": <span class="value">2.7768</span>
+}</pre>
+    </aside>
+  </div>
+
+  <div class="layout">
+    <aside class="toc" aria-label="On this page">
+      <strong>Build order</strong>
+      <a href="#contract">0. The contract</a><a href="#tokens">1. Tokens &amp; targets</a>
+      <a href="#attention">2. Causal attention</a><a href="#block">3. The GPT block</a>
+      <a href="#loss">4. Pretraining loss</a><a href="#generate">5. Generation</a>
+      <a href="#sft">6. Instruction tuning</a><a href="#run">7. Run &amp; verify</a>
+      <a href="#sources">Sources</a>
+    </aside>
+
+    <main id="article">
+      <section id="contract">
+        <div class="kicker">00 · The contract</div>
+        <h2>One job: predict what comes next.</h2>
+        <p class="section-intro">A decoder-only language model receives token IDs shaped <code>[batch, time]</code> and returns one score for every vocabulary item at every time step: <code>[batch, time, vocab]</code>.</p>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAwIDM2MCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPkZyb20gdGV4dCB0byBuZXh0LXRva2VuIHByb2JhYmlsaXRpZXM8L3RpdGxlPgogIDxkZXNjIGlkPSJkZXNjIj5BIGxlZnQtdG8tcmlnaHQgcGlwZWxpbmUgY29ubmVjdGluZyBVVEYtOCBieXRlcywgZW1iZWRkaW5ncywgcmVwZWF0ZWQgdHJhbnNmb3JtZXIgYmxvY2tzLCBsb2dpdHMsIGFuZCB0aGUgbmV4dCB0b2tlbi48L2Rlc2M+CiAgPGRlZnM+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9ImJnIiB4MT0iMCIgeDI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmNGVmZTYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZTlmM2VlIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogICAgPG1hcmtlciBpZD0iYXJyb3ciIG1hcmtlcldpZHRoPSI4IiBtYXJrZXJIZWlnaHQ9IjgiIHJlZlg9IjciIHJlZlk9IjQiIG9yaWVudD0iYXV0byI+CiAgICAgIDxwYXRoIGQ9Ik0wIDBMOCA0TDAgOFoiIGZpbGw9IiMxNDNiMzUiLz4KICAgIDwvbWFya2VyPgogICAgPHN0eWxlPgogICAgICAuYm94e2ZpbGw6I2ZmZmRmNztzdHJva2U6IzE0M2IzNTtzdHJva2Utd2lkdGg6Mn0ubGFiZWx7Zm9udDo3MDAgMjBweCBzeXN0ZW0tdWksc2Fucy1zZXJpZjtmaWxsOiMxNDNiMzV9LnNtYWxse2ZvbnQ6MTVweCBzeXN0ZW0tdWksc2Fucy1zZXJpZjtmaWxsOiM0NzYyNWR9LmNoaXB7ZmlsbDojZGU2YjQ4fS5mbG93e3N0cm9rZTojMTQzYjM1O3N0cm9rZS13aWR0aDozO2ZpbGw6bm9uZTttYXJrZXItZW5kOnVybCgjYXJyb3cpfQogICAgPC9zdHlsZT4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iMzYwIiByeD0iMjgiIGZpbGw9InVybCgjYmcpIi8+CiAgPHRleHQgeD0iNTAiIHk9IjUyIiBjbGFzcz0ic21hbGwiIGxldHRlci1zcGFjaW5nPSIyIj5PTkUgVE9LRU4gU1RFUCwgRU5EIFRPIEVORDwvdGV4dD4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0NiAxMDQpIj4KICAgIDxyZWN0IGNsYXNzPSJib3giIHdpZHRoPSIxODQiIGhlaWdodD0iMTU0IiByeD0iMTgiLz4KICAgIDx0ZXh0IHg9IjIyIiB5PSI0MiIgY2xhc3M9ImxhYmVsIj5UZXh0IOKGkiBJRHM8L3RleHQ+CiAgICA8dGV4dCB4PSIyMiIgeT0iNzYiIGNsYXNzPSJzbWFsbCI+4oCcdGlueSBtb2RlbOKAnTwvdGV4dD4KICAgIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDIyIDk2KSI+CiAgICAgIDxyZWN0IGNsYXNzPSJjaGlwIiB3aWR0aD0iMzUiIGhlaWdodD0iMzQiIHJ4PSI3Ii8+PHJlY3QgY2xhc3M9ImNoaXAiIHg9IjQyIiB3aWR0aD0iMzUiIGhlaWdodD0iMzQiIHJ4PSI3IiBvcGFjaXR5PSIuNzgiLz48cmVjdCBjbGFzcz0iY2hpcCIgeD0iODQiIHdpZHRoPSIzNSIgaGVpZ2h0PSIzNCIgcng9IjciIG9wYWNpdHk9Ii42Ii8+CiAgICAgIDx0ZXh0IHg9IjgiIHk9IjIzIiBmb250LWZhbWlseT0idWktbW9ub3NwYWNlLG1vbm9zcGFjZSIgZm9udC1zaXplPSIxMyIgZmlsbD0id2hpdGUiPjExNjwvdGV4dD48dGV4dCB4PSI1MCIgeT0iMjMiIGZvbnQtZmFtaWx5PSJ1aS1tb25vc3BhY2UsbW9ub3NwYWNlIiBmb250LXNpemU9IjEzIiBmaWxsPSJ3aGl0ZSI+MTA1PC90ZXh0Pjx0ZXh0IHg9IjkyIiB5PSIyMyIgZm9udC1mYW1pbHk9InVpLW1vbm9zcGFjZSxtb25vc3BhY2UiIGZvbnQtc2l6ZT0iMTMiIGZpbGw9IndoaXRlIj4xMTA8L3RleHQ+CiAgICA8L2c+CiAgPC9nPgogIDxwYXRoIGNsYXNzPSJmbG93IiBkPSJNMjQyIDE4MUgyODYiLz4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyOTggMTA0KSI+CiAgICA8cmVjdCBjbGFzcz0iYm94IiB3aWR0aD0iMTg0IiBoZWlnaHQ9IjE1NCIgcng9IjE4Ii8+CiAgICA8dGV4dCB4PSIyMiIgeT0iNDIiIGNsYXNzPSJsYWJlbCI+RW1iZWRkaW5nczwvdGV4dD4KICAgIDx0ZXh0IHg9IjIyIiB5PSI3NCIgY2xhc3M9InNtYWxsIj50b2tlbiArIHBvc2l0aW9uPC90ZXh0PgogICAgPHBhdGggZD0iTTI0IDEwNEgxNjBNMjQgMTIwSDE2MCIgc3Ryb2tlPSIjMmQ3YzZkIiBzdHJva2Utd2lkdGg9IjkiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWRhc2hhcnJheT0iMTggMTAiLz4KICA8L2c+CiAgPHBhdGggY2xhc3M9ImZsb3ciIGQ9Ik00OTQgMTgxSDUzOCIvPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDU1MCA4MCkiPgogICAgPHJlY3QgeD0iMjAiIHk9IjIwIiBjbGFzcz0iYm94IiB3aWR0aD0iMjEwIiBoZWlnaHQ9IjE3MiIgcng9IjE4IiBvcGFjaXR5PSIuMzgiLz4KICAgIDxyZWN0IHg9IjEwIiB5PSIxMCIgY2xhc3M9ImJveCIgd2lkdGg9IjIxMCIgaGVpZ2h0PSIxNzIiIHJ4PSIxOCIgb3BhY2l0eT0iLjY4Ii8+CiAgICA8cmVjdCBjbGFzcz0iYm94IiB3aWR0aD0iMjEwIiBoZWlnaHQ9IjE3MiIgcng9IjE4Ii8+CiAgICA8dGV4dCB4PSIyNiIgeT0iNDYiIGNsYXNzPSJsYWJlbCI+VHJhbnNmb3JtZXIgw5cgTDwvdGV4dD4KICAgIDxyZWN0IHg9IjI2IiB5PSI2OCIgd2lkdGg9IjE1OCIgaGVpZ2h0PSIzNCIgcng9IjgiIGZpbGw9IiNkY2ViZTYiLz4KICAgIDx0ZXh0IHg9IjQzIiB5PSI5MSIgY2xhc3M9InNtYWxsIj5jYXVzYWwgYXR0ZW50aW9uPC90ZXh0PgogICAgPHJlY3QgeD0iMjYiIHk9IjExMiIgd2lkdGg9IjE1OCIgaGVpZ2h0PSIzNCIgcng9IjgiIGZpbGw9IiNmNWRmZDUiLz4KICAgIDx0ZXh0IHg9IjQzIiB5PSIxMzUiIGNsYXNzPSJzbWFsbCI+ZmVlZC1mb3J3YXJkPC90ZXh0PgogIDwvZz4KICA8cGF0aCBjbGFzcz0iZmxvdyIgZD0iTTc5NCAxODFIODM4Ii8+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoODUwIDEwNCkiPgogICAgPHJlY3QgY2xhc3M9ImJveCIgd2lkdGg9IjEzMiIgaGVpZ2h0PSIxNTQiIHJ4PSIxOCIvPgogICAgPHRleHQgeD0iMjIiIHk9IjQyIiBjbGFzcz0ibGFiZWwiPkxvZ2l0czwvdGV4dD4KICAgIDx0ZXh0IHg9IjIyIiB5PSI3NCIgY2xhc3M9InNtYWxsIj5bQixULFZdPC90ZXh0PgogICAgPHBhdGggZD0iTTI2IDEyOFYxMDhNNDcgMTI4VjkwTTY4IDEyOFYxMTRNODkgMTI4Vjc4IiBzdHJva2U9IiNkZTZiNDgiIHN0cm9rZS13aWR0aD0iMTMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwvZz4KICA8cGF0aCBjbGFzcz0iZmxvdyIgZD0iTTk5NCAxODFIMTAzNCIvPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEwNDYgMTA0KSI+CiAgICA8cmVjdCBjbGFzcz0iYm94IiB3aWR0aD0iMTA4IiBoZWlnaHQ9IjE1NCIgcng9IjE4Ii8+CiAgICA8dGV4dCB4PSIxOCIgeT0iNDIiIGNsYXNzPSJsYWJlbCI+TmV4dDwvdGV4dD4KICAgIDxjaXJjbGUgY3g9IjU0IiBjeT0iOTQiIHI9IjI4IiBmaWxsPSIjMTQzYjM1Ii8+CiAgICA8dGV4dCB4PSI0MiIgeT0iMTAyIiBmb250LWZhbWlseT0idWktbW9ub3NwYWNlLG1vbm9zcGFjZSIgZm9udC1zaXplPSIyMyIgZmlsbD0id2hpdGUiPnnigpw8L3RleHQ+CiAgPC9nPgo8L3N2Zz4KCg==" alt="Pipeline from token IDs through embeddings and transformer blocks to next-token logits"><div class="caption">Original diagram. Each position predicts its next token; generation repeats that same forward pass one token at a time.</div></div>
+        <p>The training objective and the generation procedure are the same mechanism viewed from opposite sides. During training, the correct next token is known. During generation, we select one candidate, append it, and ask again.</p>
+        <p>A <strong>logit</strong> is an unrestricted score, not yet a probability. If the vocabulary has 258 entries, every position emits 258 logits. Softmax turns one row of those scores into probabilities only when the loss or decoder needs them. Keeping logits unnormalized inside the model is both numerically convenient and exactly what PyTorch's cross-entropy expects.</p>
+        <p>The phrase “from scratch” has two meanings here. Architecturally, every learned component is instantiated with fresh random weights: embeddings, attention projections, feed-forward layers, normalizations, and the language-model head. Operationally, the example also avoids hidden assets: its corpus is embedded in <code>train.py</code>, its tokenizer has no downloaded vocabulary, and its tests run without a network connection. That gives us a controlled laboratory for the mechanics, not a shortcut to the data and compute used by a production LLM.</p>
+        <h3>A forward pass in plain language</h3>
+        <p>Suppose the input ends with “the model”. Token and position embeddings first say <em>what</em> each token is and <em>where</em> it occurs. Every transformer block then lets a position gather useful information from earlier positions and transform the resulting features. The final vector at the last position summarizes the prefix; the output head scores every possible next byte. Training compares all positions with known next bytes at once. Generation uses only the final row, appends the chosen byte, and repeats.</p>
+        <div class="callout"><strong>Scope check</strong>This model is intentionally tiny and the byte tokenizer is intentionally simple. The architecture is real; the learned language ability is not meant to be useful. Keeping those two claims separate is the first reproducibility rule.</div>
+      </section>
+
+      <section id="tokens">
+        <div class="kicker">01 · Tokens and targets</div>
+        <h2>Text must become integers before it can become vectors.</h2>
+        <p class="section-intro">Production GPT-family models usually use a subword tokenizer. Our offline smoke path uses raw UTF-8 bytes: IDs 0–255 plus explicit end-of-sequence and padding IDs.</p>
+        <div class="shape-grid">
+          <div class="shape"><b>[B,T]</b><span>integer token IDs entering the model</span></div>
+          <div class="shape"><b>[B,T,D]</b><span>token + position embeddings</span></div>
+          <div class="shape"><b>[B,T,V]</b><span>vocabulary logits leaving the model</span></div>
+        </div>
+        <h3>Why bytes are useful here—and poor for scale</h3>
+        <p>A byte tokenizer has an unusually clean contract: encode text as UTF-8 bytes and decode those bytes back to text. There is no learned vocabulary, unknown-token case, or external tokenizer file. ASCII characters occupy one token each, while many non-ASCII characters occupy several. That makes byte sequences longer than modern subword sequences, so attention does more work for the same passage. We accept that inefficiency because the example is small and the reversible mapping is easy to inspect.</p>
+        <p>Two reserved IDs sit above the 256 byte values. <code>EOS</code> marks the end of a document or generated sequence; <code>PAD</code> makes unequal examples fit a rectangular batch. They are different semantic events. EOS is a target the model should learn to predict. Padding is bookkeeping and its labels should be ignored by the loss.</p>
+        <h3>The shift is the supervision</h3>
+        <p>Take one sequence of <code>T+1</code> token IDs. The first <code>T</code> are inputs; the last <code>T</code> are targets. No label file is required.</p>
+        <div class="equation">tokens: [10, 11, 12, 13, 14]<br>inputs: [10, 11, 12, 13]&nbsp;&nbsp;&nbsp;targets: [11, 12, 13, 14]<small>At time t, the model sees tokens ≤ t and is graded on token t+1.</small></div>
+        <div class="codebox"><div class="codehead"><span>examples/llm/data.py · exact executable excerpt</span><button type="button" data-copy>Copy</button></div><pre><code>window = token_ids[start : start + context_length + 1]
+pairs.append(
+    (
+        torch.tensor(window[:-1], dtype=torch.long),
+        torch.tensor(window[1:], dtype=torch.long),
+    )
+)</code></pre></div>
+        <p>Sliding windows reuse a corpus efficiently. With context length 32, a 33-token window yields 32 next-token decisions. Moving the window by a stride smaller than 32 creates overlapping examples; moving by 32 creates disjoint chunks. Overlap increases the number of training pairs but does not create new information, so train/validation splitting must happen at the document level before windows are made. Otherwise near-identical windows can land on both sides of the split and make validation look better than it is.</p>
+        <h3>Embeddings supply content and order</h3>
+        <p>The token embedding table has shape <code>[V,D]</code>; indexing it with <code>[B,T]</code> IDs returns <code>[B,T,D]</code>. A learned position table has shape <code>[context_length,D]</code>. Broadcasting adds the same position vector to every example in a batch. Without positional information, self-attention can see which tokens are present but cannot distinguish “dog bites person” from “person bites dog” purely from order.</p>
+        <div class="callout"><strong>Classic silent failure</strong>If inputs and targets are identical, the model is trained to reconstruct the current token instead of predict the next one. Our smoke test asserts the exact shifted lists.</div>
+      </section>
+
+      <section id="attention">
+        <div class="kicker">02 · Causal attention</div>
+        <h2>Each token may look left, never right.</h2>
+        <p class="section-intro">Self-attention creates content-dependent mixtures. Causality keeps training honest by removing information that would not exist during generation.</p>
+        <div class="equation">scores = (Q @ Kᵀ) / √Dₕ<br>weights = softmax(mask(scores))<br>context = weights @ V<small>In code: <code>scores [B,H,T,T]</code>, <code>weights [B,H,T,T]</code>, <code>V [B,H,T,Dh]</code>.</small></div>
+        <p>Three learned linear projections turn each hidden vector into a query, key, and value. A query represents what the current position is looking for; keys represent what earlier positions offer; values contain the information to mix. The query–key dot product produces a compatibility score. Dividing by <code>√Dh</code> keeps those dot products from growing with head width and pushing softmax into extremely sharp, low-gradient regions.</p>
+        <h3>Follow one tensor through the heads</h3>
+        <p>Starting from <code>x [B,T,D]</code>, one projection produces the Q, K, and V features. Each is reshaped to <code>[B,T,H,Dh]</code> and transposed to <code>[B,H,T,Dh]</code>, where <code>D = H×Dh</code>. Multiplying Q by K-transpose gives one <code>[T,T]</code> score matrix per batch item and head. After masking and softmax, multiplying by V restores <code>[B,H,T,Dh]</code>. Transpose, concatenate the heads, and the output projection returns <code>[B,T,D]</code>, ready for the residual addition.</p>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5ODAgNTAwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+CiAgPHRpdGxlIGlkPSJ0aXRsZSI+QSBjYXVzYWwgYXR0ZW50aW9uIG1hc2s8L3RpdGxlPgogIDxkZXNjIGlkPSJkZXNjIj5BIGZpdmUgYnkgZml2ZSBtYXRyaXggd2hlcmUgZWFjaCB0b2tlbiBtYXkgYXR0ZW5kIG9ubHkgdG8gaXRzZWxmIGFuZCBlYXJsaWVyIHRva2Vucy48L2Rlc2M+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5oZWFke2ZvbnQ6NzAwIDI1cHggc3lzdGVtLXVpLHNhbnMtc2VyaWY7ZmlsbDojMTQzYjM1fS5jb3B5e2ZvbnQ6MTdweCBzeXN0ZW0tdWksc2Fucy1zZXJpZjtmaWxsOiM0NzYyNWR9LmlkeHtmb250OjE1cHggdWktbW9ub3NwYWNlLG1vbm9zcGFjZTtmaWxsOiM0NzYyNWR9Lnllc3tmaWxsOiMyZDdjNmR9Lm5ve2ZpbGw6I2VmZTlkZX0ubWFya3tmb250OjcwMCAyMHB4IHN5c3RlbS11aSxzYW5zLXNlcmlmO2ZpbGw6d2hpdGV9LmRhc2h7Zm9udDo3MDAgMjBweCBzeXN0ZW0tdWksc2Fucy1zZXJpZjtmaWxsOiNhOTllOGV9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iOTgwIiBoZWlnaHQ9IjUwMCIgcng9IjI2IiBmaWxsPSIjZmJmOGYxIi8+CiAgPHRleHQgeD0iNTIiIHk9IjU4IiBjbGFzcz0iaGVhZCI+V2hvIGNhbiB0b2tlbiB0IHJlYWQ/PC90ZXh0PgogIDx0ZXh0IHg9IjUyIiB5PSI5MCIgY2xhc3M9ImNvcHkiPlJvd3MgYXJlIHF1ZXJpZXMuIENvbHVtbnMgYXJlIGtleXMuIFRoZSBmdXR1cmUgaXMgY2xvc2VkLjwvdGV4dD4KICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNzAgMTI2KSI+CiAgICA8dGV4dCB4PSIyNSIgeT0iLTE4IiBjbGFzcz0iaWR4Ij5r4oKAPC90ZXh0Pjx0ZXh0IHg9IjEwNSIgeT0iLTE4IiBjbGFzcz0iaWR4Ij5r4oKBPC90ZXh0Pjx0ZXh0IHg9IjE4NSIgeT0iLTE4IiBjbGFzcz0iaWR4Ij5r4oKCPC90ZXh0Pjx0ZXh0IHg9IjI2NSIgeT0iLTE4IiBjbGFzcz0iaWR4Ij5r4oKDPC90ZXh0Pjx0ZXh0IHg9IjM0NSIgeT0iLTE4IiBjbGFzcz0iaWR4Ij5r4oKEPC90ZXh0PgogICAgPHRleHQgeD0iLTQ4IiB5PSI0OCIgY2xhc3M9ImlkeCI+ceKCgDwvdGV4dD48dGV4dCB4PSItNDgiIHk9IjEyOCIgY2xhc3M9ImlkeCI+ceKCgTwvdGV4dD48dGV4dCB4PSItNDgiIHk9IjIwOCIgY2xhc3M9ImlkeCI+ceKCgjwvdGV4dD48dGV4dCB4PSItNDgiIHk9IjI4OCIgY2xhc3M9ImlkeCI+ceKCgzwvdGV4dD48dGV4dCB4PSItNDgiIHk9IjM2OCIgY2xhc3M9ImlkeCI+ceKChDwvdGV4dD4KICAgIDxnPgogICAgICA8cmVjdCBjbGFzcz0ieWVzIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJubyIgeD0iODAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9Im5vIiB4PSIxNjAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9Im5vIiB4PSIyNDAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9Im5vIiB4PSIzMjAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+CiAgICAgIDx0ZXh0IGNsYXNzPSJtYXJrIiB4PSIyMyIgeT0iNDEiPuKckzwvdGV4dD48dGV4dCBjbGFzcz0iZGFzaCIgeD0iMTAzIiB5PSI0MSI+4oCTPC90ZXh0Pjx0ZXh0IGNsYXNzPSJkYXNoIiB4PSIxODMiIHk9IjQxIj7igJM8L3RleHQ+PHRleHQgY2xhc3M9ImRhc2giIHg9IjI2MyIgeT0iNDEiPuKAkzwvdGV4dD48dGV4dCBjbGFzcz0iZGFzaCIgeD0iMzQzIiB5PSI0MSI+4oCTPC90ZXh0PgogICAgPC9nPgogICAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCA4MCkiPgogICAgICA8cmVjdCBjbGFzcz0ieWVzIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJ5ZXMiIHg9IjgwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJubyIgeD0iMTYwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJubyIgeD0iMjQwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJubyIgeD0iMzIwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPgogICAgICA8dGV4dCBjbGFzcz0ibWFyayIgeD0iMjMiIHk9IjQxIj7inJM8L3RleHQ+PHRleHQgY2xhc3M9Im1hcmsiIHg9IjEwMyIgeT0iNDEiPuKckzwvdGV4dD48dGV4dCBjbGFzcz0iZGFzaCIgeD0iMTgzIiB5PSI0MSI+4oCTPC90ZXh0Pjx0ZXh0IGNsYXNzPSJkYXNoIiB4PSIyNjMiIHk9IjQxIj7igJM8L3RleHQ+PHRleHQgY2xhc3M9ImRhc2giIHg9IjM0MyIgeT0iNDEiPuKAkzwvdGV4dD4KICAgIDwvZz4KICAgIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMTYwKSI+CiAgICAgIDxyZWN0IGNsYXNzPSJ5ZXMiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9InllcyIgeD0iODAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9InllcyIgeD0iMTYwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJubyIgeD0iMjQwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJubyIgeD0iMzIwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPgogICAgICA8dGV4dCBjbGFzcz0ibWFyayIgeD0iMjMiIHk9IjQxIj7inJM8L3RleHQ+PHRleHQgY2xhc3M9Im1hcmsiIHg9IjEwMyIgeT0iNDEiPuKckzwvdGV4dD48dGV4dCBjbGFzcz0ibWFyayIgeD0iMTgzIiB5PSI0MSI+4pyTPC90ZXh0Pjx0ZXh0IGNsYXNzPSJkYXNoIiB4PSIyNjMiIHk9IjQxIj7igJM8L3RleHQ+PHRleHQgY2xhc3M9ImRhc2giIHg9IjM0MyIgeT0iNDEiPuKAkzwvdGV4dD4KICAgIDwvZz4KICAgIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMjQwKSI+CiAgICAgIDxyZWN0IGNsYXNzPSJ5ZXMiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9InllcyIgeD0iODAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9InllcyIgeD0iMTYwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJ5ZXMiIHg9IjI0MCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiLz48cmVjdCBjbGFzcz0ibm8iIHg9IjMyMCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiLz4KICAgICAgPHRleHQgY2xhc3M9Im1hcmsiIHg9IjIzIiB5PSI0MSI+4pyTPC90ZXh0Pjx0ZXh0IGNsYXNzPSJtYXJrIiB4PSIxMDMiIHk9IjQxIj7inJM8L3RleHQ+PHRleHQgY2xhc3M9Im1hcmsiIHg9IjE4MyIgeT0iNDEiPuKckzwvdGV4dD48dGV4dCBjbGFzcz0ibWFyayIgeD0iMjYzIiB5PSI0MSI+4pyTPC90ZXh0Pjx0ZXh0IGNsYXNzPSJkYXNoIiB4PSIzNDMiIHk9IjQxIj7igJM8L3RleHQ+CiAgICA8L2c+CiAgICA8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDMyMCkiPgogICAgICA8cmVjdCBjbGFzcz0ieWVzIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJ5ZXMiIHg9IjgwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPjxyZWN0IGNsYXNzPSJ5ZXMiIHg9IjE2MCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTIiLz48cmVjdCBjbGFzcz0ieWVzIiB4PSIyNDAiIHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjEyIi8+PHJlY3QgY2xhc3M9InllcyIgeD0iMzIwIiB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHJ4PSIxMiIvPgogICAgICA8dGV4dCBjbGFzcz0ibWFyayIgeD0iMjMiIHk9IjQxIj7inJM8L3RleHQ+PHRleHQgY2xhc3M9Im1hcmsiIHg9IjEwMyIgeT0iNDEiPuKckzwvdGV4dD48dGV4dCBjbGFzcz0ibWFyayIgeD0iMTgzIiB5PSI0MSI+4pyTPC90ZXh0Pjx0ZXh0IGNsYXNzPSJtYXJrIiB4PSIyNjMiIHk9IjQxIj7inJM8L3RleHQ+PHRleHQgY2xhc3M9Im1hcmsiIHg9IjM0MyIgeT0iNDEiPuKckzwvdGV4dD4KICAgIDwvZz4KICA8L2c+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNzE1IDE2OCkiPgogICAgPGNpcmNsZSBjeD0iMzYiIGN5PSIxMCIgcj0iOCIgZmlsbD0iIzJkN2M2ZCIvPjx0ZXh0IHg9IjU2IiB5PSIxNyIgY2xhc3M9ImNvcHkiPmFsbG93ZWQ8L3RleHQ+CiAgICA8Y2lyY2xlIGN4PSIzNiIgY3k9IjU4IiByPSI4IiBmaWxsPSIjZWZlOWRlIiBzdHJva2U9IiNjOWJlYWYiLz48dGV4dCB4PSI1NiIgeT0iNjUiIGNsYXNzPSJjb3B5Ij5zZXQgdG8g4oiS4oiePC90ZXh0PgogICAgPHBhdGggZD0iTTM2IDEwNnYxMDUiIHN0cm9rZT0iI2RlNmI0OCIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgICA8dGV4dCB4PSI1NiIgeT0iMTIzIiBjbGFzcz0iY29weSI+c29mdG1heCB0dXJuczwvdGV4dD48dGV4dCB4PSI1NiIgeT0iMTQ5IiBjbGFzcz0iY29weSI+ZXZlcnkgY2xvc2VkIGNlbGw8L3RleHQ+PHRleHQgeD0iNTYiIHk9IjE3NSIgY2xhc3M9ImNvcHkiPmludG8gcHJvYmFiaWxpdHkgMDwvdGV4dD4KICA8L2c+Cjwvc3ZnPgo=" alt="Lower-triangular causal attention mask"><div class="caption">Original diagram. Masking happens before softmax; the forbidden upper triangle then receives exactly zero probability.</div></div>
+        <div class="codebox"><div class="codehead"><span>examples/llm/model.py · exact executable excerpt</span><button type="button" data-copy>Copy</button></div><pre><code>scores = q @ k.transpose(-2, -1) / self.head_dim**0.5  # [B,H,T,T]
+allowed = self.causal_mask[:, :, :tokens, :tokens]
+scores = scores.masked_fill(~allowed, float("-inf"))
+weights = self.dropout(F.softmax(scores, dim=-1))
+context = weights @ v  # [B,H,T,Dh]</code></pre></div>
+        <p>The mask is lower-triangular: row <code>t</code> allows columns <code>0…t</code>. It is applied to scores with negative infinity before softmax, making forbidden probabilities exactly zero. Masking after softmax would leave the remaining probabilities summing to less than one unless they were renormalized, and it would be easier to leak future information through an incorrect implementation.</p>
+        <p>Multiple heads do not create separate timelines. They are parallel learned views over the same prefix: one head may become sensitive to nearby syntax while another tracks a longer dependency. That interpretation is suggestive rather than guaranteed—heads are optimized jointly, and a trained head need not have a clean human label.</p>
+        <ul class="checklist"><li><strong>Scale</strong> by <code>√Dh</code>, not by model width or token count.</li><li><strong>Mask</strong> logits before softmax, not probabilities afterward.</li><li><strong>Test</strong> both invariants: future entries are zero and every allowed row sums to one.</li></ul>
+      </section>
+
+      <section id="block">
+        <div class="kicker">03 · The GPT block</div>
+        <h2>Mix across time, then mix across features.</h2>
+        <p class="section-intro">A transformer block has two distinct communication paths. Attention moves information between token positions. The feed-forward network transforms each position independently.</p>
+        <div class="steps">
+          <div class="step"><div><b>Normalize, attend, add the shortcut</b><p>Pre-normalization stabilizes the input to attention. The residual path keeps an identity route for signals and gradients.</p></div></div>
+          <div class="step"><div><b>Normalize, expand, activate, contract</b><p>The MLP maps <code>D → 4D → D</code> with GELU, then adds a second shortcut.</p></div></div>
+          <div class="step"><div><b>Repeat L times, normalize, project to vocabulary</b><p>The language-model head converts every contextual vector into <code>V</code> logits.</p></div></div>
+        </div>
+        <p>This implementation uses <strong>pre-normalization</strong>: LayerNorm comes before each attention or MLP sublayer. The residual stream itself remains a direct route through the network, which usually makes optimization of deeper decoders easier than placing normalization only after the addition. LayerNorm operates across the feature dimension of each token independently, so it neither mixes examples nor allows future tokens to communicate.</p>
+        <p>The MLP deserves more credit than its simple shape suggests. Attention decides <em>where</em> to retrieve information; the MLP provides most of the block's feature-wise nonlinear capacity. Expanding from <code>D</code> to <code>4D</code>, applying GELU, and contracting back lets every position build combinations that a stack of linear projections alone could not express.</p>
+        <div class="codebox"><div class="codehead"><span>examples/llm/model.py · block and top-level data flow</span><button type="button" data-copy>Copy</button></div><pre><code>def forward(self, x: torch.Tensor) -> torch.Tensor:
+    x = x + self.attention(self.attention_norm(x))
+    return x + self.mlp(self.mlp_norm(x))
+
+# MiniGPT.forward
+x = self.token_embedding(token_ids) + self.position_embedding(positions)
+for block in self.blocks:
+    x = block(x)
+logits = self.lm_head(self.final_norm(x))  # [B,T,V]</code></pre></div>
+        <h3>Residuals make the block learn a change</h3>
+        <p>In <code>x + attention(...)</code>, the sublayer does not have to reconstruct its entire input; it can learn a useful correction. The same is true for the MLP. During backpropagation, these additions also provide short gradient paths. Dropout regularizes the learned branch during training and becomes an identity operation in evaluation mode, which is why switching modes is part of correct measurement.</p>
+        <p>The input embedding and output head share one weight matrix. Input lookup reads rows from it; output projection compares hidden states against all rows. Weight tying reduces parameters and gives the two ends of the model a common token geometry. Initialization happens once before the shared reference is assigned, avoiding an accidental second randomization of that matrix.</p>
+        <div class="lab">
+          <h3>Shape and parameter lab</h3>
+          <div class="controls">
+            <label>Model width <output id="widthOut">48</output><input id="width" type="range" min="16" max="128" step="16" value="48"></label>
+            <label>Layers <output id="layersOut">2</output><input id="layers" type="range" min="1" max="8" value="2"></label>
+            <label>Context <output id="contextOut">32</output><input id="context" type="range" min="8" max="128" step="8" value="32"></label>
+          </div>
+          <div class="result" id="shapeResult" aria-live="polite"></div>
+        </div>
+        <p>The calculator is an estimate for intuition; <code>count_parameters(model)</code> is the authority for the executable configuration. Position embeddings grow with context length, while attention compute and its score matrix grow roughly with <code>T²</code>.</p>
+        <p>For the shipped configuration—width 48, two blocks, four heads, context 32—the exact trainable count is 70,560. The number is tiny enough for CPU tests, yet all important ranks and boundaries match a larger decoder. Scaling the width is especially expensive: the attention and MLP projection matrices grow roughly with <code>D²</code>, while the attention score memory grows with <code>T²</code>.</p>
+      </section>
+
+      <section id="loss">
+        <div class="kicker">04 · Pretraining</div>
+        <h2>Cross-entropy turns next-token guesses into a learning signal.</h2>
+        <p class="section-intro">For each of the <code>B×T</code> positions, cross-entropy rewards the logit assigned to its target token and penalizes probability placed elsewhere.</p>
+        <div class="equation">loss = − (1 / N) Σ log softmax(logitsᵢ)[targetᵢ]<small><code>N = B×T</code> after flattening. Lower is better; perplexity is <code>exp(loss)</code>.</small></div>
+        <div class="codebox"><div class="codehead"><span>examples/llm/model.py · the exact loss boundary</span><button type="button" data-copy>Copy</button></div><pre><code>loss = F.cross_entropy(
+    logits.reshape(batch * tokens, -1),
+    targets.reshape(-1),
+    ignore_index=-100,
+)</code></pre></div>
+        <p>Flattening changes only the view of the data: <code>[B,T,V]</code> becomes <code>[B×T,V]</code>, and <code>[B,T]</code> targets become <code>[B×T]</code>. Cross-entropy internally applies log-softmax and selects the target column, so applying softmax in the model would be redundant and less stable. An initial loss near <code>log(V)</code> is plausible for nearly uniform predictions; with <code>V=258</code>, that reference is about 5.55—the observed starting value.</p>
+        <h3>What one optimizer step changes</h3>
+        <p><code>zero_grad</code> clears gradients accumulated by earlier batches. The forward pass produces logits and loss. <code>backward</code> follows the computation graph from that scalar to every parameter that influenced it. Gradient clipping caps the combined norm so an unusual batch cannot cause a huge update. AdamW then uses running moment estimates plus decoupled weight decay to change the parameters. None of these steps stores “the sentence” in a special location; learning is distributed across matrices.</p>
+        <p>The training loop is deliberately ordinary: clear gradients, run the model, backpropagate, clip the global gradient norm, update AdamW. Evaluation must switch to <code>model.eval()</code> and <code>torch.no_grad()</code>; otherwise dropout noise and an unnecessary graph contaminate measurement.</p>
+        <table>
+          <thead><tr><th>Split</th><th>Purpose</th><th>Common leakage</th></tr></thead>
+          <tbody><tr><td>Train</td><td>Update weights</td><td>Reporting its loss as generalization</td></tr><tr><td>Validation</td><td>Choose settings/checkpoints</td><td>Tuning repeatedly until it becomes a training set</td></tr><tr><td>Test</td><td>One final estimate</td><td>Looking early, then revising the model</td></tr></tbody>
+        </table>
+        <div class="callout"><strong>A falling tiny-corpus loss proves plumbing, not intelligence.</strong>It tells us gradients reach parameters and the model can fit data. It does not establish factuality, reasoning, safety, or performance on unseen text.</div>
+        <p>Perplexity, <code>exp(loss)</code>, can be read as an effective number of equally likely next-token choices under the model, but only when comparing the same tokenizer and evaluation data. Byte and subword tokenizers divide text differently, so their per-token perplexities are not directly comparable. Always report the data split and tokenization alongside the number.</p>
+      </section>
+
+      <section id="generate">
+        <div class="kicker">05 · Generation</div>
+        <h2>One forward pass becomes a loop.</h2>
+        <p class="section-intro">At each step, crop to the model’s context window, run the model, keep the last position’s logits, choose one token, and append it.</p>
+        <div class="codebox"><div class="codehead"><span>examples/llm/model.py · simplified excerpt; top-k branch omitted</span><button type="button" data-copy>Copy</button></div><pre><code>context = token_ids[:, -self.config.context_length :]
+logits, _ = self(context)
+next_logits = logits[:, -1, :]
+if temperature == 0:
+    next_id = next_logits.argmax(dim=-1, keepdim=True)
+else:
+    probabilities = F.softmax(next_logits / temperature, dim=-1)
+    next_id = torch.multinomial(probabilities, num_samples=1)
+token_ids = torch.cat((token_ids, next_id), dim=1)</code></pre></div>
+        <p><strong>Greedy decoding</strong> is deterministic but can repeat. <strong>Temperature</strong> controls distribution sharpness; it does not improve the model. <strong>Top-k</strong> removes the long tail before sampling. These are selection policies over learned logits, not extra reasoning layers.</p>
+        <p>Temperature zero is handled as a separate argmax path; dividing by zero would be undefined. For positive temperature, values below one sharpen the distribution and values above one flatten it. Top-k then retains only the k largest logits and sets the rest to negative infinity before softmax. The order matters because filtering probabilities after normalization requires another normalization pass.</p>
+        <p>Generation also exposes the fixed context limit. Once the sequence is longer than 32 tokens, this example feeds only the newest 32 back into the model. Older information is no longer visible. A production system may use a much longer context and a key/value cache to avoid recomputing earlier states, but neither changes the causal next-token contract demonstrated here.</p>
+        <p>Finally, stopping is a policy decision. This compact loop always ends after <code>max_new_tokens</code>; production decoders commonly stop a sequence when it emits EOS as well. If a tiny, undertrained model generates spaces or fragments, that is an honest result: sampling cannot manufacture knowledge that training did not put into the logits.</p>
+      </section>
+
+      <section id="sft">
+        <div class="kicker">06 · Instruction tuning</div>
+        <h2>Same model, different sequence and loss mask.</h2>
+        <p class="section-intro">Supervised instruction fine-tuning (SFT) does not replace next-token prediction. It formats task/response examples into sequences and chooses which positions should contribute to the same cross-entropy loss.</p>
+        <div class="equation">### Instruction: Add 1 + 1.<br><br>### Response:<br>2 &lt;EOS&gt;<small>Inputs remain a single token stream. Labels over prompt and padding positions become <code>-100</code>, PyTorch’s ignored target.</small></div>
+        <div class="codebox"><div class="codehead"><span>examples/llm/data.py · response-only target boundary</span><button type="button" data-copy>Copy</button></div><pre><code>inputs = full_ids[:-1]
+labels = full_ids[1:]
+# Label prompt_len-1 predicts the first response token and must be kept.
+labels[: max(0, len(prompt_ids) - 1)] = [-100] * max(
+    0, len(prompt_ids) - 1
+)</code></pre></div>
+        <p>The off-by-one matters: label position <code>prompt_len−1</code> is produced from the prompt’s final token and predicts the response’s first token. Mask it and the model never learns how to begin answering.</p>
+        <h3>SFT changes behavior, not the architecture</h3>
+        <p>Pretraining learns broad continuation statistics from plain text. SFT presents a narrower distribution in which instructions are followed by desired responses. The weights, causal mask, and language-model head are unchanged; only the serialized examples and which labels receive loss differ. That is why a pretrained checkpoint is normally the starting point: a small instruction dataset can shape an existing language model, but cannot efficiently teach language from nothing.</p>
+        <p>Padding introduces a second masking boundary. Suppose two examples have different lengths. Their token tensors are padded to a common <code>T</code>, but target positions created solely by padding must also be <code>-100</code>. Otherwise the optimizer is rewarded for predicting PAD repeatedly. Here padding is added only on the right, so causality prevents every real token from seeing it and ignored labels remove the padded positions from loss. More complex packing or left-padding schemes need an explicit attention-padding mask too.</p>
+        <p>Response-only masking answers a precise question: “Given this prompt, how should the assistant continue?” It does not train the model to reproduce the prompt. Some chat systems intentionally include loss on selected system or user tokens, and multi-turn templates may mask each role differently. The safe engineering habit is to inspect a tokenized example and its labels, especially the first response token and EOS, instead of trusting a template by inspection.</p>
+        <div class="callout"><strong>There is no universal masking rule.</strong>Some recipes also train on instruction tokens; others isolate response loss. Here we choose response-only supervision so the boundary is visible and testable, not because it is always superior.</div>
+      </section>
+
+      <section id="run">
+        <div class="kicker">07 · Run and verify</div>
+        <h2>Make the claims executable.</h2>
+        <div class="codebox"><div class="codehead"><span>Terminal · from the project root</span><button type="button" data-copy>Copy</button></div><pre><code>python -m pip install -r requirements.txt
+python -m unittest discover -s examples/llm -p 'test_*.py' -v
+python examples/llm/train.py --steps 60 --device cpu</code></pre></div>
+        <ul class="checklist"><li>Shifted inputs and targets are exact.</li><li>Future attention probabilities are zero; allowed rows sum to one.</li><li>Forward shape is <code>[B,T,V]</code> and the token embedding receives gradient.</li><li>Generation appends exactly the requested token count.</li><li>SFT masks prompt and padding while retaining the first response target.</li></ul>
+        <h3>How to read the smoke run</h3>
+        <p>The JSON output is intentionally modest. <code>parameters</code> checks that configuration and weight tying produced the intended model. <code>initial_loss</code> is measured before updates; <code>final_loss</code> uses the same embedded corpus after training. With the fixed seed, 20 CPU steps reproduce 5.5538→2.7768, and 60 steps reach about 1.58 in the recorded environment. Exact floating-point tails can differ across PyTorch versions and devices, so the test suite locks structural invariants rather than one training number.</p>
+        <p>If the loss becomes NaN, first inspect learning rate, target range, and whether a fully masked attention row reached softmax. If the loss falls but generation is nonsense, check tokenizer round-tripping, the shifted target boundary, train/eval mode, and whether the tiny corpus contains enough context for the prompt. Those checks localize most from-scratch failures faster than tuning the architecture.</p>
+        <table>
+          <thead><tr><th>Device</th><th>Expected behavior</th></tr></thead>
+          <tbody><tr><td>CPU</td><td>Reference smoke path; deterministic tests and the documented baseline.</td></tr><tr><td>Apple MPS</td><td>Use <code>--device mps</code>. Small workloads may be slower than CPU because launch overhead dominates.</td></tr><tr><td>NVIDIA CUDA</td><td>Use <code>--device cuda</code>. The example fits easily; synchronize before serious timing.</td></tr></tbody>
+        </table>
+        <p>Device support does not imply bit-for-bit identical training. Random-number generators, kernels, and reduction order can differ. The contract is that the code executes, shapes and masking invariants hold, gradients remain finite, and loss trends downward on the embedded corpus. CPU is the reference path; MPS was sanity-checked locally, while CUDA could not be executed in this environment.</p>
+      </section>
+
+      <section id="sources">
+        <div class="kicker">Sources and limits</div>
+        <h2>What this tutorial adapts — and what it changes.</h2>
+        <p>The conceptual sequence follows Sebastian Raschka’s <cite>Build a Large Language Model (From Scratch)</cite>, especially chapters 2–5 and 7, together with the official <a href="https://github.com/rasbt/LLMs-from-scratch">companion repository</a> inspected at commit <code>ef9fbc2</code>. All prose, diagrams, and executable teaching code here are original or compact adaptations documented in <code>notes/llm-source-ledger.md</code>.</p>
+        <p>Differences are deliberate: byte tokens instead of GPT-2 BPE, 70k rather than 124M parameters, an embedded micro-corpus, tied input/output weights, and response-only SFT labels. This makes correctness observable offline, but it is not a recipe for a capable general-purpose model.</p>
+      </section>
+
+      <section class="next" aria-labelledby="next-title">
+        <div class="kicker">Article 2</div>
+        <h2 id="next-title">A language model can answer. How do we train it to reason more reliably?</h2>
+        <p>Continue with verifiable evaluation, inference-time search, group-relative policy updates, KL control, reward hacking, and distillation.</p>
+        <a href="reasoning-model-from-scratch.html">Build a reasoning model →</a>
+      </section>
+    </main>
+  </div>
+
+  <footer><span>Built as an executable field guide, not a benchmark claim.</span><a href="#top">Back to top ↑</a></footer>
+  <script>
+    const root = document.documentElement;
+    addEventListener('scroll', () => {
+      const max = root.scrollHeight - innerHeight;
+      root.style.setProperty('--reading', max > 0 ? scrollY / max : 0);
+    }, {passive:true});
+
+    document.querySelectorAll('[data-copy]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const text = button.closest('.codebox').querySelector('code').innerText;
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Copied';
+        setTimeout(() => button.textContent = 'Copy', 1200);
+      });
+    });
+
+    const width = document.querySelector('#width');
+    const layers = document.querySelector('#layers');
+    const context = document.querySelector('#context');
+    function updateLab() {
+      const d = Number(width.value), l = Number(layers.value), t = Number(context.value);
+      document.querySelector('#widthOut').value = d;
+      document.querySelector('#layersOut').value = l;
+      document.querySelector('#contextOut').value = t;
+      const vocab = 258;
+      const embedding = vocab * d + t * d;
+      const perBlock = 12 * d * d + 13 * d;
+      const estimate = embedding + l * perBlock + 2 * d;
+      document.querySelector('#shapeResult').textContent =
+        `hidden [B, ${t}, ${d}] · logits [B, ${t}, ${vocab}] · ≈ ${estimate.toLocaleString()} parameters`;
+    }
+    [width,layers,context].forEach(input => input.addEventListener('input', updateLab));
+    updateLab();
+  </script>
+</body>
+</html>

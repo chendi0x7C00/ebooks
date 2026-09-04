@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How a pretrained LLM is evaluated and improved: verifier-based evaluation, inference-time scaling, GRPO reinforcement learning, and distillation — with tiny runnable PyTorch examples.">
+  <title>Build a Reasoning Model from Scratch — an executable field guide</title>
+  <style>
+    :root {
+      --ink:#143b35; --ink-2:#47625d; --paper:#fbf8f1; --card:#fffdf8;
+      --line:#d8d0c3; --mint:#dcebe6; --green:#2d7c6d; --coral:#de6b48;
+      --peach:#f5dfd5; --code:#102c28; --code-ink:#e8f5ef; --shadow:0 20px 54px #173c3420;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;color:var(--ink);background:var(--paper);font:17px/1.72 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body::before{content:"";position:fixed;inset:0 0 auto;height:4px;z-index:20;background:linear-gradient(90deg,var(--coral),#eba75f,var(--green));transform-origin:left;transform:scaleX(var(--reading,0))}
+    a{color:var(--green);text-underline-offset:3px}
+    a:hover{color:var(--coral)}
+    img{max-width:100%;display:block}
+    code,kbd{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+    .skip{position:absolute;left:-999px;top:8px;padding:.7rem 1rem;background:white;z-index:30}.skip:focus{left:8px}
+    .topbar{max-width:1180px;margin:auto;padding:22px 28px;display:flex;justify-content:space-between;align-items:center;gap:24px}
+    .brand{font-weight:800;letter-spacing:-.02em;color:var(--ink);text-decoration:none}.brand span{color:var(--coral)}
+    .topbar nav{display:flex;gap:22px;align-items:center;font-size:14px;font-weight:700}
+    .topbar nav a{text-decoration:none;color:var(--ink-2)}
+    .pill{border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:#ffffffaa}
+    .hero{max-width:1180px;margin:38px auto 72px;padding:0 28px;display:grid;grid-template-columns:1.2fr .8fr;gap:68px;align-items:center}
+    .eyebrow{font-size:13px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--coral)}
+    h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(46px,7.2vw,91px);line-height:.96;letter-spacing:-.055em;margin:18px 0 26px;font-weight:700}
+    h1 em{font-weight:400;color:var(--green)}
+    .lede{font-size:21px;line-height:1.55;color:var(--ink-2);max-width:720px}
+    .hero-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:34px;font-size:14px;color:var(--ink-2)}
+    .hero-meta strong{color:var(--ink)}
+    .terminal{background:var(--code);color:var(--code-ink);border-radius:24px;padding:24px;box-shadow:var(--shadow);transform:rotate(1.2deg)}
+    .terminal-head{display:flex;gap:8px;padding-bottom:18px;border-bottom:1px solid #ffffff22}.dot{width:10px;height:10px;border-radius:50%;background:var(--coral)}.dot:nth-child(2){background:#eab45c}.dot:nth-child(3){background:#6ab39f}
+    .terminal pre{margin:22px 0 0;white-space:pre-wrap;font-size:13px;line-height:1.8}.prompt{color:#8bd9c4}.value{color:#ffd39d}
+    .layout{max-width:1180px;margin:auto;padding:0 28px;display:grid;grid-template-columns:230px minmax(0,760px);gap:70px;align-items:start}
+    .toc{position:sticky;top:26px;border-left:1px solid var(--line);padding-left:20px;font-size:14px}
+    .toc strong{display:block;margin-bottom:12px}.toc a{display:block;padding:5px 0;color:var(--ink-2);text-decoration:none}.toc a:hover{color:var(--coral)}
+    main{min-width:0}
+    section{padding:12px 0 88px;scroll-margin-top:32px}
+    h2{font-family:Georgia,"Times New Roman",serif;font-size:clamp(34px,5vw,54px);line-height:1.05;letter-spacing:-.035em;margin:0 0 22px}
+    h3{font-size:23px;line-height:1.3;margin:38px 0 12px;letter-spacing:-.02em}
+    .kicker{color:var(--coral);font-weight:800;font-size:13px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:12px}
+    .section-intro{font-size:20px;color:var(--ink-2);margin-bottom:34px}
+    .callout{border-left:4px solid var(--coral);background:var(--peach);padding:18px 22px;border-radius:0 14px 14px 0;margin:28px 0}
+    .callout.mint{border-left-color:var(--green);background:var(--mint)}
+    .callout strong{display:block;margin-bottom:4px}
+    .callout p{margin:.3rem 0}
+    .diagram{margin:34px 0;border:1px solid var(--line);border-radius:22px;overflow:hidden;background:white;box-shadow:0 12px 36px #173c3411}
+    .caption{font-size:13px;color:var(--ink-2);padding:12px 16px;border-top:1px solid var(--line)}
+    .shape-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:26px 0}
+    .shape{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}.shape b{display:block;font-family:ui-monospace,monospace;color:var(--coral);font-size:14px}.shape span{font-size:14px;color:var(--ink-2)}
+    .equation{margin:24px 0;padding:24px;border-radius:16px;background:var(--mint);font:600 18px/1.6 ui-monospace,monospace;overflow:auto}.equation small{display:block;font:14px/1.6 Inter,system-ui,sans-serif;color:var(--ink-2);margin-top:8px}
+    .codebox{margin:28px 0;background:var(--code);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+    .codehead{display:flex;justify-content:space-between;gap:18px;align-items:center;padding:11px 16px;border-bottom:1px solid #ffffff20;color:#b8d5cc;font-size:12px}.codehead button{border:0;border-radius:999px;background:#ffffff17;color:white;padding:7px 11px;cursor:pointer}
+    pre{margin:0;padding:20px;overflow:auto;color:var(--code-ink);font-size:13px;line-height:1.65}pre .cm{color:#83a69c}pre .kw{color:#ffb48f}pre .fn{color:#a7e2d0}
+    .checklist{list-style:none;padding:0;margin:24px 0}.checklist li{position:relative;padding:10px 0 10px 34px;border-bottom:1px solid var(--line)}.checklist li::before{content:"✓";position:absolute;left:4px;color:var(--green);font-weight:900}
+    .steps{counter-reset:step;display:grid;gap:14px}.step{counter-increment:step;display:grid;grid-template-columns:42px 1fr;gap:14px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--card)}.step::before{content:counter(step);width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:white;font-weight:800}.step b{display:block}.step p{margin:4px 0 0;color:var(--ink-2);font-size:15px}
+    table{width:100%;border-collapse:collapse;margin:24px 0;font-size:15px}th,td{text-align:left;vertical-align:top;padding:13px;border-bottom:1px solid var(--line)}th{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-2)}
+    .next{padding:34px;border-radius:24px;background:var(--ink);color:white}.next h2{color:white}.next p{color:#c6ddd5}.next a{display:inline-block;margin-top:10px;background:var(--coral);color:white;text-decoration:none;padding:12px 18px;border-radius:999px;font-weight:800}
+    footer{max-width:1180px;margin:30px auto 0;padding:34px 28px 60px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:30px;color:var(--ink-2);font-size:14px}
+    @media(max-width:850px){.hero{grid-template-columns:1fr;gap:32px}.terminal{transform:none}.layout{grid-template-columns:1fr}.toc{position:static;columns:2;border-left:0;border-top:1px solid var(--line);padding:18px 0}.shape-grid{grid-template-columns:1fr}.topbar nav a:not(.pill){display:none}}
+    @media(max-width:520px){body{font-size:16px}.topbar,.hero,.layout,footer{padding-left:18px;padding-right:18px}.toc{columns:1}.hero{margin-top:18px}.terminal{padding:17px}.next{padding:24px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.terminal{transform:none}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#article">Skip to tutorial</a>
+  <header class="topbar">
+    <a class="brand" href="#top">tiny<span>gpt</span>.fieldnotes</a>
+    <nav aria-label="Primary">
+      <a href="#grpo">GRPO</a><a href="#references">Sources</a>
+      <a class="pill" href="llm-from-scratch.html">← Article 1 · LLM</a>
+    </nav>
+  </header>
+
+  <div class="hero" id="top">
+    <div>
+      <div class="eyebrow">Article 2 · executable tutorial · ~30 min</div>
+      <h1>Build a tiny <em>reasoning model</em> from scratch.</h1>
+      <p class="lede">How a pretrained language model is measured, pushed at inference time, trained with verifiable rewards (GRPO), and compressed by distillation — every mechanism demonstrated on a tiny model you can train on a laptop CPU in seconds.</p>
+      <div class="hero-meta"><span><strong>106,624</strong> parameters</span><span><strong>68</strong> tests</span><span><strong>zero</strong> downloads</span></div>
+    </div>
+    <aside class="terminal" aria-label="Recorded GRPO training output">
+      <div class="terminal-head"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+      <pre><span class="prompt">$</span> python examples/reasoning/demo_grpo.py
+
+before: sampled acc = <span class="value">0.531</span> | held-out = 0.00
+[step 300/300] reward_avg=1.000
+after:  sampled acc = <span class="value">0.927</span> | held-out = 0.00</pre>
+    </aside>
+  </div>
+
+  <div class="layout">
+    <aside class="toc" aria-label="On this page">
+      <strong>Build order</strong>
+      <a href="#from-llm-to-reasoning">1. From LM to reasoning</a>
+      <a href="#toy-lab">2. The laboratory</a>
+      <a href="#verifier">3. A math verifier</a>
+      <a href="#inference-scaling">4. Inference-time scaling</a>
+      <a href="#rlvr">5. Verifiable rewards</a>
+      <a href="#grpo">6. GRPO from scratch</a>
+      <a href="#stability">7. Keeping GRPO stable</a>
+      <a href="#reward-hacking">8. Reward hacking</a>
+      <a href="#leakage">9. Evaluation leakage</a>
+      <a href="#distillation">10. Distillation</a>
+      <a href="#real-path">11. Real-model path</a>
+      <a href="#references">12. Sources</a>
+    </aside>
+
+    <main id="article">
+      <section id="from-llm-to-reasoning">
+        <div class="kicker">01 · From LM to reasoning</div>
+        <h2>From language model to reasoning model.</h2>
+        <p class="section-intro">A reasoning model is not a different architecture. It is the same transformer, trained and used differently, so that it works through problems step by step before committing to an answer.</p>
+        <p>The <a href="llm-from-scratch.html">previous article</a> built a GPT-style language model end to end: tokenization, causal self-attention, pretraining on next-token prediction, and instruction fine-tuning. That model is a strong <em>pattern matcher</em> — it predicts plausible continuations. What it does not do reliably is <em>reasoning</em>: multi-step problems where the answer must be <em>derived</em>, not recalled.</p>
+        <p>Four ideas close the gap, and each is a section of this article:</p>
+        <div class="steps">
+          <div class="step"><div><b>Evaluation</b><p>You cannot improve what you cannot measure, so we first build a <em>verifier</em> that grades free-form math answers automatically.</p></div></div>
+          <div class="step"><div><b>Inference-time scaling</b><p>Without any training, we can sample smarter: temperature, top-p, and majority voting over multiple attempts.</p></div></div>
+          <div class="step"><div><b>RL with verifiable rewards (RLVR)</b><p>The verifier doubles as a reward signal. GRPO uses it to push the model toward answers that verify — no human preference labels, no separate reward model.</p></div></div>
+          <div class="step"><div><b>Distillation</b><p>A strong teacher writes out reasoning traces; a small student learns to imitate them with plain supervised learning — no RL at all.</p></div></div>
+        </div>
+        <div class="callout mint"><strong>One discipline, three kinds of blocks</strong><p>Everything below follows <em>observable behavior → the math → executable code</em>. Implementation excerpts come from <code>examples/reasoning/</code>, output blocks are recorded runs of those programs, and the optional real-model commands in §11 target the pinned upstream repository.</p></div>
+      </section>
+
+      <section id="toy-lab">
+        <div class="kicker">02 · The laboratory</div>
+        <h2>Our laboratory: a 106,624-parameter stand-in.</h2>
+        <p class="section-intro">The book this article is based on uses a pretrained Qwen3-0.6B model and the MATH-500 benchmark — about 1.2&nbsp;GB of downloads and hours of compute. We scale the <em>task</em> down instead of faking the results.</p>
+        <div class="shape-grid">
+          <div class="shape"><b>Model</b><span>2-layer, 4-head decoder-only transformer (<code>tiny_lm.py</code>, 106,624 parameters) — the same architecture family as Article 1's GPT, fixed 24-token vocabulary</span></div>
+          <div class="shape"><b>Task</b><span>one-digit addition: <code>Compute 3+4.</code> → <code>\boxed{7}</code>; train pool (80) and eval pool (20) disjoint by construction</span></div>
+          <div class="shape"><b>Starting point</b><span>brief instruction tuning (100 steps, prompt-masked cross-entropy) → 85% greedy accuracy on the train pool, still making interesting mistakes</span></div>
+        </div>
+        <div class="callout"><strong>Why this is a fair stand-in</strong><p>Addition has the two properties the real pipeline relies on: answers are <em>exactly and cheaply verifiable</em>, and a partially trained model produces a <em>mix</em> of correct and incorrect attempts — which is precisely what GRPO's group-relative signal needs. Where the toy behaves differently from a real model (and it does, twice), we say so and show the numbers anyway.</p></div>
+      </section>
+
+      <section id="verifier">
+        <div class="kicker">03 · Measure first</div>
+        <h2>A math verifier: extract, normalize, verify, grade.</h2>
+        <p class="section-intro">Ask a model <q>Compute 1/2 + 1/6</q> and it might answer <code>\boxed{\dfrac{2}{3}}</code>, <code>\boxed{2/3}</code>, <code>0.667</code>, or bury the answer in three paragraphs. Grading that at scale needs a deterministic pipeline, not vibes.</p>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMjEwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9Ik1hdGggdmVyaWZpZXIgcGlwZWxpbmU6IGV4dHJhY3QsIG5vcm1hbGl6ZSwgdmVyaWZ5LCBncmFkZSI+CiAgPGRlZnM+CiAgICA8bWFya2VyIGlkPSJhcnIiIHZpZXdCb3g9IjAgMCAxMCAxMCIgcmVmWD0iOSIgcmVmWT0iNSIgbWFya2VyV2lkdGg9IjciIG1hcmtlckhlaWdodD0iNyIgb3JpZW50PSJhdXRvLXN0YXJ0LXJldmVyc2UiPgogICAgICA8cGF0aCBkPSJNMCwwIEwxMCw1IEwwLDEwIHoiIGZpbGw9IiM0NzU1NjkiLz4KICAgIDwvbWFya2VyPgogIDwvZGVmcz4KICA8c3R5bGU+CiAgICAuYm94IHsgZmlsbDogI2Y4ZmFmYzsgc3Ryb2tlOiAjNDc1NTY5OyBzdHJva2Utd2lkdGg6IDEuNTsgcng6IDg7IH0KICAgIC5zdGVwIHsgZm9udC1zaXplOiAxM3B4OyBmb250LXdlaWdodDogNjAwOyBmaWxsOiAjMGYxNzJhOyB9CiAgICAuc3ViIHsgZm9udC1zaXplOiAxMXB4OyBmaWxsOiAjNDc1NTY5OyB9CiAgICAubW9ubyB7IGZvbnQtZmFtaWx5OiB1aS1tb25vc3BhY2UsIFNGTW9uby1SZWd1bGFyLCBNZW5sbywgbW9ub3NwYWNlOyBmb250LXNpemU6IDExcHg7IGZpbGw6ICMxZTQwYWY7IH0KICA8L3N0eWxlPgoKICA8IS0tIGlucHV0IC0tPgogIDxyZWN0IGNsYXNzPSJib3giIHg9IjgiIHk9IjYwIiB3aWR0aD0iMTMwIiBoZWlnaHQ9IjkwIi8+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjczIiB5PSI4MiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TW9kZWwgcmVzcG9uc2U8L3RleHQ+CiAgPHRleHQgY2xhc3M9Im1vbm8iIHg9IjczIiB5PSIxMDIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPi4uLiBzbyB3ZSBnZXQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9Im1vbm8iIHg9IjczIiB5PSIxMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlxib3hlZHtcZGZyYWN7MTR9ezN9fTwvdGV4dD4KCiAgPGxpbmUgeDE9IjE0MiIgeTE9IjEwNSIgeDI9IjE2OCIgeTI9IjEwNSIgc3Ryb2tlPSIjNDc1NTY5IiBzdHJva2Utd2lkdGg9IjEuNSIgbWFya2VyLWVuZD0idXJsKCNhcnIpIi8+CgogIDwhLS0gZXh0cmFjdCAtLT4KICA8cmVjdCBjbGFzcz0iYm94IiB4PSIxNzIiIHk9IjYwIiB3aWR0aD0iMTMwIiBoZWlnaHQ9IjkwIi8+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjIzNyIgeT0iODIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjEuIEV4dHJhY3Q8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMjM3IiB5PSIxMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmxhc3QgXGJveGVkey4uLn0sPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjIzNyIgeT0iMTE0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5icmFjZS1kZXB0aCBtYXRjaGluZzwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iMjM3IiB5PSIxMzYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlxkZnJhY3sxNH17M308L3RleHQ+CgogIDxsaW5lIHgxPSIzMDYiIHkxPSIxMDUiIHgyPSIzMzIiIHkyPSIxMDUiIHN0cm9rZT0iIzQ3NTU2OSIgc3Ryb2tlLXdpZHRoPSIxLjUiIG1hcmtlci1lbmQ9InVybCgjYXJyKSIvPgoKICA8IS0tIG5vcm1hbGl6ZSAtLT4KICA8cmVjdCBjbGFzcz0iYm94IiB4PSIzMzYiIHk9IjYwIiB3aWR0aD0iMTMwIiBoZWlnaHQ9IjkwIi8+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjQwMSIgeT0iODIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjIuIE5vcm1hbGl6ZTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3ViIiB4PSI0MDEiIHk9IjEwMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Y2Fub25pY2FsIHBsYWluIGZvcm08L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iNDAxIiB5PSIxMTQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPihkZnJhYywgXiwgMSwwMDAsIMKwKTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iNDAxIiB5PSIxMzYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPigxNCkvKDMpPC90ZXh0PgoKICA8bGluZSB4MT0iNDcwIiB5MT0iMTA1IiB4Mj0iNDk2IiB5Mj0iMTA1IiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS13aWR0aD0iMS41IiBtYXJrZXItZW5kPSJ1cmwoI2FycikiLz4KCiAgPCEtLSB2ZXJpZnkgLS0+CiAgPHJlY3QgY2xhc3M9ImJveCIgeD0iNTAwIiB5PSI2MCIgd2lkdGg9IjEzMCIgaGVpZ2h0PSI5MCIvPgogIDx0ZXh0IGNsYXNzPSJzdGVwIiB4PSI1NjUiIHk9IjgyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4zLiBWZXJpZnk8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iNTY1IiB5PSIxMDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnN5bWJvbGljIGVxdWl2YWxlbmNlPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJtb25vIiB4PSI1NjUiIHk9IjEyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+c2ltcGxpZnkoYS1iKT09MDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iNTY1IiB5PSIxMzYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnZzIGdyb3VuZCB0cnV0aCAxNC8zPC90ZXh0PgoKICA8bGluZSB4MT0iNjM0IiB5MT0iMTA1IiB4Mj0iNjYwIiB5Mj0iMTA1IiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS13aWR0aD0iMS41IiBtYXJrZXItZW5kPSJ1cmwoI2FycikiLz4KCiAgPCEtLSBncmFkZSAtLT4KICA8cmVjdCB4PSI2NjQiIHk9IjYwIiB3aWR0aD0iODgiIGhlaWdodD0iOTAiIHJ4PSI4IiBmaWxsPSIjZWNmZGY1IiBzdHJva2U9IiMwNTk2NjkiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjcwOCIgeT0iODIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiMwNjVmNDYiPjQuIEdyYWRlPC90ZXh0PgogIDx0ZXh0IHg9IjcwOCIgeT0iMTE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXNpemU9IjIyIiBmaWxsPSIjMDU5NjY5Ij7inJM8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iNzA4IiB5PSIxNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmNvcnJlY3QgLyB3cm9uZzwvdGV4dD4KCiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMzgwIiB5PSIxODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlRoZSBzYW1lIGZvdXIgc3RlcHMgZ3JhZGUgYSBiZW5jaG1hcmsgKGV2YWx1YXRpb24pIGFuZCBzY29yZSByb2xsb3V0cyAoUkxWUiByZXdhcmQpLjwvdGV4dD4KPC9zdmc+Cg==" alt="Pipeline diagram: model response is extracted with brace matching, normalized to a canonical form, checked for symbolic equivalence against the ground truth, and graded"><div class="caption">Original diagram. The same four steps grade a benchmark (evaluation) and score training rollouts (RLVR rewards, section 6).</div></div>
+
+        <h3>Extraction: find the final answer</h3>
+        <p>We ask the model (via the prompt template) to put its final result in <code>\boxed{...}</code>. Extraction takes the <em>last</em> <code>\boxed</code> in the response and matches braces with a depth counter, so nested content like <code>\boxed{\frac{1}{2}}</code> survives. If there is no boxed answer, we optionally fall back to the last number in the text:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/verifier.py</span><button type="button" data-copy>Copy</button></div><pre><code>def extract_boxed(text: str) -&gt; str | None:
+    start = text.rfind("\\boxed")
+    if start == -1:
+        return None
+    i = start + len("\\boxed")
+    while i &lt; len(text) and text[i].isspace():
+        i += 1
+    if i &gt;= len(text) or text[i] != "{":
+        return None
+    i += 1
+    depth, content_start = 1, i
+    while i &lt; len(text) and depth &gt; 0:
+        if text[i] == "{": depth += 1
+        elif text[i] == "}": depth -= 1
+        i += 1
+    if depth != 0:
+        return None
+    return text[content_start : i - 1]</code></pre></div>
+
+        <h3>Normalization: one canonical form</h3>
+        <p>The same value appears as <code>\dfrac{14}{3}</code>, <code>14/3</code>, <code>$14/3$</code>, or <code>(14)/(3)</code>. A normalization pass rewrites the common surface variations — LaTeX fractions and roots, <code>^</code> → <code>**</code>, Unicode superscripts (2² → 2**2), thousand separators (1,000 → 1000), degree marks, <code>\text{...}</code> wrappers, multiple-choice labels (<code>c. 3</code> → 3):</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/verifier.py · abridged</span><button type="button" data-copy>Copy</button></div><pre><code>def normalize_answer(text):
+    out = RE_SPECIAL.sub("", text).strip()  <span class="cm"># drop &lt;|assistant|&gt;-style tokens</span>
+    <span class="cm"># Leading multiple-choice label: "c. 3" -&gt; "3"</span>
+    <span class="cm"># Degree markers: 30° / 30^{\circ} -&gt; 30</span>
+    <span class="cm"># Unwrap \text{...}; strip \( \) \[ \] and \left \right</span>
+    out = out.replace("\\dfrac", "\\frac").replace("\\tfrac", "\\frac")
+    <span class="cm"># Unicode superscripts: x² -&gt; x**2</span>
+    out = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"sqrt(\1)", out)
+    out = re.sub(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"(\1)/(\2)", out)
+    out = out.replace("^", "**")            <span class="cm"># 2^3 -&gt; 2**3</span>
+    out = re.sub(r"(?&lt;=\d)\s+(\d+/\d+)", r"+\1", out)  <span class="cm"># "2 1/2" -&gt; "2+1/2"</span>
+    out = out.replace("{", "").replace("}", "")
+    out = re.sub(r"(?&lt;=\d),(?=\d\d\d(\D|$))", "", out)  <span class="cm"># 1,000 -&gt; 1000</span>
+    return out.strip().lower()</code></pre></div>
+
+        <h3>Verification: symbolic, not string, equality</h3>
+        <p>String comparison fails on <code>1/2</code> vs <code>0.5</code>. So after a fast string-equality short-circuit, both sides are parsed into SymPy expressions and compared symbolically — the difference simplifies to zero exactly when the answers are mathematically equal. Three guards matter because model output is arbitrary text: inputs longer than 2,000 characters are rejected; since SymPy's parser uses <code>eval()</code> internally, nothing reaches it unless it passes a strict allowlist (numbers, <code>+ - * / **</code>, parentheses, and <code>sqrt(...)</code>; every other identifier, attribute, or string is refused); and numeric literals and parenthesis depth are bounded, so short but explosive inputs like <code>9**999999999</code> are rejected fast instead of hanging the evaluation:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/verifier.py</span><button type="button" data-copy>Copy</button></div><pre><code>def answers_equal(a, b):
+    if a == b: return True
+    ea, eb = _parse_expr(a), _parse_expr(b)  <span class="cm"># allowlist-checked, or None</span>
+    if ea is not None and eb is not None:
+        return simplify(ea - eb) == 0
+    return False</code></pre></div>
+        <p>Unparseable or non-allowlisted garbage (models sometimes emit it) parses to <code>None</code> and simply fails the check — it can never execute as code.</p>
+
+        <h3>Grading, and a full demo</h3>
+        <p><code>grade_answer</code> normalizes both sides, splits multi-part answers like <code>(2, 3)</code> on top-level commas (depth-aware, so nested content keeps its inner commas), and requires pairwise equivalence. Running <code>demo_verifier.py</code> exercises the whole pipeline against the surface forms real models produce:</p>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_verifier.py</span><button type="button" data-copy>Copy</button></div><pre><code>Case                      | Extracted        | Normalized | Expect | Got   | OK?
+clean boxed answer        | 7                | 7          | True   | True  | PASS
+\dfrac variant            | \dfrac{14}{3}    | (14)/(3)   | True   | True  | PASS
+dollar-wrapped            | 1{,}000          | 1000       | True   | True  | PASS
+degrees                   | 30^\circ         | 30         | True   | True  | PASS
+unicode superscript       | 4                | 4          | True   | True  | PASS
+MC label prefix           | c. 3             | 3          | True   | True  | PASS
+decimal vs fraction       | 0.5              | 0.5        | True   | True  | PASS
+multi-part answer         | (2, 3)           | (2, 3)     | True   | True  | PASS
+wrong value               | 8                | 8          | False  | False | PASS
+part count mismatch       | (2, 3)           | (2, 3)     | False  | False | PASS
+unparseable junk          | framework.raises | framework.raises | False  | False | PASS
+Passed 13/13</code></pre></div>
+        <p>Two of these rows were added after the pipeline <em>failed</em> them on the first run — <code>1{,}000</code> exposed an ordering bug (thousand separators were stripped before braces were removed). That is the point of the verifier being code: its bugs are testable, and the tests now pin the behavior.</p>
+        <div class="callout mint"><strong>Why the verifier matters beyond evaluation</strong><p>It is deterministic and reproducible — the same answer always gets the same grade, with none of the noise of human preference labels or a learned reward model. In section 6 it becomes the reward function for reinforcement learning. Everything that can go wrong with rewards (section 8) starts here, in what the verifier can and cannot see.</p></div>
+      </section>
+
+      <section id="inference-scaling">
+        <div class="kicker">04 · Inference-time scaling</div>
+        <h2>Better answers without training.</h2>
+        <p class="section-intro">Before touching the weights, there is a cheaper lever: spend more compute <em>at generation time</em>. Three knobs, all implemented in <code>examples/reasoning/generation.py</code> and exercised by <code>demo_inference_scaling.py</code>.</p>
+
+        <h3>Temperature: reshaping the next-token distribution</h3>
+        <p>The model ends every forward pass with a logit vector over the vocabulary; softmax turns it into a probability distribution. Dividing the logits by a temperature <em>T</em> first sharpens (<em>T</em> &lt; 1) or flattens (<em>T</em> &gt; 1) that distribution:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/generation.py</span><button type="button" data-copy>Copy</button></div><pre><code>def scale_logits_by_temperature(logits, temperature):
+    if temperature &lt;= 0:
+        raise ValueError("Temperature must be positive")
+    return logits / temperature</code></pre></div>
+        <p>Measured on our toy model (next token after <code>Compute 3+4.</code>, top-5 candidates):</p>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_inference_scaling.py</span><button type="button" data-copy>Copy</button></div><pre><code>  T=0.5: '\boxed{': 1.000, '1': 0.000, '0': 0.000, '}': 0.000, '2': 0.000
+  T=1.0: '\boxed{': 0.998, '1': 0.000, '0': 0.000, '}': 0.000, '2': 0.000
+  T=2.0: '\boxed{': 0.825, '1': 0.018, '0': 0.017, '}': 0.011, '2': 0.010</code></pre></div>
+        <p>The trained model is already confident, so low temperature changes little; <em>T</em> = 2 visibly spreads probability mass to alternatives. Temperature does not change the <em>ranking</em> — it changes how often sampling explores below the top choice.</p>
+
+        <h3>Top-p (nucleus) sampling: truncating the tail</h3>
+        <p>Sampling from the full distribution occasionally picks an absurd low-probability token. Top-p keeps only the smallest set of tokens whose cumulative probability reaches <em>p</em>, then renormalizes:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/generation.py · abridged</span><button type="button" data-copy>Copy</button></div><pre><code>sorted_p, idx = torch.sort(probas, dim=-1, descending=True)
+prefix = torch.cumsum(sorted_p, dim=-1) - sorted_p
+keep = prefix &lt; top_p
+keep[..., 0] = True            <span class="cm"># always keep the single best token</span>
+<span class="cm"># zero out the rest, scatter back, renormalize to sum 1</span></code></pre></div>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_inference_scaling.py</span><button type="button" data-copy>Copy</button></div><pre><code>  top_p=1.0: kept ['0.50', '0.25', '0.15', '0.06', '0.04']
+  top_p=0.9: kept ['0.56', '0.28', '0.17']          (renormalized)
+  top_p=0.6: kept ['0.67', '0.33']                  (renormalized)
+  top_p=0.4: kept ['1.00']                          (renormalized)</code></pre></div>
+        <p>Note the boundary rule: the token that <em>crosses</em> the threshold is kept (the cumulative mass <em>before</em> a token must be below <em>p</em>), and the top token is always kept. These two details are where off-by-one implementations diverge; the test suite pins both.</p>
+
+        <h3>Self-consistency: vote over sampled attempts</h3>
+        <p>Sample <em>k</em> completions at moderate temperature, extract the final answer from each with the verifier's extractor, and return the majority:</p>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_inference_scaling.py</span><button type="button" data-copy>Copy</button></div><pre><code>  problem: Compute 2+9.  (correct answer: 11)
+  sampled final answers: ['10', '13', '14', '10', '15', '10', '10', '10']
+  vote counts: {'10': 5, '13': 1, '14': 1, '15': 1} -&gt; winner '10' (tied=False)
+
+  over 10 problems: greedy 10/10 | majority vote 5/10 (8 samples, T=1.0)</code></pre></div>
+        <div class="callout"><strong>An honest negative result</strong><p>On this toy task, voting <em>loses</em> to greedy decoding: the model's errors are systematic (it is biased toward certain wrong digits), so the majority confidently amplifies a wrong mode. Self-consistency pays off when sampled <em>reasoning paths</em> are diverse but converge on the correct answer — that is the regime the book demonstrates on the real 0.6B model (ch. 4), where chain-of-thought makes mistakes decorrelate. Our toy answers are bare digits with no reasoning path to diversify, so the mechanism is real but the benefit is absent. We report it as measured.</p></div>
+        <p>The same section of the book also covers <em>self-refinement</em> — scoring a draft response (with rule-based scores or the model's own log-probabilities as a confidence measure) and feeding the critique back for another pass. We leave it at this pointer; the GRPO machinery below reuses the same log-prob scoring in a different role.</p>
+      </section>
+
+      <section id="rlvr">
+        <div class="kicker">05 · From RLHF to RLVR</div>
+        <h2>Rewards you can verify, not preferences you must model.</h2>
+        <p class="section-intro">To go beyond inference-time tricks we need a training signal for "good reasoning".</p>
+        <p>The 2022 InstructGPT recipe, RLHF, gets it from humans: annotators rank candidate responses, a separate <em>reward model</em> is trained on those rankings, and the LLM is then optimized against the reward model's scores. That works, but it means training and maintaining a second model roughly the size of the first, and the signal inherits the noise and inconsistency of human judgment.</p>
+        <p>Reasoning tasks admit something cleaner. For math (and for code that must compile), correctness is <em>verifiable</em>: the verifier of section 3 grades a response deterministically, 1 for correct and 0 otherwise. <strong>Reinforcement learning with verifiable rewards (RLVR)</strong> replaces the entire reward-model stage with that check — no human preference labels are needed, though the problems and their ground-truth answers are still given. The recipe became prominent with DeepSeek-R1 (2025): its R1-Zero variant showed that pure RL with verifiable rewards can grow reasoning behavior from a base model, and the full R1 pipeline combined a small cold-start SFT stage with RL.</p>
+        <p>Our reward is section 3's pipeline, with one strictness knob: a response <em>without</em> a <code>\boxed{}</code> answer scores 0 — no fallback — so the reward pressures the model to produce a parseable final answer:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/rewards.py</span><button type="button" data-copy>Copy</button></div><pre><code>def reward_correctness(response_text, ground_truth) -&gt; float:
+    extracted = extract_answer(response_text, require_boxed=True)
+    if not extracted:
+        return 0.0
+    return float(grade_answer(extracted, ground_truth))</code></pre></div>
+        <p>RLVR decides <em>what</em> signal we learn from. The remaining question is <em>how</em> to turn a binary grade into weight updates. That is GRPO.</p>
+      </section>
+
+      <section id="grpo">
+        <div class="kicker">06 · GRPO from scratch</div>
+        <h2>The group is the baseline.</h2>
+        <p class="section-intro"><strong>Group Relative Policy Optimization</strong> (GRPO, from the DeepSeekMath paper) is the policy-gradient algorithm used to train DeepSeek-R1 — and our toy model. Its selling point over PPO is that it needs <em>no value model</em>: instead of learning a separate network that estimates how good a response is expected to be, GRPO samples a <em>group</em> of responses to the same prompt and uses the group itself as the baseline.</p>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgNDIwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkdSUE8gdXBkYXRlOiBzYW1wbGUgYSBncm91cCwgc2NvcmUgd2l0aCB2ZXJpZmllciwgY29tcHV0ZSBncm91cC1yZWxhdGl2ZSBhZHZhbnRhZ2VzLCB3ZWlnaHQgbG9nLXByb2JzLCB1cGRhdGUiPgogIDxkZWZzPgogICAgPG1hcmtlciBpZD0iYXJyMiIgdmlld0JveD0iMCAwIDEwIDEwIiByZWZYPSI5IiByZWZZPSI1IiBtYXJrZXJXaWR0aD0iNyIgbWFya2VySGVpZ2h0PSI3IiBvcmllbnQ9ImF1dG8tc3RhcnQtcmV2ZXJzZSI+CiAgICAgIDxwYXRoIGQ9Ik0wLDAgTDEwLDUgTDAsMTAgeiIgZmlsbD0iIzQ3NTU2OSIvPgogICAgPC9tYXJrZXI+CiAgPC9kZWZzPgogIDxzdHlsZT4KICAgIC5ib3ggeyBmaWxsOiAjZjhmYWZjOyBzdHJva2U6ICM0NzU1Njk7IHN0cm9rZS13aWR0aDogMS41OyB9CiAgICAuaGwgeyBmaWxsOiAjZWZmNmZmOyBzdHJva2U6ICMyNTYzZWI7IH0KICAgIC5sb3NzIHsgZmlsbDogI2ZlZjJmMjsgc3Ryb2tlOiAjZGMyNjI2OyB9CiAgICAuc3RlcCB7IGZvbnQtc2l6ZTogMTNweDsgZm9udC13ZWlnaHQ6IDYwMDsgZmlsbDogIzBmMTcyYTsgfQogICAgLnN1YiB7IGZvbnQtc2l6ZTogMTFweDsgZmlsbDogIzQ3NTU2OTsgfQogICAgLm1vbm8geyBmb250LWZhbWlseTogdWktbW9ub3NwYWNlLCBTRk1vbm8tUmVndWxhciwgTWVubG8sIG1vbm9zcGFjZTsgZm9udC1zaXplOiAxMXB4OyBmaWxsOiAjMWU0MGFmOyB9CiAgICAubnVtIHsgZm9udC1zaXplOiAxMXB4OyBmb250LXdlaWdodDogNzAwOyBmaWxsOiAjZmZmZmZmOyB9CiAgPC9zdHlsZT4KCiAgPCEtLSBwcm9tcHQgLS0+CiAgPHJlY3QgY2xhc3M9ImJveCIgeD0iMjAiIHk9IjMwIiB3aWR0aD0iMTgwIiBoZWlnaHQ9IjU0IiByeD0iOCIvPgogIDx0ZXh0IGNsYXNzPSJzdGVwIiB4PSIxMTAiIHk9IjUyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5Qcm9tcHQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9Im1vbm8iIHg9IjExMCIgeT0iNzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPiJDb21wdXRlIDMrNC4iPC90ZXh0PgoKICA8bGluZSB4MT0iMjA0IiB5MT0iNTciIHgyPSIyNDYiIHkyPSI1NyIgc3Ryb2tlPSIjNDc1NTY5IiBzdHJva2Utd2lkdGg9IjEuNSIgbWFya2VyLWVuZD0idXJsKCNhcnIyKSIvPgoKICA8IS0tIHN0YWdlIDE6IHJvbGxvdXRzIC0tPgogIDxyZWN0IGNsYXNzPSJib3giIHg9IjI1MCIgeT0iMTQiIHdpZHRoPSIyMjAiIGhlaWdodD0iOTAiIHJ4PSI4Ii8+CiAgPGNpcmNsZSBjeD0iMjY4IiBjeT0iMzIiIHI9IjEwIiBmaWxsPSIjMjU2M2ViIi8+PHRleHQgY2xhc3M9Im51bSIgeD0iMjY4IiB5PSIzNiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3RlcCIgeD0iMjg0IiB5PSIzNiI+U2FtcGxlIGEgZ3JvdXAgb2Ygcm9sbG91dHM8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMjg0IiB5PSI1MiI+b2xkIHBvbGljeSBzbmFwc2hvdCwgbm9fZ3JhZCw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMjg0IiB5PSI2NiI+dGVtcGVyYXR1cmUgKyB0b3AtcDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iMjYyIiB5PSI5MiI+cm9sbG91dOKCgeKApiByb2xsb3V04oKIPC90ZXh0PgoKICA8bGluZSB4MT0iMzYwIiB5MT0iMTA4IiB4Mj0iMzYwIiB5Mj0iMTQwIiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS13aWR0aD0iMS41IiBtYXJrZXItZW5kPSJ1cmwoI2FycjIpIi8+CgogIDwhLS0gc3RhZ2UgMjogcmV3YXJkcyAtLT4KICA8cmVjdCBjbGFzcz0iYm94IiB4PSIyNTAiIHk9IjE0NCIgd2lkdGg9IjIyMCIgaGVpZ2h0PSI3NiIgcng9IjgiLz4KICA8Y2lyY2xlIGN4PSIyNjgiIGN5PSIxNjIiIHI9IjEwIiBmaWxsPSIjMjU2M2ViIi8+PHRleHQgY2xhc3M9Im51bSIgeD0iMjY4IiB5PSIxNjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjI8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjI4NCIgeT0iMTY2Ij5WZXJpZmlhYmxlIHJld2FyZHM8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMjg0IiB5PSIxODIiPm1hdGggdmVyaWZpZXIgZ3JhZGVzIGVhY2ggcm9sbG91dDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iMjYyIiB5PSIyMDQiPnIgPSBbMSwgMSwgMCwg4oCmLCAxXTwvdGV4dD4KCiAgPGxpbmUgeDE9IjM2MCIgeTE9IjIyNCIgeDI9IjM2MCIgeTI9IjI1NiIgc3Ryb2tlPSIjNDc1NTY5IiBzdHJva2Utd2lkdGg9IjEuNSIgbWFya2VyLWVuZD0idXJsKCNhcnIyKSIvPgoKICA8IS0tIHN0YWdlIDM6IGFkdmFudGFnZXMgLS0+CiAgPHJlY3QgY2xhc3M9ImhsIiB4PSIyNTAiIHk9IjI2MCIgd2lkdGg9IjIyMCIgaGVpZ2h0PSI3NiIgcng9IjgiIHN0cm9rZS13aWR0aD0iMS41Ii8+CiAgPGNpcmNsZSBjeD0iMjY4IiBjeT0iMjc4IiByPSIxMCIgZmlsbD0iIzI1NjNlYiIvPjx0ZXh0IGNsYXNzPSJudW0iIHg9IjI2OCIgeT0iMjgyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4zPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdGVwIiB4PSIyODQiIHk9IjI4MiI+R3JvdXAtcmVsYXRpdmUgYWR2YW50YWdlczwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iMjg0IiB5PSIzMDAiPkHhtaIgPSAocuG1oiDiiJIgzrzhtaMpIC8gKM+D4bWjICsgzrUpPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjI4NCIgeT0iMzE4Ij5ncm91cCBpcyBpdHMgb3duIGJhc2VsaW5lIOKAlCBubyB2YWx1ZSBtb2RlbDwvdGV4dD4KCiAgPGxpbmUgeDE9IjQ3NCIgeTE9IjI5OCIgeDI9IjUxNiIgeTI9IjI5OCIgc3Ryb2tlPSIjNDc1NTY5IiBzdHJva2Utd2lkdGg9IjEuNSIgbWFya2VyLWVuZD0idXJsKCNhcnIyKSIvPgoKICA8IS0tIHN0YWdlIDQ6IGxvZ3Byb2JzIC0tPgogIDxyZWN0IGNsYXNzPSJib3giIHg9IjUyMCIgeT0iMTgyIiB3aWR0aD0iMjI0IiBoZWlnaHQ9Ijc2IiByeD0iOCIvPgogIDxjaXJjbGUgY3g9IjUzOCIgY3k9IjIwMCIgcj0iMTAiIGZpbGw9IiMyNTYzZWIiLz48dGV4dCBjbGFzcz0ibnVtIiB4PSI1MzgiIHk9IjIwNCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3RlcCIgeD0iNTU0IiB5PSIyMDQiPlNlcXVlbmNlIGxvZy1wcm9iczwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3ViIiB4PSI1NTQiIHk9IjIyMCI+YW5zd2VyIHRva2VucyBvbmx5LCBzaGlmdGVkIHRhcmdldHM7PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjU1NCIgeT0iMjM0Ij5vbGQgKGRldGFjaGVkKSB2cyBuZXcgKGdyYWQpPC90ZXh0PgoKICA8bGluZSB4MT0iNjMyIiB5MT0iMjYyIiB4Mj0iNjMyIiB5Mj0iMjk0IiBzdHJva2U9IiM0NzU1NjkiIHN0cm9rZS13aWR0aD0iMS41IiBtYXJrZXItZW5kPSJ1cmwoI2FycjIpIi8+CgogIDwhLS0gc3RhZ2UgNTogbG9zcyAtLT4KICA8cmVjdCBjbGFzcz0ibG9zcyIgeD0iNTIwIiB5PSIyOTgiIHdpZHRoPSIyMjQiIGhlaWdodD0iODgiIHJ4PSI4IiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDxjaXJjbGUgY3g9IjUzOCIgY3k9IjMxNiIgcj0iMTAiIGZpbGw9IiNkYzI2MjYiLz48dGV4dCBjbGFzcz0ibnVtIiB4PSI1MzgiIHk9IjMyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3RlcCIgeD0iNTU0IiB5PSIzMjAiPkNsaXBwZWQgcG9saWN5IGxvc3MgKCsgS0wpPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJtb25vIiB4PSI1MzAiIHk9IjM0MCI+4oiSbWVhbihtaW4oz4FBLCBjbGlwKM+BKUEpKTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibW9ubyIgeD0iNTMwIiB5PSIzNTYiPisgzrLCt21lYW4obG9ncF9uZXcg4oiSIGxvZ3BfcmVmKTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3ViIiB4PSI1NTQiIHk9IjM3NCI+YWR2YW50YWdlcyAmYW1wOyBvbGQvcmVmIGxvZy1wcm9icyBkZXRhY2hlZDwvdGV4dD4KCiAgPCEtLSB1cGRhdGUgYXJyb3cgYmFjayAtLT4KICA8cGF0aCBkPSJNIDYzMiAzOTAgQyA2MzIgNDEwLCAxMTAgNDEwLCAxMTAgOTIiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzQ3NTU2OSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1kYXNoYXJyYXk9IjUgNCIgbWFya2VyLWVuZD0idXJsKCNhcnIyKSIvPgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjM3MSIgeT0iNDEyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5iYWNrd2FyZCDihpIgY2xpcCBncmFkcyDihpIgb3B0aW1pemVyIHN0ZXAg4oaSIG5leHQgcHJvbXB0PC90ZXh0PgoKICA8IS0tIGxlZ2VuZCAtLT4KICA8cmVjdCBjbGFzcz0iYm94IiB4PSIyMCIgeT0iMTUwIiB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEyMCIgcng9IjgiLz4KICA8dGV4dCBjbGFzcz0ic3RlcCIgeD0iMTEwIiB5PSIxNzIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPktleSBpbnZhcmlhbnRzPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjMyIiB5PSIxOTQiPsK3IG1lYW4oQSkg4omIIDAgYnkgY29uc3RydWN0aW9uPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjMyIiB5PSIyMTIiPsK3IGFsbC1lcXVhbCByZXdhcmRzIOKGkiBubyBzaWduYWw8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMzIiIHk9IjIzMCI+wrcgz4EgPSBleHAobG9ncF9uZXcg4oiSIGxvZ3Bfb2xkKTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3ViIiB4PSIzMiIgeT0iMjQ4Ij7CtyBncmFkaWVudHMgZmxvdyB2aWEgbmV3IGxvZy1wcm9icyBvbmx5PC90ZXh0Pgo8L3N2Zz4K" alt="GRPO update loop: sample a group of rollouts from a frozen snapshot, score with the verifier, compute group-relative advantages, compute sequence log-probs, combine into a clipped policy loss, update weights"><div class="caption">Original diagram. One GRPO update, five stages; the dashed path is the gradient update feeding the next iteration.</div></div>
+
+        <h3>Stage 1–2: rollouts and rewards</h3>
+        <p>For one prompt, we snapshot the current policy (the <em>old</em> policy — frozen, gradients off) and sample a group of completions with temperature and top-p, under <code>torch.no_grad()</code>. Each completion is graded by the verifier:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/grpo.py · abridged</span><button type="button" data-copy>Copy</button></div><pre><code>old_model = copy.deepcopy(model)
+for p in old_model.parameters():
+    p.requires_grad = False
+
+group = sample_group(old_model, tokenizer, example,
+                     num_rollouts=8, max_new_tokens=8,
+                     temperature=1.0, top_p=0.95, seed=seed)
+<span class="cm"># rewards like [1, 1, 0, 1, 0, 0, 1, 0]</span></code></pre></div>
+
+        <h3>Stage 3: group-relative advantages</h3>
+        <p>Rewards are absolute; the learning signal is <em>relative</em>. The advantage standardizes each reward within the group:</p>
+        <div class="equation">Aᵢ = (rᵢ − μᵣ) / (σᵣ + ε)<small>A rollout above the group mean gets a positive push; below it, a negative one. ε = 1e-4 is numerical stability.</small></div>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/grpo.py</span><button type="button" data-copy>Copy</button></div><pre><code>def compute_advantages(rewards):
+    r = torch.tensor(rewards, dtype=torch.float32)
+    return (r - r.mean()) / (r.std() + 1e-4)</code></pre></div>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMzAwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkZyb20gcmV3YXJkcyB0byBncm91cC1yZWxhdGl2ZSBhZHZhbnRhZ2VzOiBhIHdvcmtlZCBleGFtcGxlIHdpdGggcmV3YXJkcyAxLDEsMCwwIj4KICA8ZGVmcz4KICAgIDxtYXJrZXIgaWQ9ImFycjMiIHZpZXdCb3g9IjAgMCAxMCAxMCIgcmVmWD0iOSIgcmVmWT0iNSIgbWFya2VyV2lkdGg9IjciIG1hcmtlckhlaWdodD0iNyIgb3JpZW50PSJhdXRvLXN0YXJ0LXJldmVyc2UiPgogICAgICA8cGF0aCBkPSJNMCwwIEwxMCw1IEwwLDEwIHoiIGZpbGw9IiM0NzU1NjkiLz4KICAgIDwvbWFya2VyPgogIDwvZGVmcz4KICA8c3R5bGU+CiAgICAubGJsIHsgZm9udC1zaXplOiAxMnB4OyBmaWxsOiAjMzM0MTU1OyB9CiAgICAudmFsIHsgZm9udC1mYW1pbHk6IHVpLW1vbm9zcGFjZSwgTWVubG8sIG1vbm9zcGFjZTsgZm9udC1zaXplOiAxMnB4OyBmaWxsOiAjMGYxNzJhOyB9CiAgICAudGl0bGUgeyBmb250LXNpemU6IDEzcHg7IGZvbnQtd2VpZ2h0OiA2MDA7IGZpbGw6ICMwZjE3MmE7IH0KICAgIC5heGlzIHsgc3Ryb2tlOiAjOTRhM2I4OyBzdHJva2Utd2lkdGg6IDE7IH0KICA8L3N0eWxlPgoKICA8IS0tIGxlZnQ6IHJld2FyZHMgLS0+CiAgPHRleHQgY2xhc3M9InRpdGxlIiB4PSIxNTAiIHk9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5WZXJpZmllciByZXdhcmRzIHLhtaI8L3RleHQ+CiAgPCEtLSBiYXNlbGluZSBncmlkIC0tPgogIDxsaW5lIGNsYXNzPSJheGlzIiB4MT0iNjAiIHkxPSIyNDAiIHgyPSIyNjAiIHkyPSIyNDAiLz4KICA8IS0tIGJhcnM6IHZhbHVlIDEgLT4gaGVpZ2h0IDgwIC0tPgogIDxyZWN0IHg9IjcwIiAgeT0iMTYwIiB3aWR0aD0iMzYiIGhlaWdodD0iODAiIGZpbGw9IiMwNTk2NjkiLz4KICA8cmVjdCB4PSIxMjAiIHk9IjE2MCIgd2lkdGg9IjM2IiBoZWlnaHQ9IjgwIiBmaWxsPSIjMDU5NjY5Ii8+CiAgPHJlY3QgeD0iMTcwIiB5PSIxNjAiIHdpZHRoPSIzNiIgaGVpZ2h0PSI4MCIgZmlsbD0iI2NiZDVlMSIvPgogIDxyZWN0IHg9IjIyMCIgeT0iMTYwIiB3aWR0aD0iMzYiIGhlaWdodD0iODAiIGZpbGw9IiNjYmQ1ZTEiLz4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSI4OCIgIHk9IjE1NCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTwvdGV4dD4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSIxMzgiIHk9IjE1NCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTwvdGV4dD4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSIxODgiIHk9IjE1NCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MDwvdGV4dD4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSIyMzgiIHk9IjE1NCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSI4OCIgIHk9IjI1OCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+cuKCgTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSIxMzgiIHk9IjI1OCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+cuKCgjwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSIxODgiIHk9IjI1OCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+cuKCgzwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSIyMzgiIHk9IjI1OCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+cuKChDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSIxNjAiIHk9IjI4NSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+zrzhtaMgPSAwLjUsIM+D4bWjID0gMC41NzcgKM61ID0gMWUtNCk8L3RleHQ+CgogIDxsaW5lIHgxPSIyOTAiIHkxPSIxNTAiIHgyPSIzNDAiIHkyPSIxNTAiIHN0cm9rZT0iIzQ3NTU2OSIgc3Ryb2tlLXdpZHRoPSIxLjUiIG1hcmtlci1lbmQ9InVybCgjYXJyMykiLz4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSIzMTUiIHk9IjE0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIxM3B4Ij5B4bWiID0gKHLhtaIg4oiSIM684bWjKS8oz4PhtaMgKyDOtSk8L3RleHQ+CgogIDwhLS0gcmlnaHQ6IGFkdmFudGFnZXMgLS0+CiAgPHRleHQgY2xhc3M9InRpdGxlIiB4PSI1NDAiIHk9IjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BZHZhbnRhZ2VzIEHhtaIgKG1lYW4g4omIIDApPC90ZXh0PgogIDwhLS0gemVybyBsaW5lIC0tPgogIDxsaW5lIGNsYXNzPSJheGlzIiB4MT0iNDAwIiB5MT0iMTUwIiB4Mj0iNzAwIiB5Mj0iMTUwIi8+CiAgPCEtLSArMC44NjYgLT4gdXAgNzBweDsgLTAuODY2IC0+IGRvd24gNzBweCAtLT4KICA8cmVjdCB4PSI0MzAiIHk9IjgwIiAgd2lkdGg9IjUwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjMDU5NjY5Ii8+CiAgPHJlY3QgeD0iNTAwIiB5PSI4MCIgIHdpZHRoPSI1MCIgaGVpZ2h0PSI3MCIgZmlsbD0iIzA1OTY2OSIvPgogIDxyZWN0IHg9IjU3MCIgeT0iMTUwIiB3aWR0aD0iNTAiIGhlaWdodD0iNzAiIGZpbGw9IiNkYzI2MjYiLz4KICA8cmVjdCB4PSI2NDAiIHk9IjE1MCIgd2lkdGg9IjUwIiBoZWlnaHQ9IjcwIiBmaWxsPSIjZGMyNjI2Ii8+CiAgPHRleHQgY2xhc3M9InZhbCIgeD0iNDU1IiB5PSI3MiIgIHRleHQtYW5jaG9yPSJtaWRkbGUiPiswLjg2NjwvdGV4dD4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSI1MjUiIHk9IjcyIiAgdGV4dC1hbmNob3I9Im1pZGRsZSI+KzAuODY2PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJ2YWwiIHg9IjU5NSIgeT0iMjM4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7iiJIwLjg2NjwvdGV4dD4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSI2NjUiIHk9IjIzOCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+4oiSMC44NjY8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNDU1IiB5PSIxNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmZmZmYiPmNvcnJlY3Q8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNTI1IiB5PSIxNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmZmZmYiPmNvcnJlY3Q8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNTUwIiB5PSIyODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnBvc2l0aXZlIEEg4oaSIHJhaXNlIHRoZXNlIHRva2VuIHByb2JhYmlsaXRpZXM7IG5lZ2F0aXZlIEEg4oaSIGxvd2VyIHRoZW08L3RleHQ+Cjwvc3ZnPgo=" alt="Bar chart: rewards 1,1,0,0 with mean 0.5 become advantages +0.866, +0.866, -0.866, -0.866"><div class="caption">The worked example from the book (ch. 6): rewards [1, 1, 0, 0] become advantages [+0.866, +0.866, −0.866, −0.866]. Correct rollouts get pushed up, incorrect ones down, by exactly the same amount.</div></div>
+        <ul class="checklist"><li><strong>Centered by construction</strong> — the advantages of a group always average to ≈ 0; the group is its own baseline.</li><li><strong>Degenerate groups carry no signal</strong> — if <em>all</em> rollouts earn the same reward (all right or all wrong), every advantage is 0 and there is nothing to learn from that prompt.</li></ul>
+
+        <h3>Stage 4: sequence log-probabilities</h3>
+        <p>To increase the probability of good rollouts we need to differentiate through "how probable was this response". The sequence log-prob sums the log-probs of the answer tokens — and only the answer tokens. This is Article 1's shifted-target construction with a mask: position <em>t</em> of the logits predicts token <em>t</em> + 1, so the first position that predicts an answer token is <code>prompt_len − 1</code>:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/grpo.py · abridged</span><button type="button" data-copy>Copy</button></div><pre><code>def sequence_logprob(model, token_ids, prompt_len):
+    ids = torch.tensor([token_ids])              <span class="cm"># (1, seq_len)</span>
+    logits = model(ids)[0].float()               <span class="cm"># (seq_len, vocab)</span>
+    logprobs = torch.log_softmax(logits, dim=-1)
+    targets = ids[0, 1:]                         <span class="cm"># shifted by one</span>
+    selected = logprobs[:-1].gather(1, targets.unsqueeze(-1)).squeeze(-1)
+    return selected[prompt_len - 1:].sum()       <span class="cm"># answer positions only</span></code></pre></div>
+        <p>The same forward pass is run three ways: under the old policy (detached — it is a constant reference), under a frozen reference model when KL is used (also detached), and under the current trainable policy — the only one that carries gradients.</p>
+
+        <h3>Stage 5: the policy-gradient loss, and the detach that matters</h3>
+        <p>The chapter-6 form of the loss weights each rollout's log-prob by its advantage and averages over the group, with a sign flip (optimizers minimize; we want to <em>maximize</em> advantage-weighted probability):</p>
+        <div class="equation">L<sub>PG</sub> = − (1/N) Σᵢ Aᵢ · log p<sub>θ</sub>(y⁽ⁱ⁾ | x)<small>The inner log p<sub>θ</sub> is the sequence log-prob of rollout i under the current policy; Aᵢ is its detached group-relative advantage.</small></div>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/grpo.py</span><button type="button" data-copy>Copy</button></div><pre><code>adv = advantages.detach()      <span class="cm"># fixed learning signal — see below</span>
+pg_loss = -(adv * new_logps).mean()</code></pre></div>
+        <div class="callout mint"><strong>The <code>.detach()</code> is the whole point</strong><p>The advantages are <em>constants</em> for this update: they were computed from rewards, which come from a non-differentiable verifier. Without <code>.detach()</code>, autograd would try to flow gradient through the advantage computation into however it was produced. With it, gradient flows only through <code>new_logps</code> — the current policy's log-probability of each token it generated. The same discipline applies to the old-policy and reference log-probs below. The test suite verifies that a backward pass reaches the policy's parameters and that the advantage tensor carries no graph.</p></div>
+        <p>One subtlety you will notice in any training log: the <em>logged</em> loss right after the old-policy snapshot is ≈ 0. The advantages average to zero, and (as we will see next) the policy ratio starts at exactly 1 — so the scalar loss is uninformative by construction. The informative metrics are <code>reward_avg</code>, advantage statistics, entropy, and response length. The book's training runs make the same point: GRPO's loss is a sanity check, not a progress meter.</p>
+
+        <h3>Does it learn? Measured on the toy task</h3>
+        <p><code>demo_grpo.py</code> runs 300 GRPO updates (8 rollouts per prompt, 24-prompt train subset, temperature 1.0, top-p 0.95) and measures sampled accuracy — the model's own rollouts graded by the verifier — before and after:</p>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_grpo.py</span><button type="button" data-copy>Copy</button></div><pre><code>  before: sampled acc (train subset) = 0.531 | greedy acc (held-out) = 0.00
+  [step   1/300] loss=-0.0000 reward_avg=0.375 adv_std=1.000 entropy=0.55 resp_len=3.0 ratio=1.00
+  [step  60/300] loss=0.0000 reward_avg=1.000 adv_std=0.000 entropy=0.14 resp_len=3.0 ratio=1.00
+  [step 120/300] loss=0.0000 reward_avg=0.000 adv_std=0.000 entropy=0.37 resp_len=3.0 ratio=1.00
+  [step 180/300] loss=0.0000 reward_avg=1.000 adv_std=0.000 entropy=0.16 resp_len=3.0 ratio=1.00
+  [step 300/300] loss=0.0000 reward_avg=1.000 adv_std=0.000 entropy=0.09 resp_len=3.0 ratio=1.00
+  after:  sampled acc (train subset) = 0.927 | greedy acc (held-out) = 0.00</code></pre></div>
+        <p>Sampled accuracy on the trained problems climbs from 53% to 93% in twelve seconds of CPU time — the verifiable reward doing its job. The log also shows the mechanics live: entropy declines as the model grows confident, and steps with <code>reward_avg</code> 0.000 or 1.000 have <code>adv_std=0</code> (degenerate groups, no signal). And the held-out column is the honest caveat: this toy model <em>memorizes</em> rather than generalizes, so unseen problems stay at 0%. Real RLVR results carry the same warning — reward on training prompts is not reasoning ability on unseen ones.</p>
+      </section>
+
+      <section id="stability">
+        <div class="kicker">07 · Keeping GRPO stable</div>
+        <h2>Ratios, clipping, and the KL term.</h2>
+        <p class="section-intro">Chapter 6's loss lets the policy move arbitrarily far in one update. Over a long run that invites a familiar failure: a few aggressive steps shift token probabilities too much, rewards crash, and the run never recovers. Chapter 7 adds three stabilizers, all present in <code>examples/reasoning/grpo.py</code>.</p>
+
+        <h3>The policy ratio and clipping</h3>
+        <p>Because rollouts were generated by the <em>old</em> policy (the snapshot), we can ask how far the current policy has drifted since. Per rollout:</p>
+        <div class="equation">ρᵢ = exp( log p<sub>new</sub>(y⁽ⁱ⁾) − log p<sub>old</sub>(y⁽ⁱ⁾) )<small>A ratio of 1 means "unchanged since the snapshot".</small></div>
+        <p>Instead of weighting log-probs directly, the clipped objective scales the advantage by the ratio and takes the <em>pessimistic</em> (minimum) of the unclipped and clipped forms:</p>
+        <div class="equation">L<sub>clip</sub> = − meanᵢ [ min( ρᵢ·Aᵢ, clip(ρᵢ, 1−ε, 1+ε)·Aᵢ ) ]</div>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/grpo.py</span><button type="button" data-copy>Copy</button></div><pre><code>ratio = torch.exp(new_logps - old_logps)          <span class="cm"># old_logps detached</span>
+clipped = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps)
+obj = torch.minimum(ratio * adv, clipped * adv)
+pg_loss = -obj.mean()</code></pre></div>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMzAwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkNsaXBwZWQgcG9saWN5IG9iamVjdGl2ZTogaG93IGNsaXBwaW5nIGNhcHMgdGhlIHVwZGF0ZSBmb3IgcG9zaXRpdmUgYW5kIG5lZ2F0aXZlIGFkdmFudGFnZXMiPgogIDxzdHlsZT4KICAgIC5sYmwgeyBmb250LXNpemU6IDExcHg7IGZpbGw6ICM0NzU1Njk7IH0KICAgIC50aXRsZSB7IGZvbnQtc2l6ZTogMTNweDsgZm9udC13ZWlnaHQ6IDYwMDsgZmlsbDogIzBmMTcyYTsgfQogICAgLmF4aXMgeyBzdHJva2U6ICM5NGEzYjg7IHN0cm9rZS13aWR0aDogMTsgfQogICAgLnNvbGlkIHsgc3Ryb2tlOiAjMjU2M2ViOyBzdHJva2Utd2lkdGg6IDIuNTsgZmlsbDogbm9uZTsgfQogICAgLmRhc2hlZCB7IHN0cm9rZTogIzk0YTNiODsgc3Ryb2tlLXdpZHRoOiAxLjU7IGZpbGw6IG5vbmU7IHN0cm9rZS1kYXNoYXJyYXk6IDUgNDsgfQogIDwvc3R5bGU+CgogIDwhLS0gUGFuZWwgMTogQSA+IDAgLS0+CiAgPHRleHQgY2xhc3M9InRpdGxlIiB4PSIxOTAiIHk9IjI2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BZHZhbnRhZ2UgQSAmZ3Q7IDAgKGdvb2Qgcm9sbG91dCk8L3RleHQ+CiAgPCEtLSBheGVzOiB4ID0gNDAuLjM0MCAocmF0aW8gMC4uMiksIHkwID0gMjMwLCBzY2FsZSA4MC91bml0IC0tPgogIDxsaW5lIGNsYXNzPSJheGlzIiB4MT0iNDAiIHkxPSIyMzAiIHgyPSIzNDAiIHkyPSIyMzAiLz4KICA8bGluZSBjbGFzcz0iYXhpcyIgeDE9IjQwIiB5MT0iMjMwIiB4Mj0iNDAiIHkyPSI1MCIvPgogIDwhLS0gY2xpcCBib3VuZGFyeSBhdCByYXRpbyAxLjIgLT4geD0yMjAgLS0+CiAgPGxpbmUgeDE9IjIyMCIgeTE9IjIzMCIgeDI9IjIyMCIgeTI9IjEzNCIgc3Ryb2tlPSIjZGMyNjI2IiBzdHJva2Utd2lkdGg9IjEiIHN0cm9rZS1kYXNoYXJyYXk9IjMgMyIvPgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjIyMCIgeT0iMjQ0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjZGMyNjI2Ij4xICsgzrU8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iMTkwIiB5PSIyNDQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjE8L3RleHQ+CiAgPCEtLSBkYXNoZWQgdW5jbGlwcGVkOiAoNDAsMjMwKSB0byAoMzQwLDIzMC0yKjgwPTcwKSAtLT4KICA8cGF0aCBjbGFzcz0iZGFzaGVkIiBkPSJNIDQwIDIzMCBMIDM0MCA3MCIvPgogIDwhLS0gc29saWQgb2JqZWN0aXZlOiByaXNlIHRvICgyMjAsMTM0KSB0aGVuIGZsYXQgLS0+CiAgPHBhdGggY2xhc3M9InNvbGlkIiBkPSJNIDQwIDIzMCBMIDIyMCAxMzQgTCAzNDAgMTM0Ii8+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iMzAwIiB5PSIxMjYiPmNhcHBlZCBieSBjbGlwPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjEyMCIgeT0iMTcwIiB0cmFuc2Zvcm09InJvdGF0ZSgtMjggMTIwIDE3MCkiPnVuY2xpcHBlZCDPgcK3QTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSI0NiIgeT0iNTQiPm9iamVjdGl2ZTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSIzMzAiIHk9IjI2MCIgdGV4dC1hbmNob3I9ImVuZCI+cmF0aW8gz4E8L3RleHQ+CgogIDwhLS0gUGFuZWwgMjogQSA8IDAgLS0+CiAgPHRleHQgY2xhc3M9InRpdGxlIiB4PSI1NjAiIHk9IjI2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BZHZhbnRhZ2UgQSAmbHQ7IDAgKGJhZCByb2xsb3V0KTwvdGV4dD4KICA8IS0tIGF4ZXM6IHggPSA0MTAuLjcxMCAocmF0aW8gMC4uMiksIHkwID0gMTEwLCBzY2FsZSA4MC91bml0IChuZWdhdGl2ZSBkb3duKSAtLT4KICA8bGluZSBjbGFzcz0iYXhpcyIgeDE9IjQxMCIgeTE9IjExMCIgeDI9IjcxMCIgeTI9IjExMCIvPgogIDxsaW5lIGNsYXNzPSJheGlzIiB4MT0iNDEwIiB5MT0iMTEwIiB4Mj0iNDEwIiB5Mj0iMjUwIi8+CiAgPCEtLSBjbGlwIGJvdW5kYXJ5IGF0IHJhdGlvIDAuOCAtPiB4PTUzMCAtLT4KICA8bGluZSB4MT0iNTMwIiB5MT0iMTEwIiB4Mj0iNTMwIiB5Mj0iMTc0IiBzdHJva2U9IiNkYzI2MjYiIHN0cm9rZS13aWR0aD0iMSIgc3Ryb2tlLWRhc2hhcnJheT0iMyAzIi8+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNTMwIiB5PSIxMDYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNkYzI2MjYiPjEg4oiSIM61PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjU2MCIgeT0iMTA2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xPC90ZXh0PgogIDwhLS0gZGFzaGVkIHVuY2xpcHBlZDogKDQxMCwxMTApIHRvICg3MTAsMTEwKzIqODA9MjcwKSAtLT4KICA8cGF0aCBjbGFzcz0iZGFzaGVkIiBkPSJNIDQxMCAxMTAgTCA3MTAgMjcwIi8+CiAgPCEtLSBzb2xpZCBvYmplY3RpdmU6IGZsYXQgYXQgLTAuOCAoeT0xNzQpIHVudGlsIHg9NTMwLCB0aGVuIGZvbGxvdyB1bmNsaXBwZWQgLS0+CiAgPHBhdGggY2xhc3M9InNvbGlkIiBkPSJNIDQxMCAxNzQgTCA1MzAgMTc0IEwgNzEwIDI3MCIvPgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjQ3MCIgeT0iMTY2Ij5jYXBwZWQgYnkgY2xpcDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSI2NDAiIHk9IjIyMCIgdHJhbnNmb3JtPSJyb3RhdGUoMjcgNjQwIDIyMCkiPnVuY2xpcHBlZCDPgcK3QTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSI3MDAiIHk9IjI5MCIgdGV4dC1hbmNob3I9ImVuZCI+cmF0aW8gz4E8L3RleHQ+CgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjM4MCIgeT0iMjkyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5vYmplY3RpdmUgPSBtaW4oz4HCt0EsIGNsaXAoz4EsIDHiiJLOtSwgMSvOtSnCt0EpIOKAlCB0aGUgcGVzc2ltaXN0aWMgY2hvaWNlIGluIGJvdGggY2FzZXM8L3RleHQ+Cjwvc3ZnPgo=" alt="Two plots of the clipped objective versus the policy ratio: for positive advantage the objective stops increasing beyond 1+epsilon; for negative advantage it stops decreasing below 1-epsilon"><div class="caption">The pessimistic minimum in both advantage regimes (drawn with ε = 0.2 for readability). Good rollouts (A &gt; 0) stop being rewarded for pushing ρ further up; bad rollouts (A &lt; 0) stop being penalized for pushing ρ further down. DeepSeek-R1 used a very weak ε = 10 (almost no clipping); PPO-style RLHF typically uses ε ≈ 0.1–0.2.</div></div>
+        <p>Right after the snapshot, ρ = 1 exactly and the loss is −mean(<em>A</em>) ≈ 0 — which is why the logged loss in section 6 sits at zero even while the model improves. The ratio only becomes meaningful when rollouts are reused for several <em>inner</em> update epochs, or when monitoring drift over a run.</p>
+
+        <h3>The KL term, and an honest caveat about what it estimates</h3>
+        <p>The original GRPO formulation adds a penalty that keeps the policy near a frozen <em>reference</em> model (the initial model; DeepSeek-R1 refreshed it only every 400 steps):</p>
+        <div class="equation">L = L<sub>clip</sub> + β · meanᵢ [ log p<sub>new</sub>(y⁽ⁱ⁾) − log p<sub>ref</sub>(y⁽ⁱ⁾) ]<small>β ≈ 0.001–0.05 in practice; the bracketed term is a signed surrogate, see below.</small></div>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/grpo.py</span><button type="button" data-copy>Copy</button></div><pre><code>ref = torch.stack(ref_logps).detach()      <span class="cm"># frozen reference policy</span>
+kl_loss = kl_coeff * kl_surrogate(new_logps, ref)   <span class="cm"># signed, off-policy</span>
+loss = pg_loss + kl_loss</code></pre></div>
+        <div class="callout"><strong>This is a signed, off-policy surrogate — not an exact KL divergence</strong><p>The rollouts were sampled from the <em>old</em> policy, not the current one, so <code>mean(new − ref)</code> over these samples is a convenient estimate of drift — direction matters, and <code>new − ref</code> (penalizing drift from the reference) is not interchangeable with <code>old − new</code>. The value is <em>signed</em>: it can be negative, so it cannot be read as a non-negative KL magnitude. The book's own KL run is the cautionary tale: accuracy rose from ~15% to ~40%, then rewards and accuracy collapsed to zero with the model emitting gibberish. Many recent math-reasoning recipes (DAPO, Dr. GRPO, DeepSeek-V3.2) simply drop the KL term; our implementation follows the book in keeping it optional (<code>kl_coeff=0.0</code> by default), exposes it as <code>kl_surrogate()</code>, and pins its signed semantics in a test.</p></div>
+
+        <h3>Metrics that actually tell you something</h3>
+        <p>Since the scalar loss is ≈ 0 by construction, the diagnostics that matter, all logged by <code>train_grpo</code>:</p>
+        <table>
+          <thead><tr><th>Metric</th><th>Healthy</th><th>Warning sign</th></tr></thead>
+          <tbody>
+            <tr><td><code>reward_avg</code></td><td>rises over a run</td><td>crashes or saturates at 1.0 everywhere (no signal left)</td></tr>
+            <tr><td><code>adv_std</code></td><td>mostly &gt; 0</td><td>long stretches at 0 (degenerate groups dominate)</td></tr>
+            <tr><td><code>entropy_avg</code></td><td>declines slowly</td><td>near 0 early (confidence collapse) or exploding (instability)</td></tr>
+            <tr><td><code>policy_ratio</code></td><td>near 1</td><td>far from 1 (updates too aggressive for the clip to matter)</td></tr>
+            <tr><td><code>avg_response_len</code></td><td>stable or intentional</td><td>collapsing or hitting the token cap</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Zero-advantage skips</h3>
+        <p>Groups whose rewards are all equal produce zero gradient — so we can skip the update entirely (<code>skip_zero_advantage=True</code>, the DAPO "filter zero-gradient prompts" trick). A test pins the semantics precisely: an untrained model, which cannot produce a single correct answer, yields all-zero rewards, every step is skipped, and its weights are <em>bit-identical</em> afterwards. The same test guards against a subtle bug class — "skipping" a step while still mutating the model.</p>
+      </section>
+
+      <section id="reward-hacking">
+        <div class="kicker">08 · When rewards lie</div>
+        <h2>Reward hacking: the model optimizes the specification, not your intent.</h2>
+        <p class="section-intro">A verifier only sees what it checks. Anything the reward pays for, the model will eventually produce — including cheap ways to look right.</p>
+        <p>The book demonstrates this with a format reward: paying a bonus for emitting <code>&lt;think&gt;...&lt;/think&gt;</code> tags <em>regardless of correctness</em>. In that run, the format-reward share climbs while evaluation accuracy collapses — the model learns to look thoughtful instead of being right.</p>
+        <p>Our toy reproduces the incentive gap directly. We train the model to answer with <code>&lt;think&gt;</code> traces, then sample 160 responses on <em>held-out</em> problems (where it is often wrong but always well-formatted) and score them two ways (<code>demo_grpo.py</code>, part 2):</p>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_grpo.py, part 2</span><button type="button" data-copy>Copy</button></div><pre><code>  160 sampled responses, 154 incorrect; of the incorrect
+  ones, 154 still carried a valid &lt;think&gt; format.
+  mean reward if format pays unconditionally: 1.038
+  mean reward if format requires correctness: 0.075
+  gap = 0.963 of free reward for wrong-but-formatted answers</code></pre></div>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMzAwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IlJld2FyZCBoYWNraW5nIG1lYXN1cmVkIG9uIHRoZSB0b3kgdGFzazogd3JvbmcgYnV0IGZvcm1hdHRlZCByZXNwb25zZXMgY29sbGVjdCBhbG1vc3QgZnVsbCByZXdhcmQiPgogIDxzdHlsZT4KICAgIC5sYmwgeyBmb250LXNpemU6IDEycHg7IGZpbGw6ICMzMzQxNTU7IH0KICAgIC52YWwgeyBmb250LWZhbWlseTogdWktbW9ub3NwYWNlLCBNZW5sbywgbW9ub3NwYWNlOyBmb250LXNpemU6IDEzcHg7IGZvbnQtd2VpZ2h0OiA2MDA7IGZpbGw6ICMwZjE3MmE7IH0KICAgIC50aXRsZSB7IGZvbnQtc2l6ZTogMTNweDsgZm9udC13ZWlnaHQ6IDYwMDsgZmlsbDogIzBmMTcyYTsgfQogICAgLmF4aXMgeyBzdHJva2U6ICM5NGEzYjg7IHN0cm9rZS13aWR0aDogMTsgfQogIDwvc3R5bGU+CgogIDx0ZXh0IGNsYXNzPSJ0aXRsZSIgeD0iMjAwIiB5PSIyOCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MTYwIHNhbXBsZWQgcmVzcG9uc2VzIG9uIGhlbGQtb3V0IHByb2JsZW1zPC90ZXh0PgogIDwhLS0gc3RhY2tlZCBiYXI6IDYgY29ycmVjdCAoZ3JlZW4pIHZzIDE1NCB3cm9uZy1idXQtZm9ybWF0dGVkIChyZWQpIC0tPgogIDwhLS0gdG90YWwgd2lkdGggMzAwcHg7IGNvcnJlY3QgPSA2LzE2MCozMDAgPSAxMXB4IC0tPgogIDxyZWN0IHg9IjYwIiB5PSI2MCIgd2lkdGg9IjExIiBoZWlnaHQ9IjQ0IiBmaWxsPSIjMDU5NjY5Ii8+CiAgPHJlY3QgeD0iNzEiIHk9IjYwIiB3aWR0aD0iMjg5IiBoZWlnaHQ9IjQ0IiBmaWxsPSIjZGMyNjI2Ii8+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNjYiIHk9IjEyOCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NjwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSI2NiIgeT0iMTQyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5jb3JyZWN0PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjIxNSIgeT0iODYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmZmZmYiPjE1NCBpbmNvcnJlY3Qg4oCUIGV2ZXJ5IG9uZSBzdGlsbCBoYWQgYSB2YWxpZCAmbHQ7dGhpbmsmZ3Q7IGZvcm1hdDwvdGV4dD4KCiAgPHRleHQgY2xhc3M9InRpdGxlIiB4PSI1NDAiIHk9IjI4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NZWFuIHJld2FyZCBwZXIgcmVzcG9uc2U8L3RleHQ+CiAgPCEtLSBiYXJzOiB1bmNvbmRpdGlvbmFsIDEuMDM4IC0+IDE2NnB4OyBjb25kaXRpb25hbCAwLjA3NSAtPiAxMnB4OyBzY2FsZSAxNjAvdW5pdCwgeTA9MjUwIC0tPgogIDxsaW5lIGNsYXNzPSJheGlzIiB4MT0iNDIwIiB5MT0iMjUwIiB4Mj0iNzAwIiB5Mj0iMjUwIi8+CiAgPHJlY3QgeD0iNDUwIiB5PSI4NCIgd2lkdGg9IjgwIiBoZWlnaHQ9IjE2NiIgZmlsbD0iI2RjMjYyNiIvPgogIDxyZWN0IHg9IjU4MCIgeT0iMjM4IiB3aWR0aD0iODAiIGhlaWdodD0iMTIiIGZpbGw9IiMwNTk2NjkiLz4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSI0OTAiIHk9Ijc0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4xLjAzODwvdGV4dD4KICA8dGV4dCBjbGFzcz0idmFsIiB4PSI2MjAiIHk9IjIyOCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MC4wNzU8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNDkwIiB5PSIyNzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmZvcm1hdCBwYXlzPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjQ5MCIgeT0iMjg0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj51bmNvbmRpdGlvbmFsbHk8L3RleHQ+CiAgPHRleHQgY2xhc3M9ImxibCIgeD0iNjIwIiB5PSIyNzAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmZvcm1hdCByZXF1aXJlczwvdGV4dD4KICA8dGV4dCBjbGFzcz0ibGJsIiB4PSI2MjAiIHk9IjI4NCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Y29ycmVjdG5lc3M8L3RleHQ+CgogIDx0ZXh0IGNsYXNzPSJsYmwiIHg9IjM4MCIgeT0iMjk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BbiB1bmNvbmRpdGlvbmFsIGZvcm1hdCByZXdhcmQgbWFrZXMgd3JvbmcgYW5zd2VycyBuZWFybHkgYXMgcHJvZml0YWJsZSBhcyByaWdodCBvbmVzIChkZW1vX2dycG8ucHksIHBhcnQgMikuPC90ZXh0Pgo8L3N2Zz4K" alt="Bar chart: 154 of 160 sampled responses are incorrect but all carry the think-tag format; an unconditional format reward yields mean reward 1.038 versus 0.075 when the format bonus requires correctness"><div class="caption">Measured on the toy task. Under an unconditional format reward, 96% of responses are wrong yet the mean reward is 1.038 out of a nominal 2.0 — the gradient cannot tell "looks right" from "is right". Conditioning the bonus on correctness collapses the gap.</div></div>
+        <p>The standard mitigations, both in the book and in <code>rewards.py</code>: shrink the auxiliary weight (1.0 → 0.1), or make the bonus <em>conditional</em> on the correctness reward firing. The deeper lesson generalizes: a reward is a specification, and the model optimizes the specification — not your intent.</p>
+      </section>
+
+      <section id="leakage">
+        <div class="kicker">09 · Evaluation leakage</div>
+        <h2>Train and test must never meet.</h2>
+        <p class="section-intro">RLVR makes one data mistake catastrophic: if evaluation problems (or near-duplicates) sit in the training pool, reward climbs and the benchmark number means nothing.</p>
+        <p>The book is explicit about the separation — GRPO trains on 12,000 MATH training problems that <em>exclude</em> every MATH-500 evaluation problem (the exclusion is a published, inspectable dataset diff).</p>
+        <p>We hold the toy to the same rule: <code>data.py</code> draws the 20-problem evaluation pool once, with a fixed seed, and <code>train_baseline</code> / <code>train_grpo</code> never see it. That is why the held-out numbers in this article (0.00 before and after GRPO for the memorizing toy model; 0.35 for the distilled student) are worth reporting at all — and it is why section 6 reports <em>both</em> train-pool and held-out accuracy rather than letting the flattering number stand alone.</p>
+      </section>
+
+      <section id="distillation">
+        <div class="kicker">10 · Distillation</div>
+        <h2>Reasoning without reinforcement learning.</h2>
+        <p class="section-intro">RLVR is powerful but expensive: every update needs a group of fresh rollouts. There is a cheaper route that skips RL entirely.</p>
+        <p><strong>Hard distillation</strong>: let a strong teacher generate reasoning traces, keep the ones that verify, and fine-tune a small student on them with ordinary supervised cross-entropy. (Its sibling, <em>soft</em> distillation, trains the student to match the teacher's full next-token distribution; it carries more information but needs the teacher's logits, a shared tokenizer, and much more storage. The DeepSeek-R1 distilled variants use the hard form — which, notably, is just SFT on synthetic data.)</p>
+        <div class="diagram"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA3NjAgMjYwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLCAtYXBwbGUtc3lzdGVtLCBzYW5zLXNlcmlmIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkhhcmQgZGlzdGlsbGF0aW9uOiB0ZWFjaGVyIGdlbmVyYXRlcyB2ZXJpZmllZCB0cmFjZXMsIHN0dWRlbnQgdHJhaW5zIG9uIGFuc3dlciB0b2tlbnMgb25seSI+CiAgPGRlZnM+CiAgICA8bWFya2VyIGlkPSJhcnI0IiB2aWV3Qm94PSIwIDAgMTAgMTAiIHJlZlg9IjkiIHJlZlk9IjUiIG1hcmtlcldpZHRoPSI3IiBtYXJrZXJIZWlnaHQ9IjciIG9yaWVudD0iYXV0by1zdGFydC1yZXZlcnNlIj4KICAgICAgPHBhdGggZD0iTTAsMCBMMTAsNSBMMCwxMCB6IiBmaWxsPSIjNDc1NTY5Ii8+CiAgICA8L21hcmtlcj4KICA8L2RlZnM+CiAgPHN0eWxlPgogICAgLmJveCB7IGZpbGw6ICNmOGZhZmM7IHN0cm9rZTogIzQ3NTU2OTsgc3Ryb2tlLXdpZHRoOiAxLjU7IH0KICAgIC5zdGVwIHsgZm9udC1zaXplOiAxM3B4OyBmb250LXdlaWdodDogNjAwOyBmaWxsOiAjMGYxNzJhOyB9CiAgICAuc3ViIHsgZm9udC1zaXplOiAxMXB4OyBmaWxsOiAjNDc1NTY5OyB9CiAgICAubW9ubyB7IGZvbnQtZmFtaWx5OiB1aS1tb25vc3BhY2UsIFNGTW9uby1SZWd1bGFyLCBNZW5sbywgbW9ub3NwYWNlOyBmb250LXNpemU6IDExcHg7IGZpbGw6ICMxZTQwYWY7IH0KICA8L3N0eWxlPgoKICA8IS0tIHRlYWNoZXIgLS0+CiAgPHJlY3QgY2xhc3M9ImJveCIgeD0iMjAiIHk9IjQwIiB3aWR0aD0iMTUwIiBoZWlnaHQ9IjgwIiByeD0iOCIvPgogIDx0ZXh0IGNsYXNzPSJzdGVwIiB4PSI5NSIgeT0iNjQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlRlYWNoZXI8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iOTUiIHk9IjgyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5zdHJvbmdlciBtb2RlbDwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3ViIiB4PSI5NSIgeT0iOTYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPihhbHJlYWR5IHZlcmlmaWVkKTwvdGV4dD4KCiAgPGxpbmUgeDE9IjE3NCIgeTE9IjgwIiB4Mj0iMjE2IiB5Mj0iODAiIHN0cm9rZT0iIzQ3NTU2OSIgc3Ryb2tlLXdpZHRoPSIxLjUiIG1hcmtlci1lbmQ9InVybCgjYXJyNCkiLz4KCiAgPCEtLSB0cmFjZXMgLS0+CiAgPHJlY3QgY2xhc3M9ImJveCIgeD0iMjIwIiB5PSIyNCIgd2lkdGg9IjIzMCIgaGVpZ2h0PSIxMTIiIHJ4PSI4Ii8+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjMzNSIgeT0iNDYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlN5bnRoZXRpYyB0cmFjZSBkYXRhc2V0PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJtb25vIiB4PSIzMzUiIHk9IjY4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4mbHQ7dGhpbmsmZ3Q7Mys0PTcmbHQ7L3RoaW5rJmd0O1xib3hlZHs3fTwvdGV4dD4KICA8dGV4dCBjbGFzcz0ic3ViIiB4PSIzMzUiIHk9Ijg4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5wcm9tcHQgKyByZWFzb25pbmcgdHJhY2UgKyBhbnN3ZXI8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMzM1IiB5PSIxMDQiIHRleHQtYW5jaG9yPSJtaWRkbGUiPmNoZWNrZWQgYnkgdGhlIHZlcmlmaWVyIGJlZm9yZSB1c2U8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iMzM1IiB5PSIxMjIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPihvdmVybG9uZyB0cmFjZXMgZmlsdGVyZWQgb3V0KTwvdGV4dD4KCiAgPGxpbmUgeDE9IjQ1NCIgeTE9IjgwIiB4Mj0iNDk2IiB5Mj0iODAiIHN0cm9rZT0iIzQ3NTU2OSIgc3Ryb2tlLXdpZHRoPSIxLjUiIG1hcmtlci1lbmQ9InVybCgjYXJyNCkiLz4KCiAgPCEtLSBtYXNrZWQgbG9zcyAtLT4KICA8cmVjdCB4PSI1MDAiIHk9IjI0IiB3aWR0aD0iMjQwIiBoZWlnaHQ9IjExMiIgcng9IjgiIGZpbGw9IiNlZmY2ZmYiIHN0cm9rZT0iIzI1NjNlYiIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KICA8dGV4dCBjbGFzcz0ic3RlcCIgeD0iNjIwIiB5PSI0NiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+UHJvbXB0LW1hc2tlZCBjcm9zcy1lbnRyb3B5PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJtb25vIiB4PSI2MjAiIHk9IjcwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5sb3NzID0gQ0Ugb3ZlciBhbnN3ZXIgdG9rZW5zIG9ubHk8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iNjIwIiB5PSI5MCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+cHJvbXB0IHBvc2l0aW9ucyBnZXQgbm8gZ3JhZGllbnQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iNjIwIiB5PSIxMDYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPihzaGlmdGVkIHRhcmdldHMsIGFuc3dlciBzdGFydHMgYXQ8L3RleHQ+CiAgPHRleHQgY2xhc3M9InN1YiIgeD0iNjIwIiB5PSIxMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiPnBvc2l0aW9uIHByb21wdF9sZW4g4oiSIDEpPC90ZXh0PgoKICA8IS0tIHN0dWRlbnQgLS0+CiAgPHJlY3QgY2xhc3M9ImJveCIgeD0iNTAwIiB5PSIxNzAiIHdpZHRoPSIyNDAiIGhlaWdodD0iNjQiIHJ4PSI4Ii8+CiAgPHRleHQgY2xhc3M9InN0ZXAiIHg9IjYyMCIgeT0iMTk0IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5TdHVkZW50PC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjYyMCIgeT0iMjEyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5zbWFsbCBtb2RlbCBpbWl0YXRlcyB0aGUgdGVhY2hlcidzIHRyYWNlczwvdGV4dD4KCiAgPHBhdGggZD0iTSA2MjAgMTQwIEwgNjIwIDE2NCIgc3Ryb2tlPSIjNDc1NTY5IiBzdHJva2Utd2lkdGg9IjEuNSIgbWFya2VyLWVuZD0idXJsKCNhcnI0KSIvPgoKICA8IS0tIHNpZGUgbm90ZTogbm8gcmV3YXJkcyAtLT4KICA8cmVjdCBjbGFzcz0iYm94IiB4PSIyMCIgeT0iMTcwIiB3aWR0aD0iNDMwIiBoZWlnaHQ9IjY0IiByeD0iOCIvPgogIDx0ZXh0IGNsYXNzPSJzdGVwIiB4PSIyMzUiIHk9IjE5NCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Tm8gcm9sbG91dHMsIG5vIHJld2FyZHMsIG5vIFJMPC90ZXh0PgogIDx0ZXh0IGNsYXNzPSJzdWIiIHg9IjIzNSIgeT0iMjEyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5oYXJkIGRpc3RpbGxhdGlvbiA9IHN1cGVydmlzZWQgZmluZS10dW5pbmcgb24gdGVhY2hlci1nZW5lcmF0ZWQgdGV4dDwvdGV4dD4KPC9zdmc+Cg==" alt="Distillation flow: teacher generates verified reasoning traces, the student is trained on them with cross-entropy restricted to answer tokens"><div class="caption">Original diagram. Hard distillation: no rollouts, no rewards, no RL — but the same answer-only masking as instruction tuning, so the student learns to <em>respond</em>, not to echo prompts.</div></div>
+        <p>The one detail that makes it work is the loss mask. Position <em>t</em> of the logits predicts token <em>t</em> + 1 (Article 1's shifted targets), and only positions that predict <em>answer</em> tokens — from <code>prompt_len − 1</code> onward — contribute:</p>
+        <div class="codebox"><div class="codehead"><span>examples/reasoning/distill.py</span><button type="button" data-copy>Copy</button></div><pre><code>def masked_answer_loss(model, token_ids, prompt_len):
+    ids = torch.tensor([token_ids],
+                       device=next(model.parameters()).device)
+    logits = model(ids)[0]                 <span class="cm"># (seq_len, vocab)</span>
+    answer_start = prompt_len - 1
+    pred_logits = logits[answer_start:-1]  <span class="cm"># positions predicting answer tokens</span>
+    targets = ids[0, answer_start + 1 :]
+    return F.cross_entropy(pred_logits, targets)</code></pre></div>
+        <p><code>demo_distill.py</code> runs the whole story: a teacher (baseline accuracy 1.00 on the train pool) <em>generates</em> one trace per training problem, the verifier keeps only the correct ones (80/80 survive here), and a fresh student trains on the surviving traces for 40 epochs:</p>
+        <div class="codebox"><div class="codehead"><span>Recorded output · demo_distill.py</span><button type="button" data-copy>Copy</button></div><pre><code>  teacher traces: 80/80 passed the verifier (0 rejected)
+  example trace:
+    prompt:     'Compute 0+0.'
+    completion: '&lt;think&gt;0+0=0&lt;/think&gt;\boxed{0}'
+  student val loss before training: 3.1556
+  student val loss after training:  0.3849
+  student greedy accuracy on train pool:      0.78
+  student greedy accuracy on held-out eval:   0.35</code></pre></div>
+        <p>The student absorbs both the answer format and the trace structure from teacher-written text alone. Its held-out accuracy (0.35) is a single seeded run, not a controlled comparison — we report it as an observation, not evidence of causation. Distillation and RLVR are complements in practice: distill to bootstrap reasoning format cheaply, then use RL to push past the teacher's ceiling on verifiable tasks.</p>
+      </section>
+
+      <section id="real-path">
+        <div class="kicker">11 · The real-model path and limitations</div>
+        <h2>The same stages, at real scale.</h2>
+        <p class="section-intro">The conceptual stages of this article map directly onto the book's full-size setup — verifier, rollout groups, clipped objective, distillation loop. The toy's tokenizer, reduced verifier subset, and hardware path do not; the real pipeline below replaces them.</p>
+        <div class="codebox"><div class="codehead"><span>Pinned upstream repo · optional, downloads ≈ 1.2 GB</span><button type="button" data-copy>Copy</button></div><pre><code>git clone https://github.com/rasbt/reasoning-from-scratch
+cd reasoning-from-scratch &amp;&amp; uv sync
+uv run ch03/02_math500-verifier-scripts/evaluate_math500.py   <span class="cm"># evaluate Qwen3-0.6B on MATH-500</span>
+uv run ch07/03_rlvr_grpo_scripts_advanced/7_5_plus_kl.py \
+    --steps 500 --max_new_tokens 1024                         <span class="cm"># GRPO with clipping + KL</span></code></pre></div>
+        <p>Known limitations of the toy laboratory, stated plainly:</p>
+        <ul>
+          <li>The 24-token vocabulary and one-digit task make memorization dominant; the toy does not demonstrate <em>generalization</em> gains from RLVR, and self-consistency shows no benefit (section 4 explains why this is expected, not a bug in the method).</li>
+          <li>Our GRPO uses one prompt per step and a single inner epoch, so the policy ratio sits at 1.0 and clipping/KL effects are demonstrated by construction and unit tests rather than by long-run curves.</li>
+          <li>The verifier implements a reduced subset of the book's LaTeX normalization; exotic answer formats would need the full pipeline (<code>reasoning_from_scratch/ch03.py</code>).</li>
+        </ul>
+      </section>
+
+      <section id="references">
+        <div class="kicker">12 · Sources and further reading</div>
+        <h2>What this tutorial adapts — and what it changes.</h2>
+        <ul>
+          <li>Sebastian Raschka, <em>Build a Reasoning Model (From Scratch)</em>, Manning, 2026 — the book this article follows (ch. 3 verifier, ch. 4–5 inference-time methods, ch. 6–7 GRPO, ch. 8 distillation).</li>
+          <li>Companion code: <a href="https://github.com/rasbt/reasoning-from-scratch">github.com/rasbt/reasoning-from-scratch</a> (studied at commit <code>20e5e37</code>).</li>
+          <li>Ouyang et al., <a href="https://arxiv.org/abs/2203.02155">Training language models to follow instructions with human feedback</a> (InstructGPT/RLHF), 2022.</li>
+          <li>Shao et al., <a href="https://arxiv.org/abs/2402.03300">DeepSeekMath: GRPO</a>, 2024.</li>
+          <li>DeepSeek-AI, <a href="https://arxiv.org/abs/2501.12948">DeepSeek-R1: incentivizing reasoning via RL</a>, 2025.</li>
+          <li>Prequel article: <a href="llm-from-scratch.html">Build an LLM from scratch</a> (transformer architecture, shifted targets, instruction tuning).</li>
+        </ul>
+        <p>All prose, diagrams, and executable teaching code here are original or reduced adaptations documented concept by concept in <code>notes/reasoning-source-ledger.md</code>. The test suite (<code>python -m pytest examples/reasoning/tests</code>) pins the code's behavior, and the quoted numbers are reproduced by running the four <code>demo_*.py</code> scripts.</p>
+      </section>
+
+      <section class="next" aria-labelledby="back-title">
+        <div class="kicker">Article 1</div>
+        <h2 id="back-title">New here? Start with the model itself.</h2>
+        <p>Bytes, causal attention, shifted targets, next-token loss, generation, and response-only instruction tuning — the foundation this article builds on.</p>
+        <a href="llm-from-scratch.html">← Build a tiny language model</a>
+      </section>
+    </main>
+  </div>
+
+  <footer><span>Built as an executable field guide, not a benchmark claim.</span><a href="#top">Back to top ↑</a></footer>
+  <script>
+    const root = document.documentElement;
+    addEventListener('scroll', () => {
+      const max = root.scrollHeight - innerHeight;
+      root.style.setProperty('--reading', max > 0 ? scrollY / max : 0);
+    }, {passive:true});
+
+    document.querySelectorAll('[data-copy]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const text = button.closest('.codebox').querySelector('code').innerText;
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Copied';
+        setTimeout(() => button.textContent = 'Copy', 1200);
+      });
+    });
+  </script>
+</body>
+</html>

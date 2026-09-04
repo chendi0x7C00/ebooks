@@ -12,6 +12,8 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 | [Reliable AI Systems: An Engineering Field Guide](books/reliable-ai-systems.html) | English | 141 KB |
 | [Build Your Own AI Coding Agent Harness](books/build-your-own-ai-coding-agent-harness.html) | English | 384 KB |
 | [DeepSeek Harness 架构解析](books/deepseek-harness-architecture.html) | 中文 | 54 KB |
+| [Build a Tiny LLM from Scratch](books/llm-from-scratch.html) | English | 48 KB |
+| [Build a Reasoning Model from Scratch](books/reasoning-model-from-scratch.html) | English | 78 KB |
 
 每本书都是一个自包含的单 HTML 文件，CSS/JS 全部内联，可直接下载离线阅读。
 本地重建：`python3 build_pages_site.py`（脚本位于 vibe_coding 仓库）。
