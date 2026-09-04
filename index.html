@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chendi 的电子书架</title>
+<style>
+:root { color-scheme: dark; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  background: #0f1115; color: #e6e6e6; line-height: 1.6;
+  max-width: 1060px; margin: 0 auto; padding: 48px 24px 80px;
+}
+header h1 { font-size: 2rem; letter-spacing: .5px; }
+header p { color: #9aa0aa; margin-top: 6px; }
+.group { margin-top: 44px; }
+.group h2 {
+  font-size: .85rem; text-transform: uppercase; letter-spacing: 2px;
+  color: #7f8794; border-bottom: 1px solid #23262e; padding-bottom: 8px;
+}
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 16px; margin-top: 18px;
+}
+a.card {
+  display: flex; flex-direction: column; gap: 8px; text-decoration: none;
+  background: #161a22; border: 1px solid #23262e; border-radius: 12px;
+  padding: 18px 20px; transition: border-color .15s, transform .15s;
+}
+a.card:hover { border-color: #4a7dff; transform: translateY(-2px); }
+.card .title { font-size: 1.05rem; font-weight: 600; color: #f0f2f5; }
+.card .desc { font-size: .88rem; color: #9aa0aa; flex: 1; }
+.card .meta { display: flex; gap: 8px; font-size: .72rem; color: #7f8794; }
+.card .meta span {
+  background: #1d222c; border-radius: 99px; padding: 2px 10px;
+}
+footer {
+  margin-top: 56px; color: #5c6370; font-size: .8rem;
+  border-top: 1px solid #23262e; padding-top: 16px;
+}
+footer a { color: #7f8794; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>📚 电子书架</h1>
+    <p>vibe coding 期间生成的 HTML 电子书，单文件自包含，随处可读</p>
+  </header>
+    <section class="group">
+      <h2>系统与网络</h2>
+      <div class="grid">
+      <a class="card" href="books/build-a-c-compiler.html">
+        <span class="title">手把手教你构建 C 语言编译器</span>
+        <span class="desc">从词法分析到代码生成，用 C 语言手写一个可自举的 C 编译器</span>
+        <span class="meta"><span>中文</span><span>272 KB</span></span>
+      </a>
+      <a class="card" href="books/python-sockets-from-first-principles.html">
+        <span class="title">Down to the Wire — Python Sockets from First Principles</span>
+        <span class="desc">从第一性原理理解 TCP/UDP 与 Python socket 编程</span>
+        <span class="meta"><span>English</span><span>180 KB</span></span>
+      </a>
+      <a class="card" href="books/netcode-from-first-principles.html">
+        <span class="title">Netcode From First Principles</span>
+        <span class="desc">从第一性原理理解多人游戏的网络同步</span>
+        <span class="meta"><span>English</span><span>98 KB</span></span>
+      </a>
+      </div>
+    </section>
+    <section class="group">
+      <h2>Python</h2>
+      <div class="grid">
+      <a class="card" href="books/writing-modern-python.html">
+        <span class="title">Writing Modern Python</span>
+        <span class="desc">面向有经验开发者的现代 Python 写法与工程实践指南</span>
+        <span class="meta"><span>English</span><span>162 KB</span></span>
+      </a>
+      </div>
+    </section>
+    <section class="group">
+      <h2>AI 工程</h2>
+      <div class="grid">
+      <a class="card" href="books/reliable-ai-systems.html">
+        <span class="title">Reliable AI Systems: An Engineering Field Guide</span>
+        <span class="desc">构建可靠 AI 系统的工程实践指南</span>
+        <span class="meta"><span>English</span><span>141 KB</span></span>
+      </a>
+      <a class="card" href="books/build-your-own-ai-coding-agent-harness.html">
+        <span class="title">Build Your Own AI Coding Agent Harness</span>
+        <span class="desc">亲手构建一个 AI 编码智能体的 Harness（Vercel Academy）</span>
+        <span class="meta"><span>English</span><span>384 KB</span></span>
+      </a>
+      <a class="card" href="books/deepseek-harness-architecture.html">
+        <span class="title">DeepSeek Harness 架构解析</span>
+        <span class="desc">一切皆插件的 Agent 运行时：DeepSeek Harness 源码走读</span>
+        <span class="meta"><span>中文</span><span>54 KB</span></span>
+      </a>
+      </div>
+    </section>
+  <footer>
+    共 7 本 · 生成于 2026-09-04 ·
+    <a href="https://github.com/chendi0x7C00/ebooks">GitHub 仓库</a>
+  </footer>
+</body>
+</html>

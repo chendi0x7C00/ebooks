@@ -1,0 +1,1078 @@
+<title>Netcode From First Principles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Literata:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* ---------- Tokens ---------- */
+  :root{
+    --bg:#EDF1F6;
+    --bg-cover:#E3EAF3;
+    --surface:#FFFFFF;
+    --surface-2:#F4F8FB;
+    --ink:#16233A;
+    --ink-soft:#4E5F78;
+    --ink-faint:#7C8CA3;
+    --line:#CBD8E6;
+    --line-strong:#9FB4CB;
+    --accent:#0E7A8C;
+    --accent-strong:#0A5C6B;
+    --accent-soft:rgba(14,122,140,.12);
+    --warn:#9A5A17;
+    --warn-soft:rgba(154,90,23,.12);
+    --good:#2B7A55;
+    --good-soft:rgba(43,122,85,.12);
+    --on-accent:#FFFFFF;
+
+    /* constant "blueprint" panel — same in both themes, by design */
+    --diagram-bg:#0F2439;
+    --diagram-bg-2:#0A1C30;
+    --diagram-line:#5FD0E2;
+    --diagram-line-dim:#3E6E82;
+    --diagram-text:#D9ECF2;
+    --diagram-warn:#E3A75C;
+    --code-bg:#0F2439;
+    --code-comment:#7E97AC;
+    --code-string:#7FD8A8;
+    --code-keyword:#5FD0E2;
+    --code-number:#E3A75C;
+
+    --font-display:'Archivo','Helvetica Neue',Arial,sans-serif;
+    --font-body-sans:'IBM Plex Sans','Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+    --font-body-serif:'Literata','Iowan Old Style','Palatino Linotype',Georgia,serif;
+    --font-body:var(--font-body-sans);
+    --font-mono:'IBM Plex Mono','SF Mono',Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A1220; --bg-cover:#0D1626; --surface:#101B2E; --surface-2:#0C1526;
+      --ink:#E1E9F2; --ink-soft:#A9B9CE; --ink-faint:#718098;
+      --line:#223349; --line-strong:#33496A;
+      --accent:#5FD3E3; --accent-strong:#8FE3EF; --accent-soft:rgba(95,211,227,.14);
+      --warn:#E0A24E; --warn-soft:rgba(224,162,78,.14);
+      --good:#63C79A; --good-soft:rgba(99,199,154,.14);
+      --on-accent:#0F2439;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A1220; --bg-cover:#0D1626; --surface:#101B2E; --surface-2:#0C1526;
+    --ink:#E1E9F2; --ink-soft:#A9B9CE; --ink-faint:#718098;
+    --line:#223349; --line-strong:#33496A;
+    --accent:#5FD3E3; --accent-strong:#8FE3EF; --accent-soft:rgba(95,211,227,.14);
+    --warn:#E0A24E; --warn-soft:rgba(224,162,78,.14);
+    --good:#63C79A; --good-soft:rgba(99,199,154,.14);
+    --on-accent:#0F2439;
+  }
+
+  /* ---------- Reading preferences (explicit in-page choice — wins over the host/OS theme above) ---------- */
+  :root[data-font="serif"]{ --font-body:var(--font-body-serif); }
+  :root[data-mode="light"]{
+    --bg:#EDF1F6; --bg-cover:#E3EAF3; --surface:#FFFFFF; --surface-2:#F4F8FB;
+    --ink:#16233A; --ink-soft:#4E5F78; --ink-faint:#7C8CA3;
+    --line:#CBD8E6; --line-strong:#9FB4CB;
+    --accent:#0E7A8C; --accent-strong:#0A5C6B; --accent-soft:rgba(14,122,140,.12);
+    --warn:#9A5A17; --warn-soft:rgba(154,90,23,.12);
+    --good:#2B7A55; --good-soft:rgba(43,122,85,.12);
+    --on-accent:#FFFFFF;
+  }
+  :root[data-mode="dark"]{
+    --bg:#0A1220; --bg-cover:#0D1626; --surface:#101B2E; --surface-2:#0C1526;
+    --ink:#E1E9F2; --ink-soft:#A9B9CE; --ink-faint:#718098;
+    --line:#223349; --line-strong:#33496A;
+    --accent:#5FD3E3; --accent-strong:#8FE3EF; --accent-soft:rgba(95,211,227,.14);
+    --warn:#E0A24E; --warn-soft:rgba(224,162,78,.14);
+    --good:#63C79A; --good-soft:rgba(99,199,154,.14);
+    --on-accent:#0F2439;
+  }
+
+  /* ---------- Reset-ish ---------- */
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation:none !important; transition:none !important;} }
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--font-body); font-size:1.0625rem; line-height:1.68;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,h4{font-family:var(--font-display); color:var(--ink); text-wrap:balance; line-height:1.15; margin:0;}
+  p{margin:0 0 1.1em; max-width:36rem;}
+  ul,ol{margin:0 0 1.1em; padding-left:1.3em; max-width:36rem;}
+  li{margin-bottom:.4em;}
+  a{color:var(--accent); text-decoration-color:var(--line-strong); text-underline-offset:.15em;}
+  a:hover{color:var(--accent-strong);}
+  a:focus-visible, button:focus-visible, label.switch:focus-within{outline:2px solid var(--accent); outline-offset:2px; border-radius:2px;}
+  strong{color:var(--ink); font-weight:600;}
+  .eyebrow{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-faint);}
+
+  .skip-link{position:absolute; left:-999px; top:0; background:var(--accent); color:var(--on-accent); padding:.5em 1em; z-index:200;}
+  .skip-link:focus{left:.5rem; top:.5rem;}
+
+  /* ---------- Corner crop marks ---------- */
+  .corner-marks span{position:fixed; width:22px; height:22px; pointer-events:none; z-index:5; opacity:.55;}
+  .corner-marks span::before,.corner-marks span::after{content:"";position:absolute;background:var(--line-strong);}
+  .corner-marks span::before{width:100%; height:1px; top:50%;}
+  .corner-marks span::after{height:100%; width:1px; left:50%;}
+  .cm-tl{top:14px; left:14px;} .cm-tr{top:14px; right:14px;} .cm-bl{bottom:14px; left:14px;} .cm-br{bottom:14px; right:14px;}
+  @media (max-width: 720px){ .corner-marks{display:none;} }
+
+  /* ---------- Cover ---------- */
+  .cover{
+    background:
+      radial-gradient(80rem 40rem at 15% -10%, var(--accent-soft), transparent 60%),
+      var(--bg-cover);
+    border-bottom:1px solid var(--line);
+    padding:4.5rem 1.75rem 3.25rem;
+  }
+  .cover-inner{max-width:46rem; margin:0 auto;}
+  .cover .eyebrow{margin-bottom:1rem; display:block;}
+  .cover h1{font-size:clamp(2.3rem,6vw,3.7rem); font-weight:800; letter-spacing:-.01em; margin-bottom:1rem;}
+  .cover h1 em{font-style:normal; color:var(--accent);}
+  .cover .dek{max-width:34rem; font-size:1.15rem; color:var(--ink-soft); margin-bottom:2rem;}
+  .titleblock{
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    border:1px solid var(--line-strong); background:var(--surface);
+    font-family:var(--font-mono); font-size:.78rem;
+  }
+  .titleblock div{padding:.6rem .8rem; border-right:1px solid var(--line); border-bottom:1px solid var(--line);}
+  .titleblock div:nth-child(4n){border-right:none;}
+  .titleblock .tb-label{color:var(--ink-faint); text-transform:uppercase; letter-spacing:.06em; font-size:.66rem; display:block; margin-bottom:.15rem;}
+  .titleblock .tb-value{color:var(--ink);}
+  @media (max-width:640px){ .titleblock{grid-template-columns:repeat(2,minmax(0,1fr));} .titleblock div:nth-child(4n){border-right:1px solid var(--line);} .titleblock div:nth-child(2n){border-right:none;} }
+
+  /* ---------- Layout ---------- */
+  .layout{display:grid; grid-template-columns:15rem minmax(0,1fr); max-width:78rem; margin:0 auto;}
+  .rail{position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto; padding:2rem 1.25rem 2rem 1.75rem; border-right:1px solid var(--line);}
+  .rail-title{font-family:var(--font-display); font-weight:800; font-size:.95rem; letter-spacing:.02em; line-height:1.25; margin-bottom:1.5rem; color:var(--ink);}
+  .rail-title span{display:block; color:var(--accent);}
+  .rail-list{list-style:none; margin:0; padding:0; max-width:none;}
+  .rail-list li{margin:0;}
+  .rail-list a{
+    display:flex; gap:.6rem; align-items:baseline; padding:.42rem 0; color:var(--ink-soft);
+    text-decoration:none; font-size:.88rem; border-left:2px solid transparent; padding-left:.6rem; margin-left:-.6rem;
+  }
+  .rail-list a .n{font-family:var(--font-mono); font-size:.72rem; color:var(--ink-faint); min-width:1.4em;}
+  .rail-list a:hover{color:var(--ink);}
+  .rail-list a.active{color:var(--accent-strong); border-left-color:var(--accent); font-weight:600;}
+  .rail-list a.active .n{color:var(--accent);}
+  .rail-foot{margin-top:1.75rem; padding-top:1.25rem; border-top:1px solid var(--line); font-size:.76rem; color:var(--ink-faint);}
+
+  /* ---------- Reading controls: font + theme ---------- */
+  .reading-controls{display:flex; flex-direction:column; gap:.9rem; margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid var(--line);}
+  .ctrl-group{display:flex; flex-direction:column; gap:.4rem;}
+  .ctrl-label{font-family:var(--font-mono); font-size:.64rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint);}
+  .segmented{display:flex; border:1px solid var(--line-strong); border-radius:3px; overflow:hidden; background:var(--surface);}
+  .seg-opt{position:relative; flex:1;}
+  .seg-opt input{position:absolute; inset:0; width:100%; height:100%; margin:0; opacity:0; cursor:pointer;}
+  .seg-opt span{display:block; text-align:center; font-family:var(--font-mono); font-size:.72rem; padding:.38rem .3rem; color:var(--ink-soft); border-right:1px solid var(--line-strong); white-space:nowrap; transition:background .1s,color .1s;}
+  .seg-opt:last-child span{border-right:none;}
+  .seg-opt input:checked + span{background:var(--accent-strong); color:var(--on-accent); font-weight:600;}
+  .seg-opt input:not(:checked):hover + span{color:var(--ink);}
+  .seg-opt input:focus-visible + span{outline:2px solid var(--accent); outline-offset:-2px; position:relative; z-index:1;}
+
+  .content{padding:3rem 2rem 5rem; max-width:50rem;}
+  .tick{padding-top:1rem; margin-bottom:4.5rem; scroll-margin-top:1rem;}
+  .tick:first-of-type{margin-top:0;}
+  .sheet-head{display:flex; align-items:baseline; gap:1rem; margin-bottom:.9rem; flex-wrap:wrap;}
+  .sheet-head .tickno{font-family:var(--font-mono); font-size:1rem; color:var(--accent); font-weight:600; letter-spacing:.02em;}
+  .tick h2{font-size:clamp(1.5rem,3vw,2rem); font-weight:800;}
+  .tag-project{
+    font-family:var(--font-mono); font-size:.68rem; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--ink-soft); border:1px solid var(--line-strong); padding:.2rem .5rem; border-radius:2px; white-space:nowrap;
+  }
+  .rule{border:none; border-top:1px solid var(--line); margin:0 0 1.6rem;}
+  .lede{font-size:1.08rem; color:var(--ink-soft); max-width:36rem;}
+  h3{font-size:1.2rem; font-weight:700; margin:1.8rem 0 .7rem;}
+
+  /* ---------- Callouts ---------- */
+  .note{max-width:100%; border:1px solid var(--line); border-left:3px solid var(--ink-faint); background:var(--surface); padding:.9rem 1.1rem; margin:1.3rem 0; border-radius:2px;}
+  .note p{margin:0; max-width:none; font-size:.98rem;}
+  .note strong{display:inline;}
+  .note-key{border-left-color:var(--accent); background:var(--accent-soft);}
+  .note-key strong{color:var(--accent-strong);}
+  .note-warn{border-left-color:var(--warn); background:var(--warn-soft);}
+  .note-warn strong{color:var(--warn);}
+  .note-good{border-left-color:var(--good); background:var(--good-soft);}
+  .note-good strong{color:var(--good);}
+  .note-ref{border-left-color:var(--line-strong);}
+  .note-ref strong{color:var(--ink);}
+  .note-supp{border-style:dashed; border-left-style:solid; border-left-width:3px; border-left-color:var(--line-strong);}
+  .note-supp-tag{display:block; font-family:var(--font-mono); font-size:.66rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:.7em;}
+  .note-supp p{margin:0 0 .8em; max-width:none; font-size:.98rem;}
+  .note-supp p:last-child{margin-bottom:0;}
+
+  /* ---------- Diagrams ---------- */
+  .diagram{max-width:100%; margin:1.6rem 0; background:var(--diagram-bg); border:1px solid var(--line-strong); border-radius:2px; overflow-x:auto;}
+  .diagram .dg-inner{min-width:460px; padding:.4rem;}
+  .diagram figcaption{
+    font-family:var(--font-mono); font-size:.72rem; color:var(--ink-faint); letter-spacing:.03em;
+    padding:.5rem 1rem 0; text-transform:uppercase;
+  }
+  svg.dg{width:100%; height:auto; display:block;}
+  svg.dg text{font-family:var(--font-mono); fill:var(--diagram-text);}
+  svg.dg .lbl{font-size:11.5px;}
+  svg.dg .lbl-dim{font-size:11px; fill:var(--diagram-line-dim);}
+  svg.dg .lbl-accent{font-size:11.5px; fill:var(--diagram-line); font-weight:600;}
+  svg.dg .lbl-warn{font-size:11px; fill:var(--diagram-warn); font-weight:600;}
+  svg.dg .box{fill:var(--diagram-bg-2); stroke:var(--diagram-line); stroke-width:1.4;}
+  svg.dg .box-dim{fill:none; stroke:var(--diagram-line-dim); stroke-width:1.2; stroke-dasharray:3 4;}
+  svg.dg .box-warn{fill:var(--diagram-bg-2); stroke:var(--diagram-warn); stroke-width:1.4;}
+  svg.dg .ln{stroke:var(--diagram-line); stroke-width:1.4; fill:none;}
+  svg.dg .ln-dim{stroke:var(--diagram-line-dim); stroke-width:1.2; fill:none;}
+  svg.dg .ln-warn{stroke:var(--diagram-warn); stroke-width:1.4; fill:none;}
+  svg.dg .dash{stroke-dasharray:4 4;}
+  #arrow path{fill:var(--diagram-line);}
+  #arrow-dim path{fill:var(--diagram-line-dim);}
+  #arrow-warn path{fill:var(--diagram-warn);}
+
+  /* ---------- Rollback toggle ---------- */
+  .toggle-row{display:flex; align-items:center; gap:.7rem; margin:0 0 .2rem; padding:0 1rem;}
+  .rb-check{position:absolute; opacity:0; width:1px; height:1px;}
+  /* .rb-check is a preceding sibling of .rb-wrap, not a descendant of label.switch —
+     :focus-within on the label (see a:focus-visible rule above) can never match it,
+     so bridge the real sibling relationship explicitly. */
+  .rb-check:focus-visible ~ .rb-wrap label.switch{outline:2px solid var(--accent); outline-offset:2px; border-radius:2px;}
+  label.switch{
+    display:inline-flex; align-items:center; gap:.6rem; cursor:pointer; font-family:var(--font-mono);
+    font-size:.78rem; color:var(--diagram-text); user-select:none; padding:.6rem 0 0;
+  }
+  .switch .track{width:34px; height:18px; border-radius:9px; background:var(--diagram-line-dim); position:relative; flex:none; transition:background .15s;}
+  .switch .track::after{content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--diagram-text); transition:transform .15s;}
+  .rb-check:checked ~ .rb-wrap label.switch .track{background:var(--diagram-warn);}
+  .rb-check:checked ~ .rb-wrap label.switch .track::after{transform:translateX(16px);}
+  .rb-correct{display:block;}
+  .rb-wrong{display:none;}
+  .rb-check:checked ~ .rb-wrap .rb-correct{display:none;}
+  .rb-check:checked ~ .rb-wrap .rb-wrong{display:block;}
+
+  /* ---------- Code ---------- */
+  .code-block{max-width:100%; margin:1.5rem 0; border:1px solid var(--line-strong); border-radius:2px; overflow:hidden;}
+  .code-head{background:var(--diagram-bg-2); padding:.5rem .9rem; display:flex; align-items:center; gap:.5rem; border-bottom:1px solid var(--line-strong);}
+  .code-dot{width:8px; height:8px; border-radius:50%; background:var(--diagram-line-dim);}
+  .code-label{font-family:var(--font-mono); font-size:.74rem; color:var(--diagram-text); letter-spacing:.02em;}
+  .code-block pre{margin:0; background:var(--code-bg); overflow-x:auto; padding:1rem 1.1rem;}
+  .code-block code{font-family:var(--font-mono); font-size:.85rem; line-height:1.6; color:var(--diagram-text); white-space:pre;}
+  .tok-k{color:var(--code-keyword);}
+  .tok-s{color:var(--code-string);}
+  .tok-c{color:var(--code-comment); font-style:italic;}
+  .tok-n{color:var(--code-number);}
+
+  /* ---------- Tables ---------- */
+  .table-wrap{overflow-x:auto; margin:1.5rem 0; max-width:100%;}
+  table{border-collapse:collapse; width:100%; min-width:560px; font-size:.92rem;}
+  th,td{text-align:left; padding:.6rem .8rem; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-faint); font-weight:600; border-bottom:1px solid var(--line-strong);}
+  td.num, th.num{font-variant-numeric:tabular-nums; font-family:var(--font-mono);}
+  tr:last-child td{border-bottom:none;}
+  td strong{white-space:nowrap;}
+
+  /* ---------- Reveal ---------- */
+  .tick{opacity:1; transform:none;}
+  .tick.pre-reveal{opacity:0; transform:translateY(10px);}
+  .tick.reveal{opacity:1; transform:none; transition:opacity .5s ease, transform .5s ease;}
+
+  footer.book-foot{border-top:1px solid var(--line); padding:2rem 0 0; margin-top:3rem; font-size:.85rem; color:var(--ink-faint); max-width:36rem;}
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 900px){
+    .layout{grid-template-columns:minmax(0,1fr); max-width:100%;}
+    .rail{position:static; height:auto; border-right:none; border-bottom:1px solid var(--line); padding:1rem 1.25rem;}
+    .rail-title{display:none;}
+    .rail-list{display:flex; overflow-x:auto; gap:.25rem; padding-bottom:.25rem;}
+    .rail-list a{padding:.4rem .7rem; margin-left:0; border-left:none; border-bottom:2px solid transparent; white-space:nowrap;}
+    .rail-list a.active{border-left:none; border-bottom-color:var(--accent);}
+    .rail-foot{display:none;}
+    .content{padding:2rem 1.25rem 4rem;}
+    .reading-controls{flex-direction:row; flex-wrap:wrap; gap:.75rem 1.25rem; margin-bottom:.75rem; padding-bottom:.75rem;}
+    .segmented{max-width:14rem;}
+  }
+  @media (max-width: 480px){
+    .cover{padding:3.5rem 1.25rem 2.25rem;}
+    .reading-controls{gap:.6rem 1rem;}
+    .ctrl-group{flex:1 1 auto; min-width:9rem;}
+  }
+</style>
+
+<script>
+(function(){
+  try{
+    var f = localStorage.getItem("netcode-font");
+    if (f === "serif") document.documentElement.setAttribute("data-font", "serif");
+    var m = localStorage.getItem("netcode-mode");
+    if (m === "light" || m === "dark") document.documentElement.setAttribute("data-mode", m);
+  }catch(e){}
+})();
+</script>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+    <marker id="arrow-dim" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+    <marker id="arrow-warn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+  </defs>
+</svg>
+
+<div class="corner-marks" aria-hidden="true"><span class="cm-tl"></span><span class="cm-tr"></span><span class="cm-bl"></span><span class="cm-br"></span></div>
+
+<header class="cover" id="top">
+  <div class="cover-inner">
+    <span class="eyebrow">A field guide for programmers, in Python</span>
+    <h1>Netcode, from <em>first</em> principles</h1>
+    <p class="dek">Your single-player game only ever has one clock and one copy of the truth. Add a second player on a second machine, and both of those guarantees disappear. This book is about the handful of ways production games put them back together — and why fighting games, card games, and RTS games each rebuild them completely differently.</p>
+    <div class="titleblock">
+      <div><span class="tb-label">Format</span><span class="tb-value">9 chapters, Python</span></div>
+      <div><span class="tb-label">Audience</span><span class="tb-value">Experienced devs, new to games</span></div>
+      <div><span class="tb-label">Covers</span><span class="tb-value">Lockstep · server · rollback</span></div>
+      <div><span class="tb-label">Sheet</span><span class="tb-value">00 – 08</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="rail" aria-label="Chapters">
+    <div class="rail-title">NETCODE<span>FIRST PRINCIPLES</span></div>
+
+    <div class="reading-controls">
+      <div class="ctrl-group">
+        <span class="ctrl-label" id="font-label">Font</span>
+        <div class="segmented" role="group" aria-labelledby="font-label">
+          <label class="seg-opt"><input type="radio" name="pref-font" value="sans" checked><span>Sans</span></label>
+          <label class="seg-opt"><input type="radio" name="pref-font" value="serif"><span>Serif</span></label>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <span class="ctrl-label" id="mode-label">Theme</span>
+        <div class="segmented" role="group" aria-labelledby="mode-label">
+          <label class="seg-opt"><input type="radio" name="pref-mode" value="auto" checked><span>Auto</span></label>
+          <label class="seg-opt"><input type="radio" name="pref-mode" value="light"><span>Light</span></label>
+          <label class="seg-opt"><input type="radio" name="pref-mode" value="dark"><span>Dark</span></label>
+        </div>
+      </div>
+    </div>
+
+    <ol class="rail-list">
+      <li><a href="#t00"><span class="n">00</span>Preface</a></li>
+      <li><a href="#t01"><span class="n">01</span>The game loop</a></li>
+      <li><a href="#t02"><span class="n">02</span>Two computers</a></li>
+      <li><a href="#t03"><span class="n">03</span>Three genres</a></li>
+      <li><a href="#t04"><span class="n">04</span>Lockstep</a></li>
+      <li><a href="#t05"><span class="n">05</span>Authoritative server</a></li>
+      <li><a href="#t06"><span class="n">06</span>Prediction &amp; rollback</a></li>
+      <li><a href="#t07"><span class="n">07</span>Feel &amp; choosing</a></li>
+      <li><a href="#t08"><span class="n">08</span>Production &amp; cheat sheet</a></li>
+    </ol>
+    <div class="rail-foot">Read top to bottom — each chapter assumes the last. ~30 min.</div>
+  </nav>
+
+  <main id="main" class="content">
+
+    <!-- TICK 00 -->
+    <section id="t00" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 00</span><h2>Preface — one question, three answers</h2></div>
+      <hr class="rule">
+      <p class="lede">Almost every online game, from a two-player fighting game to a forty-player battle royale, is an answer to one question.</p>
+      <p>You already know how to build distributed systems: replication, consensus, RPC, eventual consistency. Networked games are that same problem wearing a costume — the "database" is a physics simulation running at 30–60 updates a second, the "clients" have eyes and reflexes, and the "consistency model" has to feel invisible to a human holding a controller. If you've built a chat backend or reasoned about a Raft log, you already have most of the vocabulary you need. This book supplies the rest.</p>
+      <p>We'll lean on three running examples, one per architecture, because "network game" is not one problem — it's three different problems that happen to share a genre label:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Codename</th><th>Genre</th><th>Players</th><th>What makes it hard</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Vanguard</strong></td><td>RTS — base &amp; battle</td><td class="num">2–8</td><td>Thousands of units; state is too big to send over the wire every tick.</td></tr>
+            <tr><td><strong>Tabletop</strong></td><td>Trick-taking card game</td><td class="num">2–6</td><td>Hidden information and real money mean the server must never trust a client.</td></tr>
+            <tr><td><strong>Duel-7</strong></td><td>1v1 fighting game</td><td class="num">2</td><td>60 fps combat where a 100 ms round trip is a lifetime.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Each gets its own chapter and its own architecture. By the end, the three will look less like unrelated tricks and more like three points on a single spectrum — and you'll be able to place any new game you're handed on that spectrum yourself.</p>
+      <p><em>Out of scope:</em> specific engine APIs (Unity/Unreal), matchmaking algorithms, and MMO world-sharding. We stay at the level of "what goes on the wire, and who is allowed to be wrong."</p>
+    </section>
+
+    <!-- TICK 01 -->
+    <section id="t01" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 01</span><h2>The single-player baseline</h2></div>
+      <hr class="rule">
+      <p class="lede">Before anything can go wrong across a network, notice how much is quietly going <em>right</em> on one machine.</p>
+      <p>A single-player game is a loop. Read input, advance the world by a fixed slice of time, draw the result, repeat. That's it — every game you've ever played is some variation of this loop.</p>
+      <figure class="diagram">
+        <figcaption>Fig 01 — the loop with exactly one clock</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 520 210" role="img" aria-label="Single machine game loop: input, simulate, render, repeating">
+            <text x="260" y="18" text-anchor="middle" class="lbl-dim">ONE MACHINE · ONE CLOCK · ONE COPY OF THE TRUTH</text>
+            <rect x="30" y="34" width="150" height="56" rx="2" class="box"/>
+            <text x="105" y="58" text-anchor="middle" class="lbl">INPUT</text>
+            <text x="105" y="74" text-anchor="middle" class="lbl-dim">poll keys / stick</text>
+            <rect x="340" y="34" width="150" height="56" rx="2" class="box"/>
+            <text x="415" y="58" text-anchor="middle" class="lbl">SIMULATE</text>
+            <text x="415" y="74" text-anchor="middle" class="lbl-dim">advance world by dt</text>
+            <rect x="185" y="140" width="150" height="56" rx="2" class="box"/>
+            <text x="260" y="164" text-anchor="middle" class="lbl">RENDER</text>
+            <text x="260" y="180" text-anchor="middle" class="lbl-dim">draw current state</text>
+            <line x1="180" y1="62" x2="338" y2="62" class="ln" marker-end="url(#arrow)"/>
+            <path d="M 415 90 L 415 118 L 337 158" class="ln" fill="none" marker-end="url(#arrow)"/>
+            <path d="M 185 158 L 68 158 L 68 92" class="ln" fill="none" marker-end="url(#arrow)"/>
+          </svg>
+        </div>
+      </figure>
+      <p>Nobody calls this a "synchronization problem" because there's nothing to synchronize — there is exactly one input source and exactly one world. Determinism (same inputs + same dt always produce the same next state) is a nice property, but nobody notices it, because there's no second copy to compare against. The moment you add a second machine, this whole loop has to answer a question it never had to ask before: whose loop is right when the two disagree?</p>
+      <div class="code-block">
+        <div class="code-head"><span class="code-dot"></span><span class="code-label">single_player.py</span></div>
+        <pre><code class="py">import time
+
+TICK_RATE = 60
+DT = 1 / TICK_RATE
+
+def run_single_player(world):
+    accumulator = 0.0
+    last = time.perf_counter()
+    while world.running:
+        now = time.perf_counter()
+        accumulator += now - last
+        last = now
+        while accumulator >= DT:
+            inputs = poll_local_input()
+            world.update(inputs, DT)      # the only truth that exists
+            accumulator -= DT
+        render(world)                     # as often as the display allows</code></pre>
+      </div>
+      <p>Keep this fixed-step accumulator in mind — it's the seed every networked architecture in this book grows from. The word "tick" in "TICK 04," "TICK 06," and everywhere else in this book just means one pass of that inner <code>while accumulator >= DT</code> loop.</p>
+    </section>
+
+    <!-- TICK 02 -->
+    <section id="t02" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 02</span><h2>Two computers, one reality</h2></div>
+      <hr class="rule">
+      <p class="lede">Add a second machine and three things you got for free disappear at once: a shared clock, a shared memory space, and mutual trust.</p>
+      <p>The network connecting them is slow relative to a 16-millisecond frame budget — even a good connection costs 20–100+ ms round trip, and speed-of-light alone puts a floor under that number once players are on different continents. It's also unreliable: packets get lost, arrive out of order, or arrive in bursts (jitter) instead of steadily. And, depending on who wrote the client, it may be actively lying to you.</p>
+      <figure class="diagram">
+        <figcaption>Fig 02 — what the wire actually costs you</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 620 220" role="img" aria-label="Two clients connected by an unreliable, latent network with an open question of trust">
+            <rect x="40" y="72" width="150" height="70" rx="2" class="box"/>
+            <text x="115" y="102" text-anchor="middle" class="lbl">CLIENT A</text>
+            <text x="115" y="120" text-anchor="middle" class="lbl-dim">its own clock</text>
+            <circle cx="58" cy="86" r="7" class="ln-dim" fill="none"/>
+            <line x1="58" y1="86" x2="58" y2="80" class="ln-dim"/>
+            <rect x="430" y="72" width="150" height="70" rx="2" class="box"/>
+            <text x="505" y="102" text-anchor="middle" class="lbl">CLIENT B</text>
+            <text x="505" y="120" text-anchor="middle" class="lbl-dim">its own clock</text>
+            <circle cx="562" cy="86" r="7" class="ln-dim" fill="none"/>
+            <line x1="562" y1="86" x2="565" y2="81" class="ln-dim"/>
+            <line x1="190" y1="107" x2="430" y2="107" class="ln dash" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+            <text x="310" y="88" text-anchor="middle" class="lbl-accent">20–150 ms, jittery</text>
+            <circle cx="310" cy="150" r="16" class="box-warn"/>
+            <text x="310" y="155" text-anchor="middle" class="lbl-warn">?</text>
+            <text x="310" y="182" text-anchor="middle" class="lbl-dim">who do we trust when they disagree?</text>
+            <text x="115" y="60" text-anchor="middle" class="lbl-dim">believes its own sim</text>
+            <text x="505" y="60" text-anchor="middle" class="lbl-dim">believes its own sim</text>
+          </svg>
+        </div>
+      </figure>
+      <div class="note note-key">
+        <p><strong>The core question — </strong>every multiplayer architecture in this book is a different answer to exactly one question: <em>which machine's simulation counts as the truth, and how do you hide the time it takes to find out?</em> Lockstep answers "all of them, in lockstep." An authoritative server answers "the server, always." Rollback answers "yours, provisionally — you'll be told if you guessed wrong." Hold onto this; every chapter from here on is a variation on it.</p>
+      </div>
+      <p>Genres differ enormously in how much they can afford to get this wrong. A card game that briefly shows the wrong hand is a bug report; a fighting game that adds 150 ms of input delay is unplayable; an RTS where one client secretly sees through the fog of war (the parts of the map that client hasn't scouted, and so shouldn't be able to see) is a banned player. The next chapter turns those differences into a map.</p>
+    </section>
+
+    <!-- TICK 03 -->
+    <section id="t03" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 03</span><h2>Three genres, three architectures</h2></div>
+      <hr class="rule">
+      <p class="lede">Line up Vanguard, Tabletop, and Duel-7 on one axis, and a pattern falls out.</p>
+      <p>At one end, the server (or one designated peer) decides everything and clients are little more than a screen. At the other end, every machine simulates the entire world itself, and the network carries almost nothing but raw player input. Where a genre sits on that axis is decided by two things: how expensive the simulation is to reproduce, and how much it costs you if a player's client turns out to be lying.</p>
+      <figure class="diagram">
+        <figcaption>Fig 03 — the trust spectrum</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 620 260" role="img" aria-label="Trust spectrum from authoritative server to full peer simulation. Lockstep and rollback sit at the identical point on the trust axis, at the far peer-simulation end; a second, vertical axis separates them by whether the genre's tempo can tolerate a synchronized wait.">
+            <line x1="60" y1="210" x2="560" y2="210" class="ln" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+            <text x="60" y="238" class="lbl-dim">server decides, clients display</text>
+            <text x="560" y="238" text-anchor="end" class="lbl-dim">every peer simulates everything</text>
+            <circle cx="130" cy="210" r="4.5" class="box"/>
+            <text x="130" y="180" text-anchor="middle" class="lbl-accent">AUTHORITATIVE SERVER</text>
+            <text x="130" y="196" text-anchor="middle" class="lbl-dim">Tabletop — cards</text>
+            <!-- lockstep and rollback share this exact x on the trust axis — the vertical
+                 spur is the second, separate axis (tempo tolerance) that actually splits them -->
+            <line x1="500" y1="80" x2="500" y2="210" class="ln-dim dash"/>
+            <circle cx="500" cy="80" r="4.5" class="box"/>
+            <text x="485" y="50" text-anchor="end" class="lbl-accent">PREDICT + ROLLBACK</text>
+            <text x="485" y="66" text-anchor="end" class="lbl-dim">Duel-7 — fighting</text>
+            <text x="485" y="84" text-anchor="end" class="lbl-warn">can't wait</text>
+            <circle cx="500" cy="150" r="4.5" class="box"/>
+            <text x="485" y="135" text-anchor="end" class="lbl-warn">can wait</text>
+            <text x="485" y="172" text-anchor="end" class="lbl-accent">DETERMINISTIC LOCKSTEP</text>
+            <text x="485" y="188" text-anchor="end" class="lbl-dim">Vanguard — RTS</text>
+          </svg>
+        </div>
+      </figure>
+      <div class="note note-ref">
+        <p><strong>A note on this axis — </strong>Lockstep and rollback sit at the <em>identical</em> point on this trust axis, drawn above as the same x-position at the far "every peer simulates everything" end: both are fully peer-to-peer, every machine holds the complete, ungated simulation state, and no referee is involved. The vertical spur marks that shared position and splits them on a second, separate axis instead — whether the genre's tempo can tolerate a synchronized wait before acting. Tick 06 spells out why that wait is the only real difference between them, and Tick 07 turns it into its own explicit question.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Game</th><th class="num">Tempo</th><th>Cheating stakes</th><th>Architecture</th></tr></thead>
+          <tbody>
+            <tr><td>Tabletop</td><td class="num">turn-based</td><td>high — hidden hands, ranked stakes</td><td>Authoritative server</td></tr>
+            <tr><td>Duel-7</td><td class="num">60 fps</td><td>low — symmetric, both see the same arena</td><td>Prediction + rollback</td></tr>
+            <tr><td>Vanguard</td><td class="num">10–20 Hz sim</td><td>medium — full map state sits on every peer, so a modified client could see through fog of war, but there's no hidden hand or stake to steal outright</td><td>Deterministic lockstep</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Notice cheating stakes and tempo point in different directions for Vanguard: an RTS would love an authoritative server for trust reasons, but 1,500 archers' worth of state simply doesn't fit down a modem-era (or even fiber-era, at scale) connection every tick. That constraint — not trust — is what pushes RTS games toward lockstep. The next three chapters take each architecture in turn.</p>
+    </section>
+
+    <!-- TICK 04 -->
+    <section id="t04" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 04</span><h2>Lockstep — how RTS games sync 1,500 archers</h2> <span class="tag-project">Project: Vanguard</span></div>
+      <hr class="rule">
+      <p class="lede">Don't send what happened. Send what was <em>ordered</em>, and let every machine work out what happened, identically, on its own.</p>
+      <p>This is the founding insight of RTS netcode. It comes from a classic 2001 postmortem, <a href="https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond" target="_blank" rel="noopener">"1500 Archers on a 28.8"</a>, written by Age of Empires' Mark Terrano and Paul Bettner. Their problem was simple to state and brutal in practice: how do you keep two players' games in sync over a 28.8 kbps modem?</p>
+      <p>The obvious approach is the one Tabletop will use in the next chapter — have every machine broadcast what its own units are doing, and let everyone else update their picture of the world from those broadcasts. Do the arithmetic and you'll see why that doesn't work here. Vanguard has 1,500 archers on the map. Each one needs roughly 20 bytes to describe its position, velocity, and status. Broadcast that for every archer, ten times a second, and you're already pushing about 300 KB/s — two orders of magnitude past the ~3.6 KB/s a 28.8 kbps modem could spare for the job, and still far more than most players' shared broadband can absorb once you add in everyone else's units too.</p>
+      <p>A systems programmer's next instinct is a reasonable one: an authoritative server doesn't have to send <em>raw</em> state. Tick 08 covers two real techniques — delta compression and interest management — that make modern shooters affordable despite this exact same bandwidth problem. So why not use them here? Because neither one has anything to work with in an RTS. Delta compression saves bandwidth by skipping units that haven't changed since the last update — but in the middle of a battle, most of Vanguard's 1,500 archers <em>are</em> changing on most ticks, so there's no large idle majority to skip. Interest management saves bandwidth by not telling a client about entities far outside its view — but an RTS player can see most of their own army and base at once, so there's no "it's far away, they don't need to know" locality to exploit either. Both tricks work great for a shooter's mostly-static world seen through a narrow first-person viewport. Neither one applies to an overhead view of a battlefield where everything is doing something at once.</p>
+      <p>So Age of Empires did something different: instead of sending state, it sent commands. "Unit 42, move to (x, y)." Every machine receives the same commands, in the same order, and runs the exact same simulation to work out what happens next on its own. Nobody ever describes the world over the wire, because every machine already knows how to compute it, given the same instructions.</p>
+      <p>That last sentence is hiding a large assumption, though: that "the same simulation" really does mean the same thing on every machine. Getting there is the entire price of admission for lockstep, and it's a stricter requirement than it sounds.</p>
+      <p>Start with something you already know: floating-point addition isn't associative. <code>(a+b)+c</code> can round to a different bit than <code>a+(b+c)</code>. Now imagine you're summing up the positions of 1,500 units by iterating over a hash set or a dictionary — a container whose enumeration order isn't guaranteed to be identical on every machine. Two "identical" simulations can end up disagreeing in the last bit of a floating-point number on the very first tick, from that ordering difference alone.</p>
+      <p>It gets worse before it gets better. Left to their defaults, compilers and CPUs are free to reorder, fuse, or vectorize floating-point math however they like, and they'll round differently depending on the machine, the compiler, and the optimization flags a build used. Pinning all of that down, build after build and platform after platform, is enough of a minefield that many shipped RTS engines skip floating-point simulation math entirely and use fixed-point — integer — math instead. Integer addition is exact and order-independent, up to overflow, so there's simply no rounding left for two machines to disagree about.</p>
+      <p>Two more rules close the remaining gaps. Fix one canonical order for iterating over units, so "which order do we process things in" is never ambiguous. And seed your random number generator from a value every machine already agrees on — never from the system clock, which is by definition different on every machine. Get any of these wrong — the math, the order, or the randomness — and the two machines' simulations quietly drift apart. That's called a desync, and the unsettling part is that nobody notices right away: both players keep playing, unaware they're now looking at two different games.</p>
+      <p>That identical-simulation guarantee depends on one more rule, though: nobody is allowed to simulate tick N until they personally hold every peer's command for tick N. Call this rule the "barrier."</p>
+      <p>Here's the part that's easy to get wrong the first time you hear it: don't picture a machine. There's no third party sitting between the two peers, refereeing this. Each one enforces the rule on itself — it simply refuses to advance to the next tick until its own inbox for that tick is full. The diagram below draws exactly two machines and a direct exchange between them, on purpose. There's nothing else in the picture, because there's nothing else in the architecture:</p>
+      <figure class="diagram">
+        <figcaption>Fig 04 — the barrier is a rule each peer enforces on itself, not a third machine</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 640 320" role="img" aria-label="Lockstep sequence diagram: the two peers exchange commands directly, with no intermediary, then each independently holds at a self-enforced barrier until its own copy of every command has arrived, before simulating identically; a delayed peer stalls the whole tick">
+            <text x="160" y="22" text-anchor="middle" class="lbl-accent">PEER A</text>
+            <text x="480" y="22" text-anchor="middle" class="lbl-accent">PEER B</text>
+            <line x1="160" y1="32" x2="160" y2="300" class="ln-dim dash"/>
+            <line x1="480" y1="32" x2="480" y2="300" class="ln-dim dash"/>
+            <text x="26" y="60" class="lbl-dim">TICK N</text>
+            <text x="160" y="42" text-anchor="middle" class="lbl-dim">my cmd</text>
+            <text x="480" y="42" text-anchor="middle" class="lbl-dim">my cmd</text>
+            <circle cx="160" cy="56" r="4" class="box"/>
+            <circle cx="480" cy="56" r="4" class="box"/>
+            <path d="M160,56 L480,100" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <path d="M480,56 L160,100" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <line x1="120" y1="100" x2="520" y2="100" class="ln"/>
+            <text x="320" y="90" text-anchor="middle" class="lbl">BARRIER: wait for both commands</text>
+            <line x1="160" y1="100" x2="160" y2="140" class="ln" marker-end="url(#arrow)"/>
+            <line x1="480" y1="100" x2="480" y2="140" class="ln" marker-end="url(#arrow)"/>
+            <text x="320" y="155" text-anchor="middle" class="lbl-dim">identical simulation, every peer</text>
+            <text x="26" y="182" class="lbl-dim">TICK N+1</text>
+            <text x="480" y="164" text-anchor="middle" class="lbl-warn">+40ms late</text>
+            <circle cx="160" cy="178" r="4" class="box"/>
+            <circle cx="480" cy="178" r="4" class="box-warn"/>
+            <path d="M160,178 L480,222" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <path d="M480,178 L160,222" class="ln-warn dash" marker-end="url(#arrow-warn)"/>
+            <line x1="120" y1="222" x2="520" y2="222" class="ln-warn dash"/>
+            <text x="320" y="212" text-anchor="middle" class="lbl-warn">BARRIER: still waiting on Peer B</text>
+            <text x="320" y="245" text-anchor="middle" class="lbl-warn">not a third machine —</text>
+            <text x="320" y="259" text-anchor="middle" class="lbl-warn">every peer enforces this rule on itself</text>
+          </svg>
+        </div>
+      </figure>
+      <p>That barrier is the whole tradeoff, in one picture: lockstep is only ever as fast as its slowest participant. It's also lockstep's particular answer to the second half of Tick 02's core question — how do you hide the time it takes to find out whose simulation is right? Lockstep's answer is that you don't hide it. You make every peer sit through the wait together, and the barrier is the mechanism that enforces that. (Tick 06 shows the other bet you can make instead: guess rather than wait, and only pay a cost on the guesses that turn out wrong.)</p>
+      <p>This is also why classic RTS games cap their lobbies at a handful of players, buffer a tick or two of input delay to absorb small hiccups, and why one player with a bad connection visibly drags the whole match down with them. And notice what's missing from this whole description: a server. It's a peer-to-peer model. No referee is required, because every machine is independently computing the same answer as everyone else.</p>
+      <aside class="note note-supp">
+        <span class="note-supp-tag">Supplementary reading — what the barrier doesn't handle by itself</span>
+        <p><strong>Packet loss isn't just late, it's fatal.</strong> A shooter can drop a position update and shrug — the next one supersedes it. Lockstep can't: every command must eventually reach every peer, in order, exactly once, or that peer's simulation permanently diverges. So lockstep can't run on raw fire-and-forget UDP — it needs a layer underneath, plain TCP or a custom ack-and-retransmit scheme, that guarantees eventual delivery, not just fast delivery. The barrier isn't waiting for a packet to show up by some deadline; it's waiting for a command, resent as many times as it takes, to actually arrive.</p>
+        <p><strong>Your own command isn't exempt.</strong> It's tempting to assume your own input should apply instantly — it's your machine, after all. It doesn't: your client queues its own command for tick N and waits at the same barrier as everyone else. That's why lockstep games buffer a fixed input delay, commonly 100–200ms, before any command takes effect, including yours — it's the time budget for that command to physically reach every other peer before the tick it's scheduled for arrives.</p>
+        <p><strong>Peers don't cross the barrier in unison.</strong> Each peer's barrier is a purely local condition — "have I personally received everyone's command for tick N?" — and that turns true at a different wall-clock moment on every machine, since every peer-to-peer link has different latency. Peer A's inbox for tick 500 can fill up 17ms before Peer B's does, so Peer A simulates first and may already be on tick 501 or 502 while Peer B is still stuck on 498. This is harmless, because determinism is a guarantee about <em>sequence</em>, not <em>simultaneity</em>: every peer eventually applies the same commands in the same order through the same math, regardless of when in real time it gets there. What it does need bounding is <em>how far</em> a fast peer is allowed to run ahead — left unchecked, it would buffer an ever-growing pile of unconfirmed future state and face a brutal catch-up burst once the slow peer recovers. So engines cap it with a run-ahead window: a peer may simulate at most K ticks ahead of the slowest acknowledged peer, then it blocks too — the same sliding-window flow control TCP uses, applied to ticks instead of bytes.</p>
+        <p><strong>Going offline is a different failure than going slow, and from silence alone a barrier can't tell them apart at all.</strong> A dropped packet and a permanently dead peer look identical on the receiving end. This isn't a lockstep-specific gap — it's the same wall every asynchronous network hits. With no bound on message delay, nothing can <em>prove</em> "very slow" apart from "gone forever." You can only approximate the difference.</p>
+        <p>Real engines approximate it by stacking two things. First, a heartbeat, sent on a fixed interval, independent of game commands — so silence in the heartbeat channel ("the pipe itself is gone") reads differently from silence in the command channel ("the pipe's fine, this tick's command just isn't ready yet"). Second, a timeout threshold: a policy tradeoff, not a detection, where missing heartbeats for a few seconds gets treated as disconnected. Once that threshold trips, the match pauses ("waiting for Player 2…"), then either drops that player from the peer set — their army goes idle, the barrier now only waits on the survivors — or ends the match. Reconnection is where determinism pays for itself: since state is just the replay of every command from the start, a peer that drops and rejoins can resync by replaying the full command log instead of needing a bespoke catch-up protocol.</p>
+        <p><strong>The lobby-size cap is this same problem, at scale.</strong> Waiting for the slowest of N peers gets worse than linearly worse as N grows. It's the same tail-latency problem as synchronous replication to N replicas: effective latency is the max across peers, not the average, and the odds that at least one of N peers is having a bad moment climb fast as N grows. That's the actual reason classic RTS lobbies top out around 2–8 players, not an arbitrary design choice.</p>
+        <p>None of this is chaos, though — it's the opposite. Every failure mode above resolves to the group pausing, never the group silently disagreeing. Lockstep buys zero divergence by refusing to let anyone proceed on incomplete information; that refusal is the whole mechanism, not a side effect of it.</p>
+      </aside>
+      <div class="code-block">
+        <div class="code-head"><span class="code-dot"></span><span class="code-label">lockstep_tick.py — vanguard</span></div>
+        <pre><code class="py">import hashlib
+
+class Link:
+    """A fake network: delivers a message N ticks late."""
+    def __init__(self, delay_ticks):
+        self.delay = delay_ticks
+        self.buffer = {}   # tick -> list[(peer_id, cmd)]
+
+    def send(self, tick, peer_id, cmd):
+        self.buffer.setdefault(tick + self.delay, []).append((peer_id, cmd))
+
+    def peek(self, tick):
+        """Look at whatever has arrived for this tick so far — does NOT remove it,
+        so a peer that isn't here yet doesn't cost the ones who already are."""
+        return self.buffer.get(tick, [])
+
+    def clear(self, tick):
+        """Drop this tick's raw buffer. Only safe once every peer is accounted for."""
+        self.buffer.pop(tick, None)
+
+def submit_local_command(tick, local_peer, link):
+    """Call this exactly once per tick — never again on a retry."""
+    link.send(tick, local_peer.id, local_peer.poll_command())
+
+def try_advance_tick(tick, peers, link, world):
+    """Call this as many times as you like until it returns a hash.
+    It never polls input or sends anything, and it never discards a command
+    that hasn't been consumed yet — so retrying is free."""
+    # BARRIER — nobody simulates until every peer's command has arrived.
+    # peek(), not receive(): a command that HAS arrived must stay right where
+    # it is until the barrier is actually satisfied, or the next poll would
+    # find it gone and this tick could never be completed.
+    commands = dict(link.peek(tick))
+    if len(commands) < len(peers):
+        return None   # still waiting: nothing buffered is lost, so this is free to retry
+
+    link.clear(tick)   # every peer is in — safe to drop the raw buffer now
+
+    # identical order, identical math, on every machine
+    for peer_id in sorted(commands):
+        world.apply(peer_id, commands[peer_id])
+    world.advance(DT)   # DT is Tick 01's local sim step (60Hz) — illustrative here.
+                        # Tick 07's "10-20Hz" is how often production lockstep engines
+                        # batch and exchange command packets, not the sim step rate;
+                        # this simplified example ties one barrier to one tick to keep
+                        # the mechanism readable, decoupling the two is an optimization.
+
+    # catch desyncs before they become "the game feels haunted"
+    return hashlib.sha1(world.serialize()).hexdigest()[:8]
+
+# game loop, sketched:
+#   submit_local_command(tick, me, link)         # exactly once
+#   result = None
+#   while result is None:                        # safe to retry: peek() never
+#       result = try_advance_tick(tick, peers, link, world)   # consumes, so nothing is lost</code></pre>
+      </div>
+      <div class="note note-good">
+        <p><strong>Why the checksum matters — </strong>real lockstep engines hash the world state every N ticks and compare hashes across peers for that same tick: peer A calls <code>try_advance_tick</code> and gets back <code>7f3a91c2</code> for tick 4000; if peer B gets that same <code>7f3a91c2</code> for tick 4000, the two worlds still agree and play continues. If peer B instead gets <code>b1e04dd0</code> for tick 4000, that mismatch <em>is</em> the desync signal — something upstream (a stray float op, an unpinned iteration order) made two "identical" simulations diverge, and the engine logs it and disconnects the pair rather than let them keep drifting apart unknowingly. The hash is how you find out before the players do, from a bug report titled "the game is haunted."</p>
+      </div>
+    </section>
+
+    <!-- TICK 05 -->
+    <section id="t05" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 05</span><h2>Authoritative server — how card games stay honest</h2> <span class="tag-project">Project: Tabletop</span></div>
+      <hr class="rule">
+      <p class="lede">Lockstep trusts every machine equally. A trick-taking card game can't afford to trust any of them.</p>
+      <p>Tabletop's actions are sparse (a handful of plays per minute) and its stakes are high (hidden hands, ranked ladders, real money in some titles). So it flips the model completely: the server holds the only copy of the truth. Clients never mutate the canonical game state — they send <em>intent</em> ("I'd like to play the 7 of hearts"), the server validates it against rules the client can't see all of (is it even your turn? do you actually hold that card?), and only then updates the real state and broadcasts the result.</p>
+      <figure class="diagram">
+        <figcaption>Fig 05 — star topology, thin clients</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 620 272" role="img" aria-label="Star topology: four clients send intent to a central authoritative server, which broadcasts public state back to all of them">
+            <rect x="245" y="98" width="130" height="64" rx="2" class="box"/>
+            <text x="310" y="126" text-anchor="middle" class="lbl">TABLETOP</text>
+            <text x="310" y="142" text-anchor="middle" class="lbl-dim">SERVER (truth)</text>
+            <rect x="245" y="12" width="130" height="40" rx="2" class="box-dim"/>
+            <text x="310" y="36" text-anchor="middle" class="lbl-dim">CLIENT 1</text>
+            <rect x="245" y="208" width="130" height="40" rx="2" class="box-dim"/>
+            <text x="310" y="232" text-anchor="middle" class="lbl-dim">CLIENT 2</text>
+            <rect x="30" y="110" width="130" height="40" rx="2" class="box-dim"/>
+            <text x="95" y="134" text-anchor="middle" class="lbl-dim">CLIENT 3</text>
+            <rect x="460" y="110" width="130" height="40" rx="2" class="box-dim"/>
+            <text x="525" y="134" text-anchor="middle" class="lbl-dim">CLIENT 4</text>
+            <line x1="300" y1="52" x2="300" y2="96" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <line x1="320" y1="96" x2="320" y2="52" class="ln" marker-end="url(#arrow)"/>
+            <line x1="300" y1="208" x2="300" y2="164" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <line x1="320" y1="164" x2="320" y2="208" class="ln" marker-end="url(#arrow)"/>
+            <line x1="160" y1="122" x2="243" y2="112" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <line x1="243" y1="132" x2="160" y2="142" class="ln" marker-end="url(#arrow)"/>
+            <line x1="460" y1="122" x2="377" y2="112" class="ln-dim" marker-end="url(#arrow-dim)"/>
+            <line x1="377" y1="132" x2="460" y2="142" class="ln" marker-end="url(#arrow)"/>
+            <text x="30" y="20" class="lbl-dim">thin  → intent</text>
+            <text x="590" y="20" text-anchor="end" class="lbl-accent">⇉ public state</text>
+            <text x="310" y="262" text-anchor="middle" class="lbl-dim">clients see the broadcast state only — never each other's hands</text>
+          </svg>
+        </div>
+      </figure>
+      <p>This buys three things at once. No determinism requirement — the server is the only place logic runs, so client CPUs, OS versions, and rounding never matter. Trivial reconnects — a disconnected client just re-requests the current state instead of replaying history. And a hard ceiling on cheating — a modified client can lie about wanting to play a card, but it can't fabricate a card it doesn't hold, because the server never told it anyone else's hand in the first place.</p>
+      <div class="note note-warn">
+        <p><strong>Failure mode — </strong>the model breaks the moment the server sends a client information it shouldn't have yet "for convenience" (e.g. everyone's hand, to simplify a debug view). A client-side authoritative check is not a security boundary; a client-side <em>display</em> of secret data is a leak, full stop. Broadcast only what that recipient is allowed to see.</p>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-dot"></span><span class="code-label">table_server.py — tabletop</span></div>
+        <pre><code class="py">class TableServer:
+    """The only place the real game state lives."""
+    def __init__(self, players):
+        self.hands = deal(players)          # server-only — clients never see this
+        self.turn = 0
+        self.trick = []
+
+    async def handle_intent(self, player_id, card):
+        if player_id != self.current_player():
+            raise IllegalMove("not your turn")
+        if card not in self.hands[player_id]:
+            raise IllegalMove("you don't hold that card")
+
+        self.hands[player_id].remove(card)
+        self.trick.append((player_id, card))
+        self.turn += 1
+
+        await self.broadcast(public_state(self))   # never the hidden hands
+
+    async def broadcast(self, state):
+        for conn in self.connections:
+            await conn.send_json(state)</code></pre>
+      </div>
+      <p>The price is latency, plain and simple: every action costs a full round trip before any client sees the result. This is authoritative server's answer to Tick 02's second question — how do you hide the time it takes to find out whose simulation is right? It doesn't hide the wait at all; it bets that the genre's own pace makes an un-hidden round trip invisible anyway. For a card game, one played every second or two, that bet pays off completely. For Duel-7's 60 fps combat, the same un-hidden wait would be unplayable — which is exactly the problem the next chapter exists to solve.</p>
+    </section>
+
+    <!-- TICK 06 -->
+    <section id="t06" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 06</span><h2>Prediction &amp; rollback — faking zero latency</h2> <span class="tag-project">Project: Duel-7</span></div>
+      <hr class="rule">
+      <p class="lede">A 100 ms round trip is invisible in a card game and catastrophic in a fighting game. Duel-7 can't wait for the network, so it stops waiting — and corrects itself later, before you notice.</p>
+      <p>There are three escalating answers to "the network is too slow for this genre," and production games have used all three:</p>
+      <h3>1 — Input delay</h3>
+      <p>The blunt fix: hold your own input for a couple of frames before applying it, so it lines up with when the remote input would realistically arrive. Simple and perfectly synchronized, but every player feels it as sluggishness — this was standard in fighting games before rollback became widespread.</p>
+      <h3>2 — Client-side prediction + server reconciliation</h3>
+      <p>This is the technique used by Source-engine games, and by Overwatch. (Timothy Ford's 2017 talk at GDC — the Game Developers Conference, the industry's largest technical conference — titled "Overwatch Gameplay Architecture and Netcode," is the canonical writeup on it.) Here's how it works: the client applies your input immediately and shows the optimistic result, while an authoritative server catches up and either confirms it or snaps you back to the corrected reality. Valve's <a href="https://developer.valvesoftware.com/wiki/Lag_Compensation" target="_blank" rel="noopener">lag compensation</a> takes this further for hit detection — the server briefly rewinds the world to what the shooter actually saw before deciding whether a shot landed.</p>
+      <p>"Snaps you back" is doing a lot of work in that sentence, and it's worth unpacking, because it's the same trick as rollback below, just triggered from the other direction. Here's how it actually works: the client tags every outgoing input with an increasing sequence number, and keeps a small buffer of every input it's sent but hasn't yet had confirmed.</p>
+      <p>The server processes those inputs and periodically tells the client, "as of input N, your state should be X." If the client's own record already matches X, it just discards everything up through N and moves on — no visible change, nothing to correct. But if it doesn't match, the client resets its local simulation to the server's state X, then replays every buffered input after N back through its own simulation to catch back up to the present. That replay is exactly the rewind-and-resimulate move you'll see in rollback's code below. The only difference is what triggers it: there, it's a peer's own guess turning out wrong; here, it's a correction arriving from the server.</p>
+      <h3>3 — Rollback netcode</h3>
+      <p>Despite the name, nobody here is reading the opponent's mind or reasoning about their strategy. "Prediction" means something almost embarrassingly mechanical: assume the remote player's input hasn't changed since the last packet you actually received from them, and simulate ahead on that guess immediately, with no waiting at all.</p>
+      <p>It's the same bet a CPU's branch predictor makes. The CPU doesn't understand your program's logic either — it just bets "this branch went the same way last time," executes ahead speculatively on that bet, and pays a defined, bounded cost, flush the pipeline and redo the work, on the occasions the bet is wrong. Rollback is that exact pattern, applied to game ticks instead of instructions.</p>
+      <p>This is the technique behind GGPO, the rollback netcode SDK that popularized this approach across the fighting-game community (more in Tick 08's further reading), and it's what most modern fighting games use. It's fully peer-to-peer, fully deterministic, and built entirely on that one guess. And the guess works because human input is sticky relative to a single frame: a held direction, a held button, usually doesn't change from one frame to the next. So on the overwhelming majority of frames, nobody's input changes at all — which means most predictions are already correct before the real input even arrives.</p>
+      <p>When the real remote input finally does arrive, one of two things happens. If it matches the guess, nothing happens — the guess was right, so there's nothing to fix. If it doesn't match, the peer rewinds its simulation to the last confirmed frame and replays every frame since, using the corrected input this time, all inside a single rendered frame. You never see this correction happen on your own character. The only visible sign, when it happens at all, is a remote character occasionally "snapping" to a different state — proof that your peer's guess about them was wrong.</p>
+      <p>That replay is only affordable because a resimulated tick is a stripped-down tick. It re-runs game logic and physics against the corrected input, but skips rendering, audio, and everything else that makes a normal frame expensive. A handful of logic-only steps fit inside a 16-millisecond budget in a way a handful of fully-rendered frames never could.</p>
+      <p>Even so, resimulation isn't free, which is exactly why shipped rollback engines — GGPO included — still cap the maximum rollback window, commonly to a handful of frames, instead of assuming they can absorb an arbitrarily late input. That cap is also why option 1 doesn't disappear once you have rollback: real fighting-game netcode typically layers a small, fixed amount of input delay underneath a bounded rollback window, so the worst case a late input can produce — resimulating all the way up to that cap — stays inside the frame budget instead of growing without limit.</p>
+      <p>Toggle the diagram below to see both cases:</p>
+      <figure class="diagram">
+        <figcaption>Fig 06 — rollback: matched prediction vs. misprediction</figcaption>
+        <div class="dg-inner">
+          <input type="checkbox" id="rb-toggle" class="rb-check">
+          <div class="rb-wrap">
+            <div class="toggle-row">
+              <label class="switch" for="rb-toggle"><span class="track"></span> show a misprediction</label>
+            </div>
+            <svg class="dg" viewBox="0 0 640 250" role="img" aria-label="Rollback timeline across five ticks, toggling between a correct prediction and a misprediction that triggers rewind and resimulation">
+              <text x="30" y="20" class="lbl-dim">LOCAL INPUT</text>
+              <text x="30" y="70" class="lbl-dim">REMOTE — GUESSED</text>
+              <g>
+                <rect x="90" y="30" width="70" height="26" rx="2" class="box"/><text x="125" y="47" text-anchor="middle" class="lbl">T</text>
+                <rect x="190" y="30" width="70" height="26" rx="2" class="box"/><text x="225" y="47" text-anchor="middle" class="lbl">T+1</text>
+                <rect x="290" y="30" width="70" height="26" rx="2" class="box"/><text x="325" y="47" text-anchor="middle" class="lbl">T+2</text>
+                <rect x="390" y="30" width="70" height="26" rx="2" class="box"/><text x="425" y="47" text-anchor="middle" class="lbl">T+3</text>
+                <rect x="490" y="30" width="70" height="26" rx="2" class="box"/><text x="525" y="47" text-anchor="middle" class="lbl">T+4</text>
+              </g>
+              <g>
+                <rect x="90" y="80" width="70" height="26" rx="2" class="box-dim"/><text x="125" y="97" text-anchor="middle" class="lbl-dim">dup</text>
+                <rect x="190" y="80" width="70" height="26" rx="2" class="box-dim"/><text x="225" y="97" text-anchor="middle" class="lbl-dim">dup</text>
+                <rect x="290" y="80" width="70" height="26" rx="2" class="box-dim"/><text x="325" y="97" text-anchor="middle" class="lbl-dim">dup</text>
+                <rect x="390" y="80" width="70" height="26" rx="2" class="box-dim"/><text x="425" y="97" text-anchor="middle" class="lbl-dim">dup</text>
+                <rect x="490" y="80" width="70" height="26" rx="2" class="box-dim"/><text x="525" y="97" text-anchor="middle" class="lbl-dim">dup</text>
+              </g>
+              <path d="M425,106 L425,112 L138,112 L133,150" class="ln-dim dash" fill="none" marker-end="url(#arrow-dim)"/>
+              <text x="300" y="128" text-anchor="middle" class="lbl-dim">tick T's real input arrives, 3 ticks late</text>
+
+              <g class="rb-correct">
+                <rect x="90" y="160" width="70" height="26" rx="2" class="box"/>
+                <text x="125" y="177" text-anchor="middle" class="lbl">match</text>
+                <text x="320" y="200" text-anchor="middle" class="lbl-dim">guess = reality — nothing to redo, no correction ever rendered</text>
+              </g>
+
+              <g class="rb-wrong">
+                <rect x="90" y="160" width="70" height="26" rx="2" class="box-warn"/>
+                <text x="125" y="177" text-anchor="middle" class="lbl-warn">differs</text>
+                <path d="M125,186 C125,215 300,225 388,210" class="ln-warn" fill="none" marker-end="url(#arrow-warn)"/>
+                <text x="255" y="230" text-anchor="middle" class="lbl-warn">rewind to T, resimulate T…T+3 with the real input — all within this frame</text>
+              </g>
+            </svg>
+          </div>
+        </div>
+      </figure>
+      <div class="note note-good">
+        <p><strong>Why it works — </strong>rollback needs the same deterministic-simulation property as lockstep (Tick 04) — it's often described as lockstep's more optimistic sibling. The difference is <em>when</em> you find out you were wrong: lockstep never lets a peer proceed until it knows; rollback lets every peer barrel ahead on a guess, and pays for wrong guesses with a cheap, invisible rewind instead of a visible stall. This is rollback's answer to Tick 02's second question: it doesn't make you wait (lockstep) and it doesn't just accept the wait as invisible (authoritative server) — it hides the wait by guessing, and only pays for the guesses that turn out wrong.</p>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-dot"></span><span class="code-label">rollback.py — duel-7</span></div>
+        <pre><code class="py">LOCAL, REMOTE = 0, 1
+
+class RollbackSession:
+    def __init__(self, world):
+        self.world = world
+        self.snapshots = {}          # tick -> serialized world
+        self.confirmed = {}          # tick -> {LOCAL: input, REMOTE: input}
+
+    def advance_predicted(self, tick, local_input, remote_guess):
+        self.snapshots[tick] = self.world.snapshot()
+        self.confirmed[tick] = {LOCAL: local_input, REMOTE: remote_guess}
+        self.world.step({LOCAL: local_input, REMOTE: remote_guess})
+
+    def on_remote_input_arrives(self, tick, real_remote_input):
+        guessed = self.confirmed[tick][REMOTE]
+        if guessed == real_remote_input:
+            return   # predicted correctly — nothing to undo
+
+        latest_tick = self.world.current_tick                 # how far we'd predicted ahead
+        self.world.restore(self.snapshots[tick])              # rewind (this also resets current_tick to `tick`,
+                                                                # which is why latest_tick had to be captured first)
+        for t in range(tick, latest_tick):                     # resimulate every predicted tick since
+            local_i = self.confirmed[t][LOCAL]
+            remote_i = real_remote_input if t == tick else self.confirmed[t][REMOTE]
+            self.world.step({LOCAL: local_i, REMOTE: remote_i})</code></pre>
+      </div>
+      <p>Notice this is peer-to-peer, just like lockstep. Most fighting games don't run a server-authoritative simulation at all, because the two players are equally trusted — there's nothing hidden to protect here, unlike Tabletop. That symmetry is exactly what makes rollback possible in the first place: rewinding and resimulating only works if every peer already holds, and is trusted to act on, the complete, ungated simulation state before any referee confirms a thing. Each side's guess about the other player is built from that same full state.</p>
+      <p>A server-authoritative genre can't make that same trade. A shooter's client must never be able to see through the fog of war, and can't be allowed to unilaterally decide that a shot landed — so it can never be handed the complete, ungated state that rollback needs in order to guess. That's why it reaches for option 2 instead: predict locally, but let the one party that actually holds the full state, the server, be the one that confirms it. This is exactly what Overwatch and Source-engine games do.</p>
+      <aside class="note note-supp">
+        <span class="note-supp-tag">Supplementary reading — what "prediction" does and doesn't guarantee</span>
+        <p><strong>Confirmed state is guaranteed to converge — but rollback doesn't invent that guarantee, it borrows it.</strong> The predicted ticks are explicitly provisional, never final, exactly like a CPU's speculatively-executed instructions before a branch resolves. The moment the real input for tick T arrives, the guessed version is thrown away and tick T — and everything after it — is replayed using the confirmed input. Once both peers hold the real input for tick T, they're replaying the identical sequence of confirmed commands through the identical deterministic math: Tick 04's "identical simulation over an identical command sequence" argument, applied after the fact instead of gated upfront by a barrier. That guarantee carries the exact same prerequisites as lockstep's — a genuinely deterministic simulation, and eventually-reliable delivery of every input. Rollback doesn't remove the need for either; it only changes what gets shown to the player while waiting for delivery to catch up.</p>
+        <p><strong>What's never guaranteed is that both screens agree at the same instant.</strong> Lockstep at least stalls everyone at a barrier until they share a tick; rollback never stalls, so at any wall-clock moment one peer may already be showing the confirmed, correct tick while the other is still showing a provisional guess about to be corrected. A visible "snap" isn't a leak in the system — it's the proof, rendered on screen, that the two peers briefly disagreed. And like lockstep's peers racing ahead of a slow one, rollback's speculation is bounded too: shipped engines cap the maximum rollback window to a handful of frames, and if the real input still hasn't arrived once that cap is hit, the engine falls back to actually waiting — briefly behaving like lockstep rather than assuming it can eat an arbitrarily late input.</p>
+        <p><strong>The rewind never plays out as a visible "flashback" — because only the last tick of a replay batch is ever drawn.</strong> Every intermediate tick in a resimulation runs game logic only; rendering and audio are skipped, which is also what makes replaying several ticks cheap enough to fit inside one frame's budget. So the player never sees a frame mid-rewind — only two consecutive displayed frames: one built from the wrong guess, the next built from the fully-corrected result. What's visible, when it's visible at all, is a discontinuity — the remote character's position pops between frames, like a scratched record jumping grooves — not an animated rewind-and-fast-forward. A small misprediction produces a jump of a few pixels, invisible the same way 24fps film hides its own discreteness; only a large one — a long delay, or a guess that was very wrong — produces the visible "teleporting" that shows up in complaints about poorly-tuned rollback implementations.</p>
+        <p><strong>The one place the CPU analogy actually breaks: audio has no commit point.</strong> An unpresented frame can be silently discarded and replaced, because the display only shows whatever gets flipped to it once per frame — a safe holding area, much like a CPU's reorder buffer for speculative results. Sound has no equivalent. A hit sound that starts playing because the game predicted a connect has already reached the player's ears the instant it starts; there's no way to un-play it once the real input reveals the hit actually missed. That's why shipped rollback engines typically delay or gate sound and hit-effects behind confirmation rather than firing them optimistically like everything else — a genuinely unavoidable seam in the technique, not an implementation bug.</p>
+      </aside>
+    </section>
+
+    <!-- TICK 07 -->
+    <section id="t07" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 07</span><h2>Making it feel good, and choosing your architecture</h2></div>
+      <hr class="rule">
+      <p class="lede">Getting the state right, which is what chapters 4 through 6 were about, is half the job. The other half is what the player actually sees between updates — and then, now that you've met all three architectures, how you actually pick one.</p>
+      <h3>Snapshot interpolation</h3>
+      <p>An authoritative server — Tabletop, or any server-authoritative action game — only sends full state updates a few times a second for remote entities. And those updates don't arrive on a steady beat. This is Tick 02's jitter showing up again, just now as an animation problem instead of a timing one. Render each snapshot the instant it lands, and motion on screen speeds up and slows down with the network instead of with time — everything looks like it's teetering between positions.</p>
+      <p>The standard fix is to deliberately render slightly in the past. Buffer the last two snapshots you've received, and interpolate — smoothly blend — between them as you draw each frame. You're trading a small, constant delay for motion that's always smooth, which is almost always the right trade to make.</p>
+      <h3>Extrapolation ("dead reckoning")</h3>
+      <p>What do you do when no new snapshot has arrived yet at all? You can keep moving a remote entity along its last known velocity, as a guess. It hides small gaps in the data well. But the guess compounds the longer it runs: the more time passes without a real update, the further it can drift from where the entity actually is. So most engines cap how far ahead they'll extrapolate before they just freeze the entity in place, or let it visibly snap back once a real update finally arrives.</p>
+      <figure class="diagram">
+        <figcaption>Fig 07 — interpolation vs. extrapolation</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 620 190" role="img" aria-label="Sparse network snapshots, a smooth interpolated render line slightly delayed, and a dashed extrapolated guess that drifts after the last snapshot">
+            <text x="30" y="30" class="lbl-dim">SNAPSHOTS (network)</text>
+            <circle cx="80" cy="55" r="4" class="box"/><circle cx="180" cy="55" r="4" class="box"/><circle cx="260" cy="55" r="4" class="box"/><circle cx="380" cy="55" r="4" class="box"/><circle cx="480" cy="55" r="4" class="box"/>
+            <line x1="80" y1="55" x2="480" y2="55" class="ln-dim dash"/>
+            <text x="30" y="100" class="lbl-dim">RENDER (interpolated, delayed)</text>
+            <polyline points="110,115 210,115 290,115 410,115 510,115" class="ln" fill="none"/>
+            <circle cx="110" cy="115" r="3" class="box"/><circle cx="210" cy="115" r="3" class="box"/><circle cx="290" cy="115" r="3" class="box"/><circle cx="410" cy="115" r="3" class="box"/><circle cx="510" cy="115" r="3" class="box"/>
+            <line x1="510" y1="115" x2="580" y2="145" class="ln-warn dash" marker-end="url(#arrow-warn)"/>
+            <circle cx="588" cy="150" r="5" class="box-warn"/>
+            <text x="590" y="172" text-anchor="end" class="lbl-warn">extrapolated guess drifts if the next packet is late</text>
+          </svg>
+        </div>
+      </figure>
+      <h3>Tick rate is a bandwidth budget, not a quality slider</h3>
+      <p>How often should you actually update the world? It's not that some genres care more about smoothness than others — it's that they're paying for updates in a completely different currency, as the table below shows.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Genre</th><th class="num">Typical rate</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Turn-based / cards</td><td class="num">on-action</td><td>Nothing to send between plays — event-driven, not tick-driven.</td></tr>
+            <tr><td>RTS lockstep</td><td class="num">10–20 Hz</td><td>Only command packets, so higher rates are cheap — bounded by input-delay tolerance, not bandwidth.</td></tr>
+            <tr><td>Shooters / action</td><td class="num">20–128 Hz</td><td>Full state per tick is expensive; Valve/Source titles famously ship 64 or 128 tick servers as a paid-for precision tradeoff.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Every one of these is the same tradeoff, just wearing a different unit: bytes per second, traded against how stale the world is allowed to look.</p>
+      <h3>Choosing an architecture</h3>
+      <p>You've now seen three answers to Tick 02's question — lockstep, an authoritative server, and prediction with rollback. So how do you actually pick, when you're staring at a new game idea? Two questions, asked in order, get you most of the way there.</p>
+      <figure class="diagram">
+        <figcaption>Fig 08 — decision flow</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 760 300" role="img" aria-label="Decision flowchart: first asks whether the genre's tempo tolerates a synchronized wait. Genres that can wait then split on trust and replay cost into lockstep or authoritative server. Twitch-critical genres that cannot wait split the same way into rollback or prediction plus server reconciliation.">
+            <rect x="260" y="10" width="240" height="40" rx="2" class="box"/>
+            <text x="380" y="34" text-anchor="middle" class="lbl">pick your genre's constraints</text>
+            <line x1="380" y1="50" x2="380" y2="68" class="ln" marker-end="url(#arrow)"/>
+            <rect x="180" y="68" width="400" height="50" rx="2" class="box"/>
+            <text x="380" y="88" text-anchor="middle" class="lbl">Q1 — can this genre's tempo</text>
+            <text x="380" y="105" text-anchor="middle" class="lbl">tolerate a synchronized wait?</text>
+            <path d="M380,118 L380,132 L190,132 L190,148" class="ln" fill="none" marker-end="url(#arrow)"/>
+            <text x="285" y="128" text-anchor="middle" class="lbl-accent">yes</text>
+            <path d="M380,118 L380,132 L570,132 L570,148" class="ln-dim" fill="none" marker-end="url(#arrow-dim)"/>
+            <text x="475" y="128" text-anchor="middle" class="lbl-dim">no</text>
+            <rect x="40" y="148" width="300" height="48" rx="2" class="box"/>
+            <text x="190" y="168" text-anchor="middle" class="lbl">cheap to replay from inputs,</text>
+            <text x="190" y="185" text-anchor="middle" class="lbl">and peers equally trusted?</text>
+            <rect x="420" y="148" width="300" height="48" rx="2" class="box"/>
+            <text x="570" y="168" text-anchor="middle" class="lbl">cheap to replay from inputs,</text>
+            <text x="570" y="185" text-anchor="middle" class="lbl">and peers equally trusted?</text>
+            <path d="M190,196 L190,210 L120,210 L120,226" class="ln" fill="none" marker-end="url(#arrow)"/>
+            <text x="155" y="206" text-anchor="middle" class="lbl-accent">yes</text>
+            <path d="M190,196 L190,210 L320,210 L320,226" class="ln-dim" fill="none" marker-end="url(#arrow-dim)"/>
+            <text x="255" y="206" text-anchor="middle" class="lbl-dim">no</text>
+            <path d="M570,196 L570,210 L480,210 L480,226" class="ln" fill="none" marker-end="url(#arrow)"/>
+            <text x="525" y="206" text-anchor="middle" class="lbl-accent">yes</text>
+            <path d="M570,196 L570,210 L650,210 L650,226" class="ln-dim" fill="none" marker-end="url(#arrow-dim)"/>
+            <text x="610" y="206" text-anchor="middle" class="lbl-dim">no</text>
+            <rect x="65" y="226" width="110" height="40" rx="2" class="box"/>
+            <text x="120" y="250" text-anchor="middle" class="lbl">LOCKSTEP</text>
+            <rect x="235" y="226" width="170" height="48" rx="2" class="box"/>
+            <text x="320" y="248" text-anchor="middle" class="lbl">AUTHORITATIVE</text>
+            <text x="320" y="264" text-anchor="middle" class="lbl">SERVER</text>
+            <rect x="425" y="226" width="110" height="40" rx="2" class="box"/>
+            <text x="480" y="250" text-anchor="middle" class="lbl">ROLLBACK</text>
+            <rect x="565" y="226" width="170" height="48" rx="2" class="box"/>
+            <text x="650" y="248" text-anchor="middle" class="lbl">PREDICTION</text>
+            <text x="650" y="264" text-anchor="middle" class="lbl">+ RECONCILIATION</text>
+          </svg>
+        </div>
+      </figure>
+      <p>The first question is about tempo: can this genre's pace tolerate everyone pausing together for a network round trip? Tick 02 told you that round trip usually costs somewhere between 20 and 100-plus milliseconds. A slow, forgiving tempo — Vanguard's command-based RTS pacing, or Tabletop's one-play-every-second-or-two rhythm — can afford to make every peer sit through that wait. A genre where players react to each other in real time, at something close to human reflex speed, generally can't: added delay starts to feel bad to a hand on a controller at around 50 milliseconds, which is well under a typical round trip.</p>
+      <p>If the answer is "yes, we can wait," ask a second question: is the simulation cheap enough to replay from just the players' inputs, and are the peers trusted enough with each other's full state? Vanguard answers yes to both — replaying commands is exactly what makes lockstep work, and while its cheating stakes are real, they're not severe enough to be worth a much bigger bandwidth bill just to eliminate them. So it lands on lockstep. Tabletop answers no — hidden hands and real stakes mean it can't hand any client the full truth — so it lands on an authoritative server instead.</p>
+      <p>If the answer is "no, we can't wait," the same second question splits the twitch-critical genres too. Duel-7 is cheap to replay and its two players are equally trusted, so it lands on rollback. A shooter is also twitch-critical, but its world state is large and its clients can't be fully trusted with things like enemy positions behind cover — so it lands on prediction plus server reconciliation instead, even though it's chasing the exact same responsiveness Duel-7 is.</p>
+      <p>Real production games rarely settle on one answer for the whole game, though. An MMO is the clearest example: an authoritative server holds the truth, the way Tabletop's does. Interest management narrows what any one client is even told about — only nearby entities matter to them, so nobody needs a full-world snapshot every tick. And client-side prediction smooths movement, the way Duel-7's option 2 does, so walking around doesn't feel like a laggy card game. The architecture gets chosen per subsystem, not once for the whole game: movement gets prediction, inventory and trading get strict server authority, and chat needs neither.</p>
+      <div class="note note-key">
+        <p><strong>The pattern to take away — </strong>"what architecture is this game" is usually the wrong question. The right one is "what does <em>this subsystem</em> need to feel right, and what can it afford to get wrong for a moment?" Movement can afford a wrong guess corrected next frame. A trade cannot.</p>
+      </div>
+    </section>
+
+    <!-- TICK 08 -->
+    <section id="t08" class="tick">
+      <div class="sheet-head"><span class="tickno">TICK 08</span><h2>Production notes, and a cheat sheet</h2></div>
+      <hr class="rule">
+      <p class="lede">Everything so far has been about game logic — who's allowed to be wrong, and for how long. Shipping any of it adds a layer underneath that every chapter so far quietly assumed away: the wire itself.</p>
+      <figure class="diagram">
+        <figcaption>Fig 09 — the stack underneath every chapter so far</figcaption>
+        <div class="dg-inner">
+          <svg class="dg" viewBox="0 0 560 260" role="img" aria-label="Layered stack: application game rules, serialization, transport, and internet layers, with a note that genre choice shows up at the transport layer">
+            <rect x="60" y="14" width="440" height="48" rx="2" class="box"/>
+            <text x="280" y="34" text-anchor="middle" class="lbl">APPLICATION</text>
+            <text x="280" y="50" text-anchor="middle" class="lbl-dim">game rules, input handling — Ticks 04–06</text>
+            <rect x="60" y="74" width="440" height="48" rx="2" class="box"/>
+            <text x="280" y="94" text-anchor="middle" class="lbl">SERIALIZATION</text>
+            <text x="280" y="110" text-anchor="middle" class="lbl-dim">JSON (turn-based) or packed binary / delta (real-time)</text>
+            <rect x="60" y="134" width="440" height="48" rx="2" style="fill:var(--diagram-bg-2); stroke:var(--diagram-line); stroke-width:2"/>
+            <text x="280" y="154" text-anchor="middle" class="lbl-accent">TRANSPORT</text>
+            <text x="280" y="170" text-anchor="middle" class="lbl-dim">UDP + custom reliability, or TCP / WebSocket</text>
+            <rect x="60" y="194" width="440" height="48" rx="2" class="box"/>
+            <text x="280" y="214" text-anchor="middle" class="lbl">INTERNET</text>
+            <text x="280" y="230" text-anchor="middle" class="lbl-dim">NAT traversal, relays / dedicated servers, matchmaking</text>
+          </svg>
+        </div>
+      </figure>
+      <p><strong>UDP vs. TCP.</strong> TCP guarantees that data arrives in order and arrives at all, which sounds like exactly what you'd want — until you notice the cost. One lost packet blocks every packet behind it until it's resent, a stall called head-of-line blocking. That's a real problem for a real-time game: nobody wants a visible freeze caused by a stale position update from half a second ago.</p>
+      <p>But "reliable enough" actually means different things depending on what's in the packet. Take a shooter continuously broadcasting position and velocity: a newer packet genuinely supersedes an older one, so these games run lightweight UDP with no real reliability layer at all. They just drop old, superseded packets and never bother recovering them, because the next packet already tells you everything the lost one would have.</p>
+      <p>Lockstep and rollback can't get away with that trick, though. Each tick's command is unique data — it isn't superseded by the next tick's command the way a stale position is — so a truly, permanently lost input either stalls a lockstep barrier forever, or produces exactly the desync Tick 04 spent a whole section warning about. So instead of dropping old data, these genres send more of it: a GGPO-style rollback packet piggybacks a short window of the sender's most recent, not-yet-confirmed inputs on every send (lockstep engines use the same trick for their own command packets). If one packet is lost, the next one already contains the data it was carrying — recovered for free, with no acknowledgment and no retransmission required. Tabletop, event-driven and low-frequency, never has to make any of these tradeoffs. It's perfectly happy running on plain TCP or WebSockets.</p>
+      <p><strong>NAT traversal.</strong> Two home routers usually can't open a direct connection to each other without help. Even a "peer-to-peer" game like Duel-7 typically still touches a server briefly for matchmaking and connection setup — including a trick called hole-punching, where a rendezvous server tells both players' machines to send each other a packet at the same moment. Each side's own outgoing packet opens a temporary return path through its own router, letting the other player's reply through without either router ever being reconfigured. And when a particularly strict NAT won't allow even that, the game falls back to relaying all its traffic through a server instead.</p>
+      <p><strong>Serialization.</strong> JSON is perfectly fine at Tabletop's tempo. At 20 to 60 updates a second, though, JSON's overhead adds up fast, so production real-time games switch to compact binary formats and send only what's changed since the last acknowledged snapshot — delta compression — instead of the full state on every tick.</p>
+      <p><strong>Interest management.</strong> This is the other half of the promise from Tick 04: a server doesn't have to tell every client about every entity in the whole world, only the ones actually relevant to that client — usually, whatever is near them, or inside their field of view. A shooter's server might be tracking thousands of entities across a large map, but any one player only needs updates about the handful of players and objects close to their own position. That's exactly the locality Tick 04 pointed out an RTS doesn't have: an RTS player can see most of their own base and army in a single glance, so there's no "it's far away, they don't need to know" audience to exclude. A shooter's narrow, ground-level viewport has plenty of that kind of audience to exclude, which is why this trick works so well there and not in Vanguard.</p>
+      <div class="note note-ref">
+        <p><strong>Full circle to Tick 02 and Tick 03 — </strong>anti-cheat turns out to be a direct consequence of the trust question you answered all the way back in Tick 03. An authoritative server, like Tabletop's, sits at the trust-nobody end of that spectrum, and it makes most client-side cheating structurally impossible — the truth simply never leaves the server, so there's nothing on a player's own machine worth attacking. A trust-everyone model, like Vanguard's or Duel-7's, puts the truth on every machine instead, so it has no equivalent wall to hide behind. It leans on other things: the symmetry of both players seeing the same battlefield, replay verification after the fact, and, for competitive titles, kernel-level anti-cheat software — which needs the operating system's own privileges, because ordinary game code can't see a cheat program running alongside it at that same privileged level.</p>
+      </div>
+      <h3>The cheat sheet</h3>
+      <p>You've now seen every architecture this book covers. Here's the whole thing on one page.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Architecture</th><th>Trust model</th><th>Sync unit</th><th>Best for</th><th>Classic failure mode</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Lockstep</strong></td><td>all peers equal</td><td>input commands</td><td>RTS, large deterministic sims</td><td>desync; stalls on the slowest peer</td></tr>
+            <tr><td><strong>Authoritative server</strong></td><td>server only</td><td>validated state deltas</td><td>cards, hidden info, high stakes</td><td>leaking secret state "for convenience"</td></tr>
+            <tr><td><strong>Prediction + rollback</strong></td><td>optimistic, self-correcting</td><td>input + periodic state</td><td>fighting games, twitch action</td><td>visible "snap" on bad misprediction</td></tr>
+            <tr><td><strong>Prediction + reconciliation</strong></td><td>client optimistic, server authoritative</td><td>input + periodic correction</td><td>shooters/action games needing hidden state or high-value trust</td><td>visible correction "snap" when server disagrees</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The one sentence to keep: pick who owns the truth, then design everything else around how cheaply, and how invisibly, you can hide the time it takes the rest of the world to find out what that truth was.</p>
+      <h3>Further reading</h3>
+      <ul>
+        <li><a href="https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond" target="_blank" rel="noopener">"1500 Archers on a 28.8"</a> — Terrano &amp; Bettner's original Age of Empires lockstep postmortem.</li>
+        <li><a href="https://www.ggpo.net/" target="_blank" rel="noopener">GGPO.net</a> — the rollback netcode SDK that popularized the technique across the fighting-game community.</li>
+        <li><a href="https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking" target="_blank" rel="noopener">Source Multiplayer Networking</a> and <a href="https://developer.valvesoftware.com/wiki/Lag_Compensation" target="_blank" rel="noopener">Lag Compensation</a> — Valve Developer Community, the reference writeups behind option 2 in Tick 06.</li>
+        <li><a href="https://medium.com/@sandshrewz/overwatch-client-side-prediction-and-improvements-7c2bf2206dc3" target="_blank" rel="noopener">Overwatch: Client-Side Prediction and Improvements</a> — summary of Timothy Ford's GDC 2017 talk.</li>
+        <li><a href="https://www.snapnet.dev/blog/netcode-architectures-part-2-rollback/" target="_blank" rel="noopener">Netcode Architectures Part 2: Rollback</a> — SnapNet's implementation-level walkthrough.</li>
+      </ul>
+      <footer class="book-foot">Netcode From First Principles — a field guide, not a framework. Every code sample here is a model to build intuition, not a library to import.</footer>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- Python syntax highlighter (comments, strings, keywords, numbers) ----
+  var KEYWORDS = "def|class|return|if|elif|else|for|while|in|not|and|or|import|from|as|with|try|except|finally|raise|yield|lambda|None|True|False|self|await|async|break|continue|pass|global|nonlocal|is";
+  var RE = new RegExp(
+    "(#.*$)|" +
+    "(\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''|\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')|" +
+    "\\b(" + KEYWORDS + ")\\b|" +
+    "\\b(\\d+\\.?\\d*)\\b",
+    "gm"
+  );
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  document.querySelectorAll("code.py").forEach(function(el){
+    var raw = escapeHtml(el.textContent);
+    var out = raw.replace(RE, function(m, c, s, k, n){
+      if (c !== undefined) return '<span class="tok-c">' + m + '</span>';
+      if (s !== undefined) return '<span class="tok-s">' + m + '</span>';
+      if (k !== undefined) return '<span class="tok-k">' + m + '</span>';
+      if (n !== undefined) return '<span class="tok-n">' + m + '</span>';
+      return m;
+    });
+    el.innerHTML = out;
+  });
+
+  // ---- Scroll-spy for the chapter rail ----
+  var links = Array.prototype.slice.call(document.querySelectorAll(".rail-list a"));
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.tick"));
+  var byId = {};
+  links.forEach(function(a){ byId[a.getAttribute("href").slice(1)] = a; });
+
+  if ("IntersectionObserver" in window){
+    var spy = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        var link = byId[entry.target.id];
+        if (!link) return;
+        if (entry.isIntersecting){
+          links.forEach(function(a){ a.classList.remove("active"); });
+          link.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-15% 0px -70% 0px", threshold: 0 });
+    sections.forEach(function(s){ spy.observe(s); });
+
+    var reveal = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (entry.isIntersecting){
+          entry.target.classList.add("reveal");
+          entry.target.classList.remove("pre-reveal");
+        }
+      });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0 });
+    sections.forEach(function(s){
+      if (s.id !== "t00"){ s.classList.add("pre-reveal"); reveal.observe(s); }
+    });
+  }
+})();
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var root = document.documentElement;
+
+  function read(key, fallback){
+    try{ return localStorage.getItem(key) || fallback; }catch(e){ return fallback; }
+  }
+  function write(key, value){
+    try{ localStorage.setItem(key, value); }catch(e){}
+  }
+  function applyFont(v){
+    if (v === "serif") root.setAttribute("data-font", "serif");
+    else root.removeAttribute("data-font");
+  }
+  function applyMode(v){
+    if (v === "light" || v === "dark") root.setAttribute("data-mode", v);
+    else root.removeAttribute("data-mode");
+  }
+
+  var font = read("netcode-font", "sans");
+  var mode = read("netcode-mode", "auto");
+  applyFont(font);
+  applyMode(mode);
+
+  var fontInput = document.querySelector('input[name="pref-font"][value="' + font + '"]');
+  if (fontInput) fontInput.checked = true;
+  var modeInput = document.querySelector('input[name="pref-mode"][value="' + mode + '"]');
+  if (modeInput) modeInput.checked = true;
+
+  document.querySelectorAll('input[name="pref-font"]').forEach(function(el){
+    el.addEventListener("change", function(){
+      applyFont(this.value);
+      write("netcode-font", this.value);
+    });
+  });
+  document.querySelectorAll('input[name="pref-mode"]').forEach(function(el){
+    el.addEventListener("change", function(){
+      applyMode(this.value);
+      write("netcode-mode", this.value);
+    });
+  });
+})();
+</script>

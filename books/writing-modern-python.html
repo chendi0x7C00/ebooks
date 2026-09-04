@@ -1,0 +1,3351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Writing Modern Python</title>
+<style>
+  :root {
+    --paper: #fafaf7;
+    --ink: #1f2933;
+    --muted: #5f6b7a;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --line: #e3e6ea;
+    --code-bg: #111827;
+    --code-fg: #e5e7eb;
+    --then: #b91c1c;
+    --then-bg: #fef2f2;
+    --now: #15803d;
+    --now-bg: #f0fdf4;
+    --sidebar-w: 264px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 16.5px;
+  }
+  /* ---------- layout ---------- */
+  /* Pure-CSS collapsible TOC: the checkbox is the state, the label is the bar. */
+  #toc-cb { display: none; }
+  .toc-bar { display: none; }
+  .toc-body {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: var(--sidebar-w);
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    background: #f4f4ef;
+    padding: 28px 20px 40px 28px;
+  }
+  main {
+    margin-left: var(--sidebar-w);
+    padding: 48px 56px 120px;
+    max-width: calc(760px + var(--sidebar-w));
+  }
+  article { max-width: 760px; }
+  @media (max-width: 920px) {
+    .toc-bar {
+      display: flex; align-items: center;
+      position: sticky; top: 0; z-index: 20;
+      height: 48px; padding: 0 16px;
+      background: #f4f4ef;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px; font-weight: 600;
+      cursor: pointer; user-select: none;
+    }
+    .toc-bar::after { content: "\25B8"; margin-left: auto; font-size: 13px; color: var(--muted); }
+    #toc-cb:checked ~ .toc-bar::after { content: "\25BE"; }
+    .toc-body {
+      display: none;
+      position: static; width: auto;
+      border-right: none; border-bottom: 1px solid var(--line);
+      padding: 16px 20px 24px;
+    }
+    #toc-cb:checked ~ .toc-body { display: block; }
+    main { margin-left: 0; padding: 32px 22px 80px; }
+  }
+  /* ---------- sidebar ---------- */
+  .toc-body .book-title { font-weight: 700; font-size: 15px; letter-spacing: .02em; margin-bottom: 2px; }
+  .toc-body .book-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 22px; }
+  .toc-body a {
+    display: block;
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 13.5px;
+    padding: 4px 8px;
+    border-left: 2px solid transparent;
+    margin-left: -8px;
+  }
+  .toc-body a:hover { color: var(--accent); }
+  .toc-body a.l2 { padding-left: 22px; color: var(--muted); font-size: 12.5px; }
+  /* ---------- typography ---------- */
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 26px; margin: 64px 0 4px; padding-top: 12px; border-top: 3px solid var(--ink); }
+  h2 .ch { color: var(--muted); font-weight: 400; font-size: 15px; display: block; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 6px; border: none; }
+  h3 { font-size: 19px; margin: 36px 0 8px; }
+  p { margin: 12px 0; }
+  a { color: var(--accent); }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: .88em;
+    background: #eef0f2;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  /* ---------- code blocks ---------- */
+  pre {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 16px 18px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+    -webkit-overflow-scrolling: touch;
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin: 14px 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  pre .cm { color: #7d8ba1; font-style: italic; }   /* comments */
+  pre .kw { color: #93c5fd; }                        /* keywords */
+  pre .st { color: #86efac; }                        /* strings */
+  /* ---------- then / now panels ---------- */
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0; }
+  @media (max-width: 920px) { .pair { grid-template-columns: 1fr; } }
+  .pair .panel { border-radius: 8px; overflow: hidden; border: 1px solid var(--line); display: flex; flex-direction: column; }
+  .pair .panel pre { flex: 1; font-size: 12.5px; }
+  .pair .panel .tag {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    padding: 6px 12px;
+  }
+  .pair .panel pre { margin: 0; border-radius: 0; }
+  .panel.then { border-color: #fecaca; }
+  .panel.then .tag { background: var(--then-bg); color: var(--then); }
+  .panel.now { border-color: #bbf7d0; }
+  .panel.now .tag { background: var(--now-bg); color: var(--now); }
+  /* ---------- adoption pills ---------- */
+  .pill {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; padding: 1px 9px; border-radius: 999px;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .pill.u { background: #dcfce7; color: #15803d; }   /* ubiquitous */
+  .pill.c { background: #dbeafe; color: #1d4ed8; }   /* common */
+  .pill.n { background: #fef3c7; color: #b45309; }   /* niche */
+  .pill.f { background: #e5e7eb; color: #6b7280; }   /* faded */
+  /* ---------- callouts ---------- */
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 10px 16px;
+    border-radius: 0 8px 8px 0;
+    margin: 18px 0;
+    font-size: 15px;
+  }
+  .callout.warn { border-left-color: #d97706; background: #fffbeb; }
+  .callout.contested { border-left-color: #6b7280; background: #f3f4f6; }  /* Verdict sidebars */
+  .callout.flags { border-left-color: #d97706; background: #fffbeb; }      /* review red flags */
+  /* ---------- figures ---------- */
+  figure { margin: 28px 0; text-align: center; }
+  figure svg { max-width: 100%; height: auto; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  /* ---------- tables ---------- */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #f0f1f3; white-space: nowrap; }
+  /* ---------- cover ---------- */
+  .cover { padding: 48px 0 24px; }
+  .cover .kicker { color: var(--accent); font-weight: 700; letter-spacing: .16em; text-transform: uppercase; font-size: 13px; }
+  .cover .subtitle { font-size: 18px; color: var(--muted); margin-top: 4px; }
+  .cover .meta { font-size: 13px; color: var(--muted); margin-top: 24px; }
+  hr.soft { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  /* ---------- phones (< 720px) ---------- */
+  @media (max-width: 719.98px) {
+    body { font-size: 17px; line-height: 1.6; }
+    h1 { font-size: 27px; }
+    h2 { font-size: 22px; }
+    h3 { font-size: 17.5px; }
+    main { padding: 28px 18px 80px; }
+    .toc-body a {
+      min-height: 44px; font-size: 15px; padding: 10px 12px;
+      display: flex; align-items: center;
+    }
+    .toc-body a.l2 { font-size: 15px; padding-left: 26px; }
+    pre { font-size: 12.5px; }
+  }
+</style>
+</head>
+<body>
+
+<input type="checkbox" id="toc-cb">
+<label for="toc-cb" class="toc-bar">Contents — Writing Modern Python</label>
+<nav class="toc-body" aria-label="Table of contents">
+<div class="book-title">Writing Modern Python</div>
+<div class="book-sub">The craft of building, testing, and shipping Python in 2026</div>
+<a href="#ch1">1 · Day One: A Project the 2026 Way</a>
+<a class="l2" href="#s1-1">1.1 The five-minute scaffold, annotated</a>
+<a class="l2" href="#s1-2">1.2 pyproject.toml, section by section</a>
+<a class="l2" href="#s1-3">1.3 The daily loop</a>
+<a class="l2" href="#s1-4">1.4 Lock files and the pinning spectrum</a>
+<a class="l2" href="#s1-5">1.5 Scripts that carry their own dependencies</a>
+<a class="l2" href="#s1-6">1.6 Ruff as the house style</a>
+<a class="l2" href="#s1-7">1.7 Guardrails: pre-commit and CI</a>
+<a class="l2" href="#s1-8">1.8 When one repo holds several packages: workspaces</a>
+<a href="#ch2">2 · Reading 2026 Code: The Idioms That Replaced Yours</a>
+<a class="l2" href="#s2-1">2.1 Imports that date your code</a>
+<a class="l2" href="#s2-2">2.2 pathlib by default</a>
+<a class="l2" href="#s2-3">2.3 Strings: f-strings by default, t-strings on purpose</a>
+<a class="l2" href="#s2-4">2.4 The classics that still bite</a>
+<a class="l2" href="#s2-5">2.5 namedtuple&#x27;s afterlife</a>
+<a class="l2" href="#s2-6">2.6 match, with restraint</a>
+<a class="l2" href="#s2-7">2.7 The small modernizations, and the quick map</a>
+<a href="#ch3">3 · Typing for Real Projects</a>
+<a class="l2" href="#s3-1">3.1 The ratchet: three tiers of strictness</a>
+<a class="l2" href="#s3-2">3.2 Pick one checker and run it in CI</a>
+<a class="l2" href="#s3-3">3.3 Protocol vs ABC</a>
+<a class="l2" href="#s3-4">3.4 TypedDict vs dataclass vs pydantic</a>
+<a class="l2" href="#s3-5">3.5 Narrowing that works: TypeIs</a>
+<a class="l2" href="#s3-6">3.6 Decorators that keep their signatures</a>
+<a class="l2" href="#s3-7">3.7 Aliases, overloads, generators</a>
+<a class="l2" href="#s3-8">3.8 Living with untyped libraries</a>
+<a href="#ch4">4 · Data at the Boundaries</a>
+<a class="l2" href="#s4-1">4.1 The rule and its reason</a>
+<a class="l2" href="#s4-2">4.2 dataclass, done right</a>
+<a class="l2" href="#s4-3">4.3 pydantic at the boundary</a>
+<a class="l2" href="#s4-4">4.4 attrs, msgspec, SQLModel — honestly</a>
+<a class="l2" href="#s4-5">4.5 Serialization out</a>
+<a href="#ch5">5 · Errors and Structure</a>
+<a class="l2" href="#s5-1">5.1 EAFP, still</a>
+<a class="l2" href="#s5-2">5.2 Always raise ... from</a>
+<a class="l2" href="#s5-3">5.3 Context without wrapping</a>
+<a class="l2" href="#s5-4">5.4 Result types: why we don&#x27;t</a>
+<a class="l2" href="#s5-5">5.5 Small modules, Protocol seams</a>
+<a class="l2" href="#s5-6">5.6 Lazy imports (3.15)</a>
+<a class="l2" href="#s5-7">5.7 Docstrings and comments</a>
+<a href="#ch6">6 · Testing That Scales</a>
+<a class="l2" href="#s6-1">6.1 pytest house style</a>
+<a class="l2" href="#s6-2">6.2 Snapshot testing went mainstream</a>
+<a class="l2" href="#s6-3">6.3 Three hypothesis properties worth writing</a>
+<a class="l2" href="#s6-4">6.4 Async tests</a>
+<a class="l2" href="#s6-5">6.5 Fakes over mocks</a>
+<a class="l2" href="#s6-6">6.6 Coverage without worship</a>
+<a class="l2" href="#s6-7">6.7 The declining and the advanced</a>
+<a href="#ch7">7 · Shipping</a>
+<a class="l2" href="#s7-1">7.1 Build backends are boring (by design)</a>
+<a class="l2" href="#s7-2">7.2 Versions</a>
+<a class="l2" href="#s7-3">7.3 Trusted publishing, or don&#x27;t publish</a>
+<a class="l2" href="#s7-4">7.4 The 2026 Dockerfile</a>
+<a class="l2" href="#s7-5">7.5 Dependency security</a>
+<a class="l2" href="#s7-6">7.6 Docs that don&#x27;t rot</a>
+<a href="#ch8">8 · Running It: Logs, Traces, Speed</a>
+<a class="l2" href="#s8-1">8.1 The logging policy</a>
+<a class="l2" href="#s8-2">8.2 structlog in practice</a>
+<a class="l2" href="#s8-3">8.3 Telemetry without vendor lock</a>
+<a class="l2" href="#s8-4">8.4 Profile first</a>
+<a class="l2" href="#s8-5">8.5 The usual wins (and the usual wastes)</a>
+<a href="#ch9">Capstone · The Review</a>
+<a class="l2" href="#sC-1">C.1 The code as found</a>
+<a class="l2" href="#sC-2">C.2 The review</a>
+<a class="l2" href="#sC-3">C.3 The rebuild, compressed</a>
+<a class="l2" href="#sC-4">C.4 The checklist</a>
+</nav>
+
+<main>
+<article>
+
+<!-- ============================== COVER ============================== -->
+<section class="cover">
+  <div class="kicker">Modern Python, Book 2</div>
+  <h1>Writing Modern Python</h1>
+  <div class="subtitle">The craft of building, testing, and shipping Python in 2026</div>
+  <p>Book 1 showed you what the language became. This book shows you how to <i>work</i> in it:
+  how a project is scaffolded in five minutes, what idiomatic typed code looks like on an ordinary
+  Tuesday, how the flagship libraries test and ship, and what a senior reviewer flags in your pull
+  request. Every claim comes with runnable code. Every recommendation is a decision, not a survey.</p>
+  <div class="meta">Written August 2026 · targets Python 3.12+ · No dependencies, read offline</div>
+</section>
+
+<div class="callout">
+  <b>This is Book 2.</b> Book 1 (<code>index.html</code>) covered the syntax —
+  <code>match</code>, <code>X | None</code>, TaskGroup, the uv/Ruff toolchain intro. This book uses
+  those features without re-teaching them. If a construct is unfamiliar, the atlas in Book 1's
+  appendix is the fastest catch-up.
+</div>
+
+<section class="chapter" id="ch1">
+<h2><span class="ch">Chapter 1</span>Day One: A Project the 2026 Way</h2>
+
+<p>In 2020, starting a project meant <code>mkdir</code>, <code>python -m venv .venv</code>,
+an activate dance, and a <code>requirements.txt</code> you would regret by March. In 2026
+the whole scaffold is one command, and the daily loop around it never touches a virtualenv
+by hand. This chapter walks the scaffold file by file, then the loop you will actually live
+in: add, sync, run, lock, lint, CI.</p>
+
+<h3 id="s1-1">1.1 The five-minute scaffold, annotated</h3>
+
+<p>Start every project with <code>uv init --package</code>. uv <span class="pill u">ubiquitous</span>
+is the default project manager of 2026 — over 126 million downloads in February 2026 alone —
+and its scaffold is the one this book assumes. <em>(Book 1, ch. 4.2)</em> introduced the command;
+here is what it writes and why each file earns its place.</p>
+
+<pre><code>$ uv init --package orders
+Initialized project `orders`
+$ cd orders
+
+orders/
+├── .python-version    <span class="cm"># interpreter pin — uv installs it for you</span>
+├── .gitignore         <span class="cm"># .venv and friends, already excluded</span>
+├── README.md
+├── pyproject.toml     <span class="cm"># the one config file; 1.2 walks it</span>
+└── src/
+    └── orders/
+        └── __init__.py</code></pre>
+
+<p>Three things to notice. There is no <code>requirements.txt</code> — dependencies live in
+<code>pyproject.toml</code> and exact versions live in <code>uv.lock</code>, which appears on
+your first <code>uv add</code>. There is no <code>.venv</code> in the listing — uv creates it
+lazily and manages it forever after. And the package sits under <code>src/</code>, which is
+the part worth defending.</p>
+
+<p>The src layout exists to break one specific lie. With a flat layout, Python puts the
+project root on <code>sys.path</code>, so <code>import orders</code> works from the repo
+even when the installed package is broken. Tests pass on your machine and fail everywhere
+else. With src layout the only way to import <code>orders</code> is to install it, so tests
+run against the installed package. That catches missing data files and bad build config at
+test time, not at release time. Flat layout remains fine for Django apps and scripts that
+never ship; everything that ships gets <code>src/</code>.</p>
+
+<h3 id="s1-2">1.2 pyproject.toml, section by section</h3>
+
+<p>One file configures your build, your dependencies, uv, Ruff, pytest, and coverage. Here
+is the canonical 2026 skeleton, annotated. Every tool you add later reads another section
+of this same file.</p>
+
+<pre><code>[build-system]
+requires = ["hatchling"]       <span class="cm"># build backend; boring by design</span>
+build-backend = "hatchling.build"
+
+[project]
+name = "orders"
+version = "0.1.0"
+requires-python = "&gt;=3.12"     <span class="cm"># floor for your code and your CI</span>
+dependencies = ["httpx&gt;=0.28"] <span class="cm"># what users install, as ranges</span>
+
+[dependency-groups]            <span class="cm"># PEP 735 — dev-only, never shipped</span>
+dev = ["pytest&gt;=8", "ruff", "pytest-cov"]
+
+[project.optional-dependencies] <span class="cm"># extras — shipped, for users</span>
+cli = ["rich&gt;=13"]
+
+[tool.uv]
+package = true                 <span class="cm"># build and install the src package</span>
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]</code></pre>
+
+<p>The section people get wrong is dependencies. PEP 735 gave us two homes with opposite
+audiences, and picking the wrong one either ships pytest to your users or asks contributors
+to install dev tools by hand.</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th></th><th><code>[dependency-groups]</code></th><th><code>[project.optional-dependencies]</code></th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Audience</td><td>You and your contributors</td><td>Your users</td></tr>
+    <tr><td>Shipped to PyPI</td><td>Never</td><td>Yes, as extras</td></tr>
+    <tr><td>Installed by</td><td><code>uv sync</code>, <code>uv run</code> (the <code>dev</code> group is on by default)</td><td><code>pip install orders[cli]</code></td></tr>
+    <tr><td>Typical contents</td><td>pytest, ruff, coverage, type stubs</td><td>Optional features: <code>rich</code>, extra backends</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Groups compose: <code>typing-test = [{include-group = "typing"}, {include-group = "test"}]</code>
+builds one CI group out of two smaller ones. Optional-dependencies stay for user-facing
+extras only.</p>
+
+<h3 id="s1-3">1.3 The daily loop</h3>
+
+<p>Four verbs cover a normal day: <code>add</code>, <code>sync</code>, <code>run</code>,
+and the occasional <code>lock --upgrade-package</code>. Two more replace tools you may still
+have installed. <code>uvx</code> runs one-off tools, replacing pipx.
+<code>uv python pin</code> picks the interpreter, replacing pyenv — uv installs standalone
+CPython builds itself. A Tuesday, end to end:</p>
+
+<pre><code>$ uv python pin 3.13            <span class="cm"># writes .python-version</span>
+$ uv add httpx                  <span class="cm"># pyproject + uv.lock + .venv in one step</span>
+$ uv add --dev pytest respx     <span class="cm"># lands in the dev dependency-group</span>
+
+$ git pull
+$ uv sync                       <span class="cm"># rebuild the env to match the lock</span>
+
+$ uv run pytest                 <span class="cm"># runs in the project env; no activate</span>
+$ uvx ruff check .              <span class="cm"># one-off tool run, cached</span>
+
+$ uv lock --upgrade-package httpx   <span class="cm"># targeted update; rest of lock kept</span>
+$ uv sync</code></pre>
+
+<p>Notice what never happens: no <code>source .venv/bin/activate</code>, no
+<code>pip install</code>, no "which Python is this terminal using". <code>uv run</code>
+always resolves the project environment, so the wrong-interpreter class of bug is gone.</p>
+
+<h3 id="s1-4">1.4 Lock files and the pinning spectrum</h3>
+
+<p>Commit <code>uv.lock</code>. For an application this is not a debate. The lockfile records
+exact, hash-verified versions of every transitive dependency. And <code>uv sync --locked</code>
+in CI fails loudly if the lock has drifted from <code>pyproject.toml</code>. Libraries sit at
+the other end. Publish wide ranges in <code>[project.dependencies]</code> so downstream
+projects can resolve you alongside everything else, and test your lower and upper bounds in
+CI. Many libraries now commit the lock too — for contributors and CI — while the ranges stay
+what users see.</p>
+
+<figure>
+<svg viewBox="0 0 640 175" role="img" aria-label="Spectrum of pinning philosophy: applications lock exact versions, libraries publish wide ranges">
+  <line x1="80" y1="85" x2="560" y2="85" stroke="#2563eb" stroke-width="2"/>
+  <polygon points="80,85 94,78 94,92" fill="#2563eb"/>
+  <polygon points="560,85 546,78 546,92" fill="#2563eb"/>
+  <circle cx="80" cy="85" r="6" fill="#15803d"/>
+  <circle cx="560" cy="85" r="6" fill="#b45309"/>
+  <text x="80" y="48" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2933">Applications</text>
+  <text x="80" y="118" text-anchor="middle" font-size="12" fill="#6b7280">commit uv.lock</text>
+  <text x="80" y="136" text-anchor="middle" font-size="12" fill="#6b7280">exact, hash-verified</text>
+  <text x="80" y="154" text-anchor="middle" font-size="12" fill="#6b7280">uv sync --locked in CI</text>
+  <text x="560" y="48" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2933">Libraries</text>
+  <text x="560" y="118" text-anchor="middle" font-size="12" fill="#6b7280">wide version ranges</text>
+  <text x="560" y="136" text-anchor="middle" font-size="12" fill="#6b7280">test bounds in CI</text>
+  <text x="560" y="154" text-anchor="middle" font-size="12" fill="#6b7280">committed for contributors</text>
+  <text x="320" y="70" text-anchor="middle" font-size="12" font-style="italic" fill="#6b7280">lock for yourself, range for downstream</text>
+</svg>
+<figcaption>Pinning is a spectrum, not a rule. Where you sit depends on who consumes
+your dependency list.</figcaption>
+</figure>
+
+<p>Two interop notes. If a deploy target only speaks pip,
+<code>uv export --format requirements-txt</code> emits a pinned requirements file from the
+lock. And PEP 751's <code>pylock.toml</code>, a tool-neutral lockfile standard, is the
+emerging format to watch — for now <code>uv.lock</code> is what you commit.</p>
+
+<h3 id="s1-5">1.5 Scripts that carry their own dependencies</h3>
+
+<p>PEP 723 lets a single file declare its own environment. Put a TOML block in the header,
+run it with <code>uv run</code>, and uv builds an ephemeral cached environment — no project,
+no README telling teammates what to install first. This is the right home for ETL jobs,
+ops scripts, and reproducible bug reports.</p>
+
+<pre><code>#!/usr/bin/env -S uv run --script
+<span class="cm"># /// script</span>
+<span class="cm"># requires-python = "&gt;=3.12"</span>
+<span class="cm"># dependencies = ["httpx&gt;=0.28", "polars&gt;=1"]</span>
+<span class="cm"># ///</span>
+<span class="st">"""Nightly ETL: pull orders, write a parquet summary."""</span>
+
+<span class="kw">import</span> httpx
+<span class="kw">import</span> polars <span class="kw">as</span> pl
+
+
+<span class="kw">def</span> fetch_orders() -&gt; list[dict]:
+    resp = httpx.get(
+        <span class="st">"https://api.example.com/orders"</span>, timeout=30
+    )
+    resp.raise_for_status()
+    <span class="kw">return</span> resp.json()
+
+
+<span class="kw">def</span> main() -&gt; None:
+    df = pl.DataFrame(fetch_orders())
+    summary = df.group_by(<span class="st">"status"</span>).len()
+    summary.write_parquet(<span class="st">"orders_summary.parquet"</span>)
+
+
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    main()</code></pre>
+
+<p>The shebang makes it directly executable: <code>chmod +x etl.py &amp;&amp; ./etl.py</code>.
+Add a dependency later with <code>uv add --script etl.py polars</code>, which edits the
+header block for you. One honest caveat: editors do not always resolve inline dependencies,
+so expect red squiggles in VS Code even when the script runs fine.</p>
+
+<h3 id="s1-6">1.6 Ruff as the house style</h3>
+
+<p>Use Ruff <span class="pill u">ubiquitous</span> for both linting and formatting. It replaces
+flake8, black, isort, and pyupgrade with one binary. The adoption numbers are not close:
+roughly 262 million downloads a month as of June 2026, and about 46× faster than flake8 on
+a 47K-line codebase (0.18s). It does not type-check; that is chapter 3's job.</p>
+
+<pre><code>[tool.ruff]
+target-version = <span class="st">"py312"</span>
+line-length = 88
+
+[tool.ruff.lint]
+select = [<span class="st">"E"</span>, <span class="st">"F"</span>, <span class="st">"I"</span>, <span class="st">"UP"</span>, <span class="st">"B"</span>]
+<span class="cm"># grow into: "SIM", "RUF", "ASYNC", "PTH"</span>
+ignore = [<span class="st">"E501"</span>]  <span class="cm"># the formatter owns line length</span>
+
+[tool.ruff.lint.isort]
+known-first-party = [<span class="st">"orders"</span>]</code></pre>
+
+<p>Start with <code>E, F, I, UP, B</code> — pycodestyle, pyflakes, import sorting, the
+auto-modernizer, and bugbear's bug patterns. Add <code>SIM, RUF, ASYNC, PTH</code> once the
+team stops noticing the first five. Run <code>ruff check --fix .</code> before
+<code>ruff format .</code>: autofixes can alter semantics, so you want them visible in the
+diff, while the formatter only moves whitespace. The formatter's output matches black on
+more than 99.9% of lines, so nothing you have already formatted needs reformatting.</p>
+
+<p>The <code>UP</code> rules deserve special mention. Gated by <code>target-version</code>,
+they rewrite dated idioms to the newest syntax your Python floor allows. With the
+<code>py312</code> floor above, legacy typing imports rewrite themselves:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> Dict, List, Optional
+
+<span class="kw">def</span> fetch_user(
+    uid: int,
+) -&gt; Optional[Dict[str, List[int]]]:
+    ...</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">def</span> fetch_user(
+    uid: int,
+) -&gt; dict[str, list[int]] | None:
+    ...</code></pre>
+  </div>
+</div>
+<p><code>ruff check --select UP --fix</code> made this edit, not a human. Builtins replace
+<code>typing.Dict</code>/<code>List</code>, and <code>X | None</code> replaces
+<code>Optional</code> — same signature, no import line, nothing to explain to new hires.</p>
+
+<h3 id="s1-7">1.7 Guardrails: pre-commit and CI</h3>
+
+<p><em>(Book 1, ch. 4.6)</em> showed a four-line CI job; here is the production version. The
+workflow pins the interpreter matrix, caches uv's downloads, and refuses to run on a stale
+lockfile. Chapter 6.7 references this same matrix for testing across versions.</p>
+
+<pre><code>name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [<span class="st">"3.12"</span>, <span class="st">"3.13"</span>, <span class="st">"3.14"</span>]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-suffix: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --locked
+      - run: uv run ruff check . &amp;&amp; uv run ruff format --check .
+      - run: uv run pytest</code></pre>
+
+<p>Locally, catch the same things before push with a pre-commit hook. The config is a small
+YAML file at the repo root:</p>
+
+<pre><code>repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0   <span class="cm"># example — pin the tag you actually run</span>
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format</code></pre>
+
+<div class="callout contested">
+<b>Verdict: prek vs pre-commit.</b><br>
+<b>Our default:</b> prek — a Rust rewrite that reads the same
+<code>.pre-commit-config.yaml</code>, with no Python dependency of its own.<br>
+<b>Also reasonable:</b> pre-commit — still the incumbent; every teammate's muscle memory
+and every existing answer on the internet assumes it.<br>
+<b>Why:</b> the config file is shared, so switching costs one install command in either
+direction. The decision is nearly free, and either choice is correct.
+</div>
+
+<div class="callout warn">
+<b>Who owns your toolchain?</b> In March 2026 OpenAI announced it would acquire Astral,
+the company behind uv, Ruff, and ty. As of August 2026, reporting described the deal as
+pending regulatory approval — treat it as announced, not closed. The tools remain
+MIT-licensed, and uv is still 0.x with no stable-API promise. The honest cost of this
+book's near-all-Astral stack (uv + Ruff + prek) is vendor concentration: you get one
+coherent toolchain and accept one company's roadmap. If that worries you, nothing here
+is a trap — <code>pyproject.toml</code>, the lockfile, and the Ruff config all transfer
+to PyPA tools with modest edits.
+</div>
+
+<h3 id="s1-8">1.8 When one repo holds several packages: workspaces</h3>
+
+<p>When the repo grows a second package — a shared <code>core</code> next to your
+<code>orders</code> app — do not split it into repos. Declare a workspace at the root and
+uv gives you one lockfile and one virtualenv for everything:</p>
+
+<pre><code><span class="cm"># root pyproject.toml</span>
+[tool.uv.workspace]
+members = [<span class="st">"packages/*"</span>]
+
+<span class="cm"># packages/core/pyproject.toml</span>
+[project]
+name = <span class="st">"core"</span>
+dependencies = [<span class="st">"orders"</span>]
+
+[tool.uv.sources]
+orders = { workspace = true }  <span class="cm"># resolve from the repo, not PyPI</span></code></pre>
+
+<p><code>[tool.uv.sources]</code> with <code>workspace = true</code> is the line that matters:
+it tells uv to resolve <code>orders</code> from the sibling directory instead of an index,
+so members always test against each other's current code. One rough edge, stated honestly:
+editable installs across members can confuse IDE type resolution, so a restart of your
+editor's language server is occasionally part of the workflow. Chapter 7 covers how the
+build backend changes when a workspace member ships to PyPI on its own.</p>
+
+</section>
+
+
+<section class="chapter" id="ch2">
+<h2><span class="ch">Chapter 2</span>Reading 2026 Code: The Idioms That Replaced Yours</h2>
+
+<p>Syntax is what the interpreter accepts. Idiom is what your colleagues accept. Nothing
+dates a codebase faster than the small patterns typed a hundred times a day.
+<code>Optional[X]</code> at the top of a file. <code>os.path.join</code> in a helper.
+A <code>%</code> format in a log line. None of it is wrong; all of it tells the reader
+when you learned Python. This chapter is the fastest perceived upgrade in the book:
+each section is one habit, replaced. Book 1 taught the syntax; here it becomes policy.</p>
+
+<h3 id="s2-1">2.1 Imports that date your code</h3>
+
+<p>Stop importing <code>List</code>, <code>Dict</code>, <code>Tuple</code>,
+<code>Optional</code>, and <code>Union</code> from <code>typing</code>. Builtins carry
+their own generics since 3.9, and the <code>|</code> operator spells unions since 3.10.
+<em>(Book 1, ch. 3.3)</em> taught that syntax; this section is the style policy around it.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> Dict, List, Optional
+<span class="kw">from</span> typing <span class="kw">import</span> Union
+
+<span class="kw">class</span> Repo:
+    <span class="kw">def</span> fetch_user(
+        <span class="kw">self</span>, uid: Union[int, str]
+    ) -&gt; Optional[Dict[str, List[int]]]:
+        ...</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">class</span> Repo:
+    <span class="kw">def</span> fetch_user(
+        <span class="kw">self</span>, uid: int | str
+    ) -&gt; dict[str, list[int]] | None:
+        ...</code></pre>
+  </div>
+</div>
+<p>Same signature, no import line. The builtin generics and the <code>|</code> unions read
+left to right and need nothing explained to a new hire.</p>
+
+<p>You do not have to make this edit by hand. <code>ruff check --select UP --fix</code>
+rewrites every occurrence, gated by your <code>target-version</code> (chapter 1.6 set it
+up). One honest note: the typing docs still list the removal date of the old aliases as
+"undecided". Treat them as dead anyway — they cost an import, and every senior reviewer
+reads them as a timestamp.</p>
+
+<h3 id="s2-2">2.2 pathlib by default</h3>
+
+<p>Reach for <code>pathlib.Path</code> whenever a path crosses a function boundary. It is
+stdlib, needs no install, and turns string surgery into method calls.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">import</span> os
+
+<span class="kw">def</span> find_configs(root: str) -&gt; list[str]:
+    hits = []
+    <span class="kw">for</span> dp, _, files <span class="kw">in</span> os.walk(root):
+        <span class="kw">for</span> name <span class="kw">in</span> files:
+            <span class="kw">if</span> name.endswith(<span class="st">".toml"</span>):
+                hits.append(
+                    os.path.join(dp, name)
+                )
+    <span class="kw">return</span> hits
+
+<span class="kw">def</span> load_task(path: str) -&gt; str:
+    <span class="kw">with</span> open(path, encoding=<span class="st">"utf-8"</span>) <span class="kw">as</span> f:
+        <span class="kw">return</span> f.read()</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+<span class="kw">def</span> find_configs(root: Path) -&gt; list[Path]:
+    <span class="kw">return</span> list(root.rglob(<span class="st">"*.toml"</span>))
+
+<span class="kw">def</span> load_task(path: Path) -&gt; str:
+    <span class="kw">return</span> path.read_text(encoding=<span class="st">"utf-8"</span>)</code></pre>
+  </div>
+</div>
+<p>The walker was nine lines of bookkeeping; <code>rglob</code> is one line of intent.
+The <code>/</code> operator joins paths, <code>read_text</code> handles the context
+manager, and a <code>Path</code> in a signature says more than <code>str</code> ever did.</p>
+
+<p>Default, not dogma. Keep <code>os</code> where it genuinely wins: <code>os.environ</code>
+for environment access, and <code>os.scandir</code> inside a hot directory loop, where it
+skips building a <code>Path</code> per entry. And when a library API wants a path-like
+object, pass the <code>Path</code> — everything modern accepts one.</p>
+
+<h3 id="s2-3">2.3 Strings: f-strings by default, t-strings on purpose</h3>
+
+<p>The f-string won. <code>%</code> formatting and <code>str.format</code> remain in old
+code and in logging calls that defer interpolation; everything you write fresh uses
+f-strings. <em>(Book 1, ch. 2.6)</em> covered the syntax.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code>msg = <span class="st">"Task %s: %s (%d pts)"</span> % (
+    task.id, task.title, task.points,
+)</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code>msg = (
+    <span class="st">f"Task {task.id}: {task.title} "</span>
+    <span class="st">f"({task.points} pts)"</span>
+)</code></pre>
+  </div>
+</div>
+<p>The values sit where they appear in the output. No counting placeholders, no tuple to
+keep in sync.</p>
+
+<p>Template strings (3.14, PEP 750) are a different tool, not a better f-string. A
+t-string evaluates to a <code>Template</code> object that keeps the literal parts and
+the interpolated values separate. It pays off only when a library consumes that object
+and does something safe with it: SQL parameter binding, HTML escaping, shell quoting.</p>
+
+<pre><code><span class="kw">from</span> string.templatelib <span class="kw">import</span> Template  <span class="cm"># 3.14</span>
+
+<span class="kw">def</span> find_user(name: str) -&gt; Template:
+    <span class="kw">return</span> t<span class="st">"SELECT * FROM users WHERE name = {name}"</span>
+
+stmt = find_user(<span class="st">"ada"</span>)
+<span class="cm"># db: a connection whose execute() accepts a Template</span>
+db.execute(stmt)   <span class="cm"># db receives the Template; {name} stays a</span>
+                   <span class="cm"># parameter, never spliced into the SQL text</span>
+
+<span class="cm"># ✗ anti-pattern, linter-flagged:</span>
+db.execute(str(t<span class="st">"... WHERE name = {name}"</span>))
+<span class="cm"># str() splices the value back in — you rebuilt</span>
+<span class="cm"># the injection bug with new syntax</span></code></pre>
+
+<p>The rule: if nothing downstream wants the <code>Template</code>, you wanted an
+f-string. Converting a t-string with <code>str()</code> throws away the one thing it was
+for.</p>
+
+<h3 id="s2-4">2.4 The classics that still bite</h3>
+
+<p>Three traps older than type hints, still flagged in review every week. Each fix is
+mechanical.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">def</span> add_line(item: LineItem,
+             items: list = []) -&gt; list:
+    items.append(item)
+    <span class="kw">return</span> items</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">def</span> add_line(
+    item: LineItem,
+    items: list[LineItem] | None = None,
+) -&gt; list[LineItem]:
+    items = [] <span class="kw">if</span> items <span class="kw">is</span> None <span class="kw">else</span> items
+    items.append(item)
+    <span class="kw">return</span> items</code></pre>
+  </div>
+</div>
+<p>The Now side is longer because the fix is real work: <code>[]</code> as a default is
+built once, at function definition, and shared by every call that omits it. The
+<code>None</code> sentinel makes a fresh list per call. Inside a dataclass the same fix
+is <code>field(default_factory=list)</code>.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">if</span> type(item) == LineItem:
+    total += item.price</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">if</span> isinstance(item, LineItem):
+    total += item.price</code></pre>
+  </div>
+</div>
+<p><code>type(x) ==</code> rejects subclasses; <code>isinstance</code> accepts them. A
+<code>GiftLineItem</code> should price like a <code>LineItem</code>. Same one-line guard
+in tests, where <code>assert type(x) == Foo</code> is a 2026 review flag.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code>report = <span class="st">""</span>
+<span class="kw">for</span> task <span class="kw">in</span> tasks:
+    report += <span class="st">f"- {task.title}\n"</span></code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code>lines = [<span class="st">f"- {t.title}\n"</span> <span class="kw">for</span> t <span class="kw">in</span> tasks]
+report = <span class="st">""</span>.join(lines)</code></pre>
+  </div>
+</div>
+<p>Repeated <code>+=</code> copies the whole string on every iteration; <code>join</code>
+allocates once. On a long report the difference is the algorithm, not a micro-tweak.</p>
+
+<h3 id="s2-5">2.5 namedtuple's afterlife</h3>
+
+<p><code>collections.namedtuple</code> gave you a class factory before dataclasses
+existed. In 2026 it has two heirs, and which one you pick depends on a single question:
+does anything unpack or index this value as a tuple?</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> collections <span class="kw">import</span> namedtuple
+
+Task = namedtuple(
+    <span class="st">"Task"</span>, [<span class="st">"title"</span>, <span class="st">"points"</span>, <span class="st">"done"</span>]
+)</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> NamedTuple
+
+<span class="kw">class</span> Task(NamedTuple):
+    title: str
+    points: int
+    done: bool = <span class="kw">False</span></code></pre>
+  </div>
+</div>
+<p><code>typing.NamedTuple</code> keeps every tuple behavior — unpacking, indexing,
+<code>_replace</code> — and adds annotations, defaults, and a class body a checker can
+read.</p>
+
+<p>If nothing relies on tuple semantics, go one step further:
+<code>@dataclass(frozen=True, slots=True)</code> (chapter 4 covers the full dataclass
+case). You trade <code>task[0]</code> for named-only access and cheaper attribute
+storage. Keep plain <code>namedtuple</code> only where unpacking or indexing is the
+contract — CSV-shaped rows, APIs that promise tuples.</p>
+
+<h3 id="s2-6">2.6 match, with restraint</h3>
+
+<p><em>(Book 1, ch. 2.4)</em> taught <code>match</code> syntax. The policy question is when it
+beats the if-chain you already write. The answer: when it destructures.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">def</span> price_of(item) -&gt; float:
+    <span class="kw">if</span> isinstance(item, LineItem):
+        <span class="kw">return</span> item.qty * item.unit_price
+    <span class="kw">if</span> isinstance(item, dict):
+        <span class="kw">if</span> item.get(<span class="st">"discounted"</span>):
+            <span class="kw">return</span> item[<span class="st">"price"</span>] * 0.9
+        <span class="kw">return</span> item[<span class="st">"price"</span>]
+    <span class="kw">raise</span> TypeError(item)</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">def</span> price_of(item) -&gt; float:
+    <span class="kw">match</span> item:
+        <span class="kw">case</span> LineItem(qty=q, unit_price=p):
+            <span class="kw">return</span> q * p
+        <span class="kw">case</span> {<span class="st">"price"</span>: p} <span class="kw">as</span> d \
+                <span class="kw">if</span> d.get(<span class="st">"discounted"</span>):
+            <span class="kw">return</span> p * 0.9
+        <span class="kw">case</span> {<span class="st">"price"</span>: p}:
+            <span class="kw">return</span> p
+        <span class="kw">case</span> _:
+            <span class="kw">raise</span> TypeError(item)</code></pre>
+  </div>
+</div>
+<p>The Now side is not shorter; it is flatter. The capture pattern pulls
+<code>qty</code> and <code>unit_price</code> out of the object, and the guard carries the
+discount condition, so no case body holds an <code>if</code>. That is the only payoff
+match has to offer — take it or leave the if-chain.</p>
+
+<div class="callout contested">
+<b>Verdict: match vs isinstance chains.</b><br>
+<b>Our default:</b> if/elif with <code>isinstance</code> for plain dispatch; match when a
+case destructures a shape or needs a guard.<br>
+<b>Also reasonable:</b> match everywhere, for one consistent dispatch style across the
+codebase.<br>
+<b>Why:</b> as a spelling of <code>isinstance</code>, match is longer and no clearer —
+a <code>case LineItem():</code> with an empty pattern does the same check with more
+machinery. It earns its keep on structural dispatch: dicts of mixed shape, dataclass
+fields pulled into locals, guarded branches.
+</div>
+
+<h3 id="s2-7">2.7 The small modernizations, and the quick map</h3>
+
+<p>Some replacements are one call each. The one worth its own pair:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> datetime <span class="kw">import</span> datetime
+
+stamp = datetime.utcnow()</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> datetime <span class="kw">import</span> UTC, datetime
+
+stamp = datetime.now(UTC)</code></pre>
+  </div>
+</div>
+<p><code>utcnow()</code> is deprecated: it returned a naive datetime that claimed to be
+UTC, and every downstream <code>astimezone</code> had to trust that claim.
+<code>datetime.now(UTC)</code> returns an aware datetime, so the timezone is in the value,
+not in the reader's head.</p>
+
+<p>The rest of the dated calls fit in one table. Print it; it doubles as a cheat sheet
+for reading any 2020-era file.</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>2020 habit</th><th>2026 idiom</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>from typing import Callable</code></td><td><code>from collections.abc import Callable</code> (same for <code>Iterable</code> and friends)</td></tr>
+    <tr><td><code>X: TypeAlias = dict[str, Any]</code></td><td><code>type X = dict[str, Any]</code> (3.12)</td></tr>
+    <tr><td><code>from __future__ import annotations</code></td><td>Delete it on 3.14+ — deferred evaluation is the default (PEP 649/749); pre-3.14 libraries keep it</td></tr>
+    <tr><td>Hand-written data-holder class with <code>__init__</code>, <code>__repr__</code>, <code>__eq__</code></td><td><code>@dataclass(slots=True, kw_only=True)</code> — chapter 4</td></tr>
+    <tr><td><code>raise RepoError("lookup failed")</code> when translating an exception</td><td><code>raise RepoError("lookup failed") from exc</code> — chapter 5</td></tr>
+    <tr><td><code>Generator[Yield, Send, Return]</code> at every API surface</td><td><code>Iterator[T]</code>; the full <code>Generator</code> only when send/return matter</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>That is the whole chapter's thesis in miniature: none of these changes what your
+program does. All of them change what a reader concludes about when it was written —
+and how carefully it was maintained since.</p>
+
+</section>
+
+
+<section class="chapter" id="ch3">
+<h2><span class="ch">Chapter 3</span>Typing for Real Projects</h2>
+
+<p>Book 1 taught the syntax. What teams struggle with is the decisions: how strict to
+be, which checker to run, which modeling tool fits the data. This chapter is those
+decisions, each with the config or idiom that implements it. The legacy-import
+cleanup (<code>List</code> → <code>list</code>) was chapter 2.1's job, and is assumed
+done here.</p>
+
+<h3 id="s3-1">3.1 The ratchet: three tiers of strictness</h3>
+
+<p>Do not turn on <code>strict = true</code> for a 40K-line codebase on day one. You
+will get a thousand errors, fix none, and delete the config by Friday. Roll out in
+three tiers — the config below is the entire plan.</p>
+
+<pre><code><span class="cm"># pyproject.toml — the ratchet, annotated</span>
+
+<span class="cm"># Tier 1 · baseline: an empty [tool.mypy] table.</span>
+<span class="cm"># Checker defaults, zero flags. Add it to CI today.</span>
+
+<span class="cm"># Tier 2 · mid: five flags worth turning on within a month.</span>
+[tool.mypy]
+check_untyped_defs = true       <span class="cm"># look inside unannotated bodies</span>
+disallow_incomplete_defs = true <span class="cm"># all-or-nothing signatures</span>
+warn_redundant_casts = true     <span class="cm"># cast() that changes nothing</span>
+warn_unused_ignores = true      <span class="cm"># stale type: ignore comments</span>
+strict_equality = true          <span class="cm"># no == between mismatched types</span>
+
+<span class="cm"># Tier 3 · strict = true — per new package or cleaned</span>
+<span class="cm"># module. Never repo-wide on an old codebase.</span>
+
+<span class="cm"># The ratchet itself: legacy code stays silent until fixed.</span>
+[[tool.mypy.overrides]]
+module = <span class="st">"legacy.*"</span>
+ignore_errors = true</code></pre>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Tier</th><th>Exact config</th><th>When to be there</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1 · Baseline</td><td><code>[tool.mypy]</code> present, no flags</td><td>Day one. The point is the CI gate, not the bugs caught.</td></tr>
+    <tr><td>2 · Mid</td><td>The five flags above</td><td>Within the first month; real bugs, no ceremony.</td></tr>
+    <tr><td>3 · Strict</td><td><code>strict = true</code>, per package or cleaned module</td><td>New code starts here; old modules graduate one at a time.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The override table is why this works. <code>legacy.*</code> stays silent while new
+code is checked honestly, and the silenced list only shrinks — fixing a module means
+deleting its line. Then gate CI with <code>uv run mypy src</code> in the workflow
+from 1.7, and the typed surface cannot regress.</p>
+
+<h3 id="s3-2">3.2 Pick one checker and run it in CI</h3>
+
+<p><em>(Book 1, ch. 3.6)</em> showed a checker catching a bug; here is which one to install.
+Default to mypy <span class="pill u">ubiquitous</span>. It is not the fastest. It is
+the most widely run checker in CI, owns typeshed (the stub repository nearly every
+checker consumes), and has the deepest plugin ecosystem — django-stubs is the
+canonical case. Section 3.1's config is already written in mypy flags, so the chapter
+stays coherent.</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Checker</th><th>Steward</th><th>Written in</th><th>Why you would pick it</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>mypy</td><td>Community</td><td>Python</td><td>The CI incumbent: typeshed, plugins, every answered question.</td></tr>
+    <tr><td>pyright / Pylance</td><td>Microsoft</td><td>TypeScript</td><td>Already in most editors; the common fast pick for new projects.</td></tr>
+    <tr><td>pyrefly</td><td>Meta</td><td>Rust</td><td>Stable; strongest spec conformance of the Rust entrants.</td></tr>
+    <tr><td>ty</td><td>Astral</td><td>Rust</td><td>uv/Ruff sibling; still beta — one to watch, not to gate CI on.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout contested">
+<b>Verdict: which checker.</b><br>
+<b>Our default:</b> mypy, configured exactly as in 3.1.<br>
+<b>Also reasonable:</b> pyright for a greenfield project whose team lives in VS Code;
+pyrefly for a stable Rust entrant; many OSS libraries run both mypy and pyright.<br>
+<b>Why:</b> a CI gate is judged by its ecosystem, not its benchmarks. Typeshed,
+plugins, and a decade of answered questions beat a faster run you will not notice
+next to the test suite.
+</div>
+
+<p>Whichever you pick, the practice is identical: config in
+<code>pyproject.toml</code>, one command in CI, no editor-only checking. And Ruff is
+absent from the table on purpose — it lints and formats; it does not type-check.</p>
+
+<h3 id="s3-3">3.3 Protocol vs ABC</h3>
+
+<p><em>(Book 1, ch. 3.4)</em> introduced Protocol syntax. The decision rule: use a Protocol
+for caller-defined interfaces, seams where the consuming function states what it
+needs. Use an ABC when you own the hierarchy, share implementation, or need runtime
+<code>isinstance</code>. The same report renderer, both ways:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> abc <span class="kw">import</span> ABC, abstractmethod
+
+<span class="kw">class</span> Renderer(ABC):
+    <span class="kw">@abstractmethod</span>
+    <span class="kw">def</span> render(
+        <span class="kw">self</span>, order: Order
+    ) -&gt; str: ...
+
+<span class="kw">def</span> print_report(
+    r: Renderer, order: Order
+) -&gt; None:
+    print(r.render(order))</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> Protocol
+
+<span class="kw">class</span> Renderer(Protocol):
+    <span class="kw">def</span> render(
+        <span class="kw">self</span>, order: Order
+    ) -&gt; str: ...
+
+<span class="kw">def</span> print_report(
+    r: Renderer, order: Order
+) -&gt; None:
+    print(r.render(order))</code></pre>
+  </div>
+</div>
+<p>The seam moved from implementor to caller. With the ABC, every renderer must import
+and inherit your class — awkward when a teammate's <code>HtmlReport</code> already
+exists. With the Protocol, anything with a matching <code>render</code> method
+qualifies, no inheritance required.</p>
+
+<div class="callout warn">
+<b>The <code>runtime_checkable</code> trap.</b> Decorating a Protocol with
+<code>@runtime_checkable</code> makes <code>isinstance(x, Renderer)</code> legal —
+but the check verifies only that a method with the right <em>name</em> exists, not
+its signature. An object with <code>render(self)</code> passes against a Protocol
+demanding <code>render(self, order)</code>. Treat it as a coarse filter, never as
+proof of compatibility.
+</div>
+
+<h3 id="s3-4">3.4 TypedDict vs dataclass vs pydantic</h3>
+
+<p>The slogan: TypedDict to talk to type checkers, pydantic for runtime safety.
+TypedDict annotates dict-shaped data you do not own — a JSON blob from an API, a
+<code>**kwargs</code> signature — and vanishes at runtime; the value is still a plain
+dict. A dataclass is your internal domain object: fast, no validation. Pydantic
+belongs where untrusted data crosses in, because parsing once at the edge beats
+checking ad hoc forever after.</p>
+
+<figure>
+<svg viewBox="0 0 360 210" role="img" aria-label="Decision tree: dict-shaped data you don't own picks TypedDict; untrusted input picks pydantic; otherwise dataclass">
+  <rect x="30" y="10" width="300" height="42" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="180" y="27" text-anchor="middle" font-size="12" fill="#1f2933">Dict-shaped data</text>
+  <text x="180" y="43" text-anchor="middle" font-size="12" fill="#1f2933">you don't own? (JSON, **kwargs)</text>
+  <line x1="120" y1="52" x2="90" y2="76" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="92" y="68" text-anchor="middle" font-size="11" fill="#15803d">yes</text>
+  <line x1="240" y1="52" x2="270" y2="76" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="268" y="68" text-anchor="middle" font-size="11" fill="#b91c1c">no</text>
+  <rect x="20" y="76" width="140" height="44" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="90" y="95" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">TypedDict</text>
+  <text x="90" y="111" text-anchor="middle" font-size="11" fill="#6b7280">static only, zero runtime</text>
+  <rect x="200" y="76" width="140" height="44" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="270" y="95" text-anchor="middle" font-size="12" fill="#1f2933">Untrusted data</text>
+  <text x="270" y="111" text-anchor="middle" font-size="12" fill="#1f2933">crossing a boundary?</text>
+  <line x1="235" y1="120" x2="235" y2="156" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="222" y="142" text-anchor="middle" font-size="11" fill="#15803d">yes</text>
+  <line x1="305" y1="120" x2="305" y2="140" stroke="#6b7280" stroke-width="1.5"/>
+  <line x1="305" y1="140" x2="90" y2="140" stroke="#6b7280" stroke-width="1.5"/>
+  <line x1="90" y1="140" x2="90" y2="156" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="312" y="142" text-anchor="middle" font-size="11" fill="#b91c1c">no</text>
+  <rect x="20" y="156" width="140" height="44" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="90" y="175" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">dataclass</text>
+  <text x="90" y="191" text-anchor="middle" font-size="11" fill="#6b7280">internal domain objects</text>
+  <rect x="165" y="156" width="140" height="44" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="235" y="175" text-anchor="middle" font-size="13" font-weight="600" fill="#1f2933">pydantic</text>
+  <text x="235" y="191" text-anchor="middle" font-size="11" fill="#6b7280">parse once, at the edge</text>
+</svg>
+<figcaption>Two questions settle it. Chapter 4 owns the modeling deep-dive.</figcaption>
+</figure>
+
+<h3 id="s3-5">3.5 Narrowing that works: TypeIs</h3>
+
+<p>Reach for <code>TypeIs</code> (3.13+, PEP 742) when writing a narrowing predicate.
+<code>TypeGuard</code>, its predecessor, narrows only the <code>if</code> branch;
+<code>TypeIs</code> narrows both, which is what you meant almost every time.</p>
+
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> TypeIs   <span class="cm"># 3.13+, PEP 742</span>
+
+<span class="kw">def</span> is_line_item(x: LineItem | Task) -&gt; TypeIs[LineItem]:
+    <span class="kw">return</span> isinstance(x, LineItem)
+
+<span class="kw">def</span> unit_price(x: LineItem | Task) -&gt; float:
+    <span class="kw">if</span> is_line_item(x):
+        <span class="kw">return</span> x.unit_price   <span class="cm"># x is LineItem here</span>
+    <span class="kw">return</span> x.estimate       <span class="cm"># and Task here — the else</span>
+                            <span class="cm"># branch narrows too</span></code></pre>
+
+<p><code>TypeGuard</code> keeps one job: narrowing to a type that is not a subtype of
+the input, like <code>list[object]</code> to <code>list[str]</code>, where invariance
+blocks the subtype relation and <code>TypeIs</code> refuses. Everywhere else,
+<code>TypeIs</code> wins.</p>
+
+<h3 id="s3-6">3.6 Decorators that keep their signatures</h3>
+
+<p>A decorator typed <code>Callable[..., R]</code> erases the wrapped function's
+signature — a top-three review red flag, because the checker stops verifying
+arguments at every decorated call site. <code>ParamSpec</code> carries the parameter
+list through unchanged.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> collections.abc <span class="kw">import</span> Callable
+<span class="kw">from</span> typing <span class="kw">import</span> TypeVar
+
+R = TypeVar(<span class="st">"R"</span>)
+
+<span class="kw">def</span> logged(
+    fn: Callable[..., R],
+) -&gt; Callable[..., R]:
+    <span class="kw">def</span> wrapper(*a, **k) -&gt; R:
+        print(<span class="st">"call"</span>, fn.__name__)
+        <span class="kw">return</span> fn(*a, **k)
+    <span class="kw">return</span> wrapper</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> collections.abc <span class="kw">import</span> Callable
+<span class="kw">from</span> typing <span class="kw">import</span> ParamSpec, TypeVar
+
+P = ParamSpec(<span class="st">"P"</span>)
+R = TypeVar(<span class="st">"R"</span>)
+
+<span class="kw">def</span> logged(
+    fn: Callable[P, R],
+) -&gt; Callable[P, R]:
+    <span class="kw">def</span> wrapper(
+        *a: P.args, **k: P.kwargs
+    ) -&gt; R:
+        print(<span class="st">"call"</span>, fn.__name__)
+        <span class="kw">return</span> fn(*a, **k)
+    <span class="kw">return</span> wrapper</code></pre>
+  </div>
+</div>
+<p>The Now side buys one thing: <code>@logged def fetch_user(uid: int)</code> still
+flags <code>fetch_user("ada")</code> as an error, because <code>P</code> preserves
+the parameter list the <code>...</code> was swallowing. When the wrapper must prepend
+an argument — injecting a connection or <code>self</code> — add
+<code>Concatenate</code>, same import line.</p>
+
+<h3 id="s3-7">3.7 Aliases, overloads, generators</h3>
+
+<p>Three small policies that clean up API surfaces. Name complex types with the 3.12
+<code>type</code> statement; reach for <code>@overload</code> only when a TypeVar
+cannot express the relationship; expose <code>Iterator[T]</code>, not the full
+generator type:</p>
+
+<pre><code><span class="kw">from</span> collections.abc <span class="kw">import</span> Iterator
+<span class="kw">from</span> typing <span class="kw">import</span> Any, overload
+
+<span class="kw">type</span> Json = dict[str, Any]   <span class="cm"># 3.12 type statement: lazy,</span>
+                             <span class="cm"># self-documenting, can be generic</span>
+
+<span class="kw">@overload</span>
+<span class="kw">def</span> fetch_user(uid: int) -&gt; User: ...
+<span class="kw">@overload</span>
+<span class="kw">def</span> fetch_user(uid: <span class="kw">None</span>) -&gt; <span class="kw">None</span>: ...
+<span class="kw">def</span> fetch_user(uid: int | None) -&gt; User | None:
+    ...                       <span class="cm"># return type depends on arg type:</span>
+                            <span class="cm"># the one case overloads are for</span>
+
+<span class="kw">def</span> pending(tasks: list[Task]) -&gt; Iterator[Task]:
+    <span class="kw">return</span> (t <span class="kw">for</span> t <span class="kw">in</span> tasks <span class="kw">if</span> <span class="kw">not</span> t.done)</code></pre>
+
+<p>Keep overloads to two or three arms, ordered specific to general; a fourth arm says
+split the function. For generators, callers care about what comes out, so
+<code>Iterator[T]</code> (or <code>AsyncIterator[T]</code> in async code) is the
+right surface. Write the full <code>Generator[Yield, Send, Return]</code> only when
+<code>send</code> or the return value matter. And import <code>Callable</code>,
+<code>Iterator</code>, and friends from <code>collections.abc</code>, not
+<code>typing</code>.</p>
+
+<p>One closing note. On 3.14+, deferred annotation evaluation (PEP 649/749) is the
+default — <em>(Book 1, ch. 3.5)</em> covered the mechanics — so
+<code>from __future__ import annotations</code> is unnecessary there. Pre-3.14
+libraries keep the import; check your <code>requires-python</code> floor first.</p>
+
+<h3 id="s3-8">3.8 Living with untyped libraries</h3>
+
+<p>You will depend on packages without annotations. The escalation ladder: first look
+for a <code>types-*</code> stub package from typeshed (<code>uv add --dev
+types-requests</code> and the like). If none exists, write a small local stub and
+import the real names behind <code>TYPE_CHECKING</code>:</p>
+
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> TYPE_CHECKING
+
+<span class="kw">if</span> TYPE_CHECKING:
+    <span class="kw">from</span> oldsdk <span class="kw">import</span> Client  <span class="cm"># resolved from stubs/oldsdk.pyi</span>
+
+<span class="cm"># pyproject.toml — scoped, never global:</span>
+[[tool.mypy.overrides]]
+module = <span class="st">"oldsdk.*"</span>
+ignore_missing_imports = true</code></pre>
+
+<p>The per-module override is the discipline. A global
+<code>ignore_missing_imports = true</code> also silences your own misspelled imports —
+how <code>Any</code> gets in through the back door. Going the other way, when
+<em>your</em> library ships annotations, drop an empty <code>py.typed</code> marker
+next to <code>__init__.py</code> (PEP 561) so downstream checkers trust them.</p>
+
+<div class="callout flags">
+<b>Review red flags — typing edition.</b><br>
+✗ <code>cast(list[LineItem], cast(Any, rows))</code> — chained casts patching over a
+bad boundary. Fix: model the boundary once (3.4); prefer a <code>TypeIs</code>
+predicate.<br>
+✗ <code># type: ignore</code> with no error code — silences every error on the line,
+present and future. Fix: always use a code, as in
+<code># type: ignore[attr-defined]</code>; <code>warn_unused_ignores</code> sweeps
+the stale ones.<br>
+✗ <code>Any</code> leaking inward from an untyped call — one unannotated boundary
+function turns its call tree into <code>Any</code>. Fix: annotate the boundary
+function's return; add stubs or a local <code>.pyi</code> for the library.
+</div>
+
+</section>
+
+
+<section class="chapter" id="ch4">
+<h2><span class="ch">Chapter 4</span>Data at the Boundaries</h2>
+
+<p>"Should this be a pydantic model?" is the most common modeling question in modern
+Python. The wrong default costs twice: slow where you did not need validation,
+unsafe where you did. Chapter 3.4 gave the decision rules; this chapter is the
+practice.</p>
+
+<h3 id="s4-1">4.1 The rule and its reason</h3>
+
+<p>The rule: dataclass inside, pydantic <span class="pill u">ubiquitous</span> or
+msgspec <span class="pill n">niche</span> at the edges. The reason has a number.
+Constructing a pydantic v2 model is about 6.5× slower than constructing a dataclass,
+because construction <em>is</em> validation — every field is checked and coerced on
+the way in. Pay that cost where untrusted data crosses in; inside, values are
+known-good and coercion buys nothing.</p>
+
+<figure>
+<svg viewBox="0 0 360 130" role="img" aria-label="Trust boundary: untrusted JSON is parsed once at the pydantic edge into a trusted dataclass core">
+  <text x="116" y="14" text-anchor="middle" font-size="11" fill="#6b7280">trust boundary</text>
+  <line x1="116" y1="22" x2="116" y2="122" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <rect x="8" y="40" width="92" height="50" rx="6" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5"/>
+  <text x="54" y="62" text-anchor="middle" font-size="12" fill="#1f2933">Untrusted</text>
+  <text x="54" y="78" text-anchor="middle" font-size="12" fill="#1f2933">JSON</text>
+  <line x1="100" y1="65" x2="130" y2="65" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="130,65 122,60 122,70" fill="#6b7280"/>
+  <rect x="130" y="40" width="96" height="50" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="178" y="62" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">pydantic</text>
+  <text x="178" y="78" text-anchor="middle" font-size="11" fill="#6b7280">parse once</text>
+  <line x1="226" y1="65" x2="256" y2="65" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="256,65 248,60 248,70" fill="#6b7280"/>
+  <rect x="256" y="40" width="96" height="50" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="304" y="62" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">dataclass</text>
+  <text x="304" y="78" text-anchor="middle" font-size="11" fill="#6b7280">trusted</text>
+  <text x="178" y="112" text-anchor="middle" font-size="11" fill="#6b7280">6.5× cost paid here</text>
+</svg>
+<figcaption>Validation happens on the dashed line; everything to the right trusts
+its data.</figcaption>
+</figure>
+
+<p>pydantic v2 is itself the pattern to notice: all validation runs in
+<code>pydantic-core</code>, a Rust library, while the Python layer assembles schemas
+from your type hints. The split made v2 5–50× faster than v1 — and it is still the
+slow side of this chapter's rule. Compiled core, ergonomic Python surface: polars is
+built the same way, and Litestar is the framework that absorbed the lesson.</p>
+
+<h3 id="s4-2">4.2 dataclass, done right</h3>
+
+<p>Stop hand-writing data-holder classes. An <code>__init__</code> that only assigns
+its arguments, with the <code>__repr__</code> and <code>__eq__</code> behind it, is
+code a decorator generates better. The same <code>LineItem</code>, both eras:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">class</span> LineItem:
+    <span class="kw">def</span> __init__(
+        <span class="kw">self</span>, sku: str, qty: int,
+        unit_price: float,
+    ) -&gt; None:
+        <span class="kw">self</span>.sku = sku
+        <span class="kw">self</span>.qty = qty
+        <span class="kw">self</span>.unit_price = unit_price
+
+    <span class="kw">def</span> __repr__(<span class="kw">self</span>) -&gt; str:
+        <span class="kw">return</span> (
+            f<span class="st">"LineItem({self.sku!r},"</span>
+            f<span class="st">" {self.qty},"</span>
+            f<span class="st">" {self.unit_price})"</span>
+        )
+
+    <span class="kw">def</span> __eq__(<span class="kw">self</span>, other: object) -&gt; bool:
+        <span class="kw">if</span> <span class="kw">not</span> isinstance(other, LineItem):
+            <span class="kw">return</span> NotImplemented
+        <span class="kw">return</span> (
+            (<span class="kw">self</span>.sku, <span class="kw">self</span>.qty)
+            == (other.sku, other.qty)
+            <span class="kw">and</span> <span class="kw">self</span>.unit_price
+            == other.unit_price
+        )</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+
+<span class="kw">@dataclass</span>(slots=True, kw_only=True)
+<span class="kw">class</span> LineItem:
+    sku: str
+    qty: int
+    unit_price: float</code></pre>
+  </div>
+</div>
+<p>The Now side is not a shorter spelling of the same work; the work is gone.
+<code>slots=True</code> drops the per-instance <code>__dict__</code>;
+<code>kw_only=True</code> forces call sites to name arguments — cheap insurance
+against a swapped <code>qty</code>/<code>unit_price</code>.</p>
+
+<p>Two more moves cover the rest: <code>frozen=True</code> for values that should not
+change after construction, and <code>field(default_factory=...)</code> for any mutable
+default — the classic bug from 2.4. A <code>@property</code> still earns its keep for
+a computed attribute like <code>total</code>: behavior, not storage.</p>
+
+<pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass, field
+
+<span class="kw">@dataclass</span>(frozen=True, slots=True)
+<span class="kw">class</span> Order:
+    id: str
+    items: list[LineItem] = field(default_factory=list)
+
+    <span class="kw">@property</span>
+    <span class="kw">def</span> total(<span class="kw">self</span>) -&gt; float:
+        <span class="kw">return</span> sum(i.qty * i.unit_price <span class="kw">for</span> i <span class="kw">in</span> <span class="kw">self</span>.items)</code></pre>
+
+<h3 id="s4-3">4.3 pydantic at the boundary</h3>
+
+<p><em>(Book 1, ch. 6.2)</em> introduced the static-vs-runtime split; here is the usage
+pattern. Parse, don't validate ad hoc: turn raw bytes into a typed model once, at the
+edge, and let the rest of the program trust it. The webhook handler:</p>
+
+<pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+
+<span class="kw">class</span> LineItemIn(BaseModel):   <span class="cm"># the payload's shape,</span>
+    sku: str                   <span class="cm"># not the domain's</span>
+    qty: int
+    unit_price: float
+
+<span class="kw">class</span> OrderIn(BaseModel):
+    order_id: str
+    items: list[LineItemIn]
+
+<span class="kw">def</span> handle_webhook(raw: bytes) -&gt; Order:
+    payload = OrderIn.model_validate_json(raw)  <span class="cm"># the edge</span>
+    <span class="kw">return</span> Order(
+        id=payload.order_id,
+        items=[
+            LineItem(
+                sku=i.sku, qty=i.qty,
+                unit_price=i.unit_price,
+            )
+            <span class="kw">for</span> i <span class="kw">in</span> payload.items
+        ],
+    )</code></pre>
+
+<p>The one call that matters is <code>model_validate_json(raw)</code>. A malformed
+payload raises here, every bad field named — not three functions later as a
+<code>KeyError</code>. Past that line, the core sees only the frozen dataclasses from
+4.2, and no validation code runs again.</p>
+
+<p><code>BaseModel</code> is for shapes you name. For a bare list or scalar,
+<code>TypeAdapter</code> parses it directly —
+<code>TypeAdapter(list[LineItemIn]).validate_json(raw)</code> — with the same error
+quality.</p>
+
+<p>The edge is also where configuration enters. <code>pydantic-settings</code> reads
+environment variables into a typed model at startup; <code>SecretStr</code> keeps
+credentials out of reprs and logs:</p>
+
+<pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> SecretStr
+<span class="kw">from</span> pydantic_settings <span class="kw">import</span> BaseSettings
+
+<span class="kw">class</span> Settings(BaseSettings):
+    database_url: str
+    api_key: SecretStr   <span class="cm"># reprs as '**********'</span>
+
+settings = Settings()    <span class="cm"># reads env at startup — the edge</span></code></pre>
+
+<p>Fail-fast at startup is the point: a missing <code>API_KEY</code> raises before the
+server binds a port, not on the first request. The full secrets treatment is chapter
+7.5's.</p>
+
+<h3 id="s4-4">4.4 attrs, msgspec, SQLModel — honestly</h3>
+
+<p>Four libraries do this job in 2026 codebases. The table is the comparison; the
+verdicts are the picks.</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th></th><th>Construction</th><th>Validation</th><th>Ecosystem</th><th>Use when</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>dataclass</td><td>Fastest; plain <code>__init__</code></td><td>None</td><td>Stdlib, no deps</td><td>Internal objects — the default</td></tr>
+    <tr><td>attrs</td><td>Same class as dataclass</td><td>Validators you write; no coercion</td><td>Mature; cattrs companion</td><td>Validation without coercion</td></tr>
+    <tr><td>pydantic</td><td>~6.5× slower than dataclass</td><td>Full parse + coercion; best errors</td><td>FastAPI, settings, everywhere</td><td>Untrusted data at the edge</td></tr>
+    <tr><td>msgspec</td><td>Fastest validated option (claims 3–80×)</td><td>Full; terse error messages</td><td>Small; Litestar-backed</td><td>Hot paths, machine-to-machine</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout contested">
+<b>Verdict: attrs and msgspec.</b><br>
+<b>Our default:</b> stdlib dataclass inside; pydantic at the edge.<br>
+<b>Also reasonable:</b> attrs — alive and maintained, 26.x in 2026 — for validators
+and converters without pydantic's coercion; msgspec on hot paths.<br>
+<b>Why:</b> attrs must earn a dependency against a dataclass that now has
+<code>slots</code> and <code>kw_only</code>. msgspec's 3–80× figures are its own
+benchmarks; the speed is real in tight loops, but the error messages are genuinely
+poor — fine machine-to-machine, rough in a user-facing API.
+</div>
+
+<div class="callout contested">
+<b>Verdict: SQLModel.</b><br>
+<b>Our default:</b> separate models — a SQLAlchemy table for the database, a pydantic
+schema for the API.<br>
+<b>Also reasonable:</b> SQLModel for small CRUD apps, where table and payload are the
+same shape anyway.<br>
+<b>Why:</b> one class as both table and schema is a deliberate
+convenience-vs-separation trade-off. It pays while the two shapes match; when the API
+needs a field the table does not store, you pay it back.
+</div>
+
+<p>Marshmallow: legacy-only — a fine library from the pre-type-hint era; new code
+starts from pydantic.</p>
+
+<h3 id="s4-5">4.5 Serialization out</h3>
+
+<p>Data crosses the boundary going out too — responses, fixtures, snapshots. Normalize
+models back to builtins with the same library that parsed them in. On a
+<code>BaseModel</code> that is <code>model_dump()</code>; a <code>TypeAdapter</code>
+handles anything, including dataclasses:</p>
+
+<pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> TypeAdapter
+
+adapter = TypeAdapter(Order)   <span class="cm"># dataclasses included</span>
+
+<span class="kw">def</span> order_response(order: Order) -&gt; dict:
+    <span class="kw">return</span> adapter.dump_python(order, mode=<span class="st">"json"</span>)</code></pre>
+
+<p><code>mode="json"</code> is the detail that matters: datetimes, decimals, and UUIDs
+come out as JSON-safe builtins, so the result stays stable across refactors of the
+model itself. Chapter 6.2 builds snapshot testing on exactly this — a normalized dict
+is what a snapshot can diff.</p>
+
+</section>
+
+
+<section class="chapter" id="ch5">
+<h2><span class="ch">Chapter 5</span>Errors and Structure</h2>
+
+<p>How a codebase fails is its clearest timestamp. The 2020 habits — the bare
+<code>except</code>, the re-raise that severs its history, the manager class
+hiding every wire — are still everywhere. This chapter is the 2026 discipline for
+both halves: exceptions that keep their history, and modules that keep their
+shape.</p>
+
+<h3 id="s5-1">5.1 EAFP, still</h3>
+
+<p>EAFP is still the Pythonic default: try the operation, handle the failure. LBYL
+earns its keep exactly where the check <em>is</em> the logic — parsing, probing a
+mapping — because <code>dict.get</code> answers "present or not?" in one call.</p>
+
+<pre><code><span class="cm"># EAFP: attempt, then handle what you expect.</span>
+<span class="kw">def</span> parse_points(raw: str) -&gt; int:
+    <span class="kw">try</span>:
+        <span class="kw">return</span> int(raw)
+    <span class="kw">except</span> ValueError:   <span class="cm"># specific, and the try stays minimal</span>
+        <span class="kw">return</span> 0
+
+<span class="cm"># LBYL: the check IS the logic here.</span>
+<span class="kw">def</span> owner_of(meta: dict[str, str]) -&gt; str:
+    <span class="kw">return</span> meta.get(<span class="st">"owner"</span>, <span class="st">"unassigned"</span>)</code></pre>
+
+<p>Two rules hold either way: keep the <code>try</code> block to the line that can
+fail, and name the exception you expect. A wider net catches bugs you meant to
+see; a bare <code>except:</code> swallows even
+<code>KeyboardInterrupt</code>.</p>
+
+<h3 id="s5-2">5.2 Always <code>raise ... from</code></h3>
+
+<p>When a layer translates an exception into its own vocabulary, chain it:
+<code>raise RepoError(...) from exc</code>. The <code>from</code> sets
+<code>__cause__</code>, and the traceback tells the whole story. The same
+failure, both ways:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code>Traceback (most recent call last):
+  File "app.py", line 4, in load
+    row = self.db.one(uid)
+KeyError: 42
+
+During handling of the above exception,
+another exception occurred:
+
+Traceback (most recent call last):
+  File "app.py", line 6, in load
+    raise RepoError("lookup failed")
+RepoError: lookup failed</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code>Traceback (most recent call last):
+  File "app.py", line 4, in load
+    row = self.db.one(uid)
+KeyError: 42
+
+The above exception was the direct cause
+of the following exception:
+
+Traceback (most recent call last):
+  File "app.py", line 6, in load
+    raise RepoError("lookup failed") from exc
+RepoError: lookup failed</code></pre>
+  </div>
+</div>
+<p>The code differs by eight characters — <code>from exc</code> — and the second
+panel's "direct cause" line is what they buy: a deliberate translation, not a
+handler that crashed mid-recovery.</p>
+
+<figure>
+<svg viewBox="0 0 360 164" role="img" aria-label="Exception chain: ApiError's __cause__ is RepoError, whose __cause__ is KeyError">
+  <text x="92" y="30" text-anchor="end" font-size="11" fill="#6b7280">api layer</text>
+  <rect x="100" y="8" width="170" height="36" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="185" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">ApiError</text>
+  <text x="185" y="38" text-anchor="middle" font-size="11" fill="#6b7280">"request failed"</text>
+  <line x1="185" y1="44" x2="185" y2="64" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="185,64 180,56 190,56" fill="#6b7280"/>
+  <text x="197" y="57" font-size="11" fill="#6b7280">.__cause__</text>
+  <text x="92" y="86" text-anchor="end" font-size="11" fill="#6b7280">repo layer</text>
+  <rect x="100" y="64" width="170" height="36" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="185" y="80" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">RepoError</text>
+  <text x="185" y="94" text-anchor="middle" font-size="11" fill="#6b7280">"lookup failed"</text>
+  <line x1="185" y1="100" x2="185" y2="120" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="185,120 180,112 190,112" fill="#6b7280"/>
+  <text x="197" y="113" font-size="11" fill="#6b7280">.__cause__</text>
+  <text x="92" y="142" text-anchor="end" font-size="11" fill="#6b7280">db layer</text>
+  <rect x="100" y="120" width="170" height="36" rx="6" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5"/>
+  <text x="185" y="136" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">KeyError</text>
+  <text x="185" y="150" text-anchor="middle" font-size="11" fill="#6b7280">uid 42</text>
+</svg>
+<figcaption>Each translated exception keeps a link to its cause; the traceback
+walks the chain from what the caller saw back to what actually broke.</figcaption>
+</figure>
+
+<p>The escape hatch is <code>from None</code>: it hides the chain on purpose, for
+the rare case where the cause is noise. A clean usage error at a CLI boundary
+need not expose an internal <code>KeyError</code>. Leave a comment when you use
+it.</p>
+
+<h3 id="s5-3">5.3 Context without wrapping</h3>
+
+<p>Often the failure is already the right exception; it is just missing context.
+Python 3.11 added <code>add_note</code> for exactly this: attach what you know,
+re-raise what you caught. No wrapper type, no re-invented traceback.</p>
+
+<pre><code><span class="kw">def</span> import_batch(rows: list[dict]) -&gt; list[Task]:
+    tasks = []
+    <span class="kw">for</span> i, row <span class="kw">in</span> enumerate(rows):
+        <span class="kw">try</span>:
+            tasks.append(parse_task(row))
+        <span class="kw">except</span> ValueError <span class="kw">as</span> exc:
+            exc.add_note(f<span class="st">"row {i}: {row.get('title')!r}"</span>)  <span class="cm"># 3.11+</span>
+            <span class="kw">raise</span>
+    <span class="kw">return</span> tasks</code></pre>
+
+<p>The note prints under the exception's message in the traceback. Retry loops and
+batch imports are the natural home.</p>
+
+<p><code>ExceptionGroup</code> and <code>except*</code>, same release, are for
+errors that arrive in bulk: a <code>TaskGroup</code> fan-out <em>(Book 1, ch. 5)</em>
+can fail three of ten tasks at once, and you need all three. That is the only
+case that earns them:</p>
+
+<pre><code><span class="kw">import</span> asyncio
+
+<span class="kw">async def</span> refresh_all(repos: list[Repo]) -&gt; None:
+    <span class="kw">try</span>:
+        <span class="kw">async with</span> asyncio.TaskGroup() <span class="kw">as</span> tg:
+            <span class="kw">for</span> repo <span class="kw">in</span> repos:
+                tg.create_task(repo.sync())
+    <span class="kw">except*</span> RepoError <span class="kw">as</span> group:   <span class="cm"># 3.11+; bulk errors only</span>
+        <span class="kw">for</span> exc <span class="kw">in</span> group.exceptions:
+            log.warning(<span class="st">"sync failed"</span>, exc_info=exc)</code></pre>
+
+<p>Everywhere else, plain <code>except</code> on a specific type remains the whole
+toolkit. Catch an <code>ExceptionGroup</code> directly only to filter it
+programmatically — <code>group.split(...)</code> — never as a habit.</p>
+
+<h3 id="s5-4">5.4 Result types: why we don't</h3>
+
+<p>The minority view, in its strongest form: make failure a return value —
+<code>Ok</code> or <code>Err</code> — and the type checker can prove every caller
+handled it. Libraries like <code>result</code> and
+<code>returns</code> <span class="pill n">niche</span> implement exactly this, and
+in languages without exceptions the argument wins.</p>
+
+<div class="callout contested">
+<b>Verdict: Result types.</b><br>
+<b>Our default:</b> exceptions for the exceptional; <code>None</code> or a sentinel
+for expected-absent.<br>
+<b>Also reasonable:</b> a Result monad in a codebase that commits to it —
+<code>returns</code> is maintained, and checker-verified handling is a real
+property.<br>
+<b>Why:</b> no stdlib traction, and the idiom fights the language. Every boundary
+with ordinary Python — stdlib calls, framework hooks — unwraps back into
+exceptions anyway, so the proof holds only inside the walled garden.
+</div>
+
+<p>In practice: <code>fetch_user</code> raises <code>LookupError</code> when a uid
+should exist, and returns <code>None</code> when absence is an expected answer —
+a cache probe, a search with no hits. The signature says which is which:
+<code>-&gt; User</code> versus <code>-&gt; User | None</code>.</p>
+
+<h3 id="s5-5">5.5 Small modules, Protocol seams</h3>
+
+<p>The manager class is where 2020 code hides its wiring. A
+<code>TaskManager</code> that opens its own database and sends its own mail can
+be tested only with both running. The 2026 shape: a dataclass holds the data,
+functions carry the behavior, and the Protocol from 3.3 is the seam where each
+collaborator plugs in.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">class</span> TaskManager:
+    <span class="kw">def</span> __init__(<span class="kw">self</span>, dsn: str):
+        <span class="kw">self</span>.db = Db(dsn)
+        <span class="kw">self</span>.smtp = Smtp()
+
+    <span class="kw">def</span> create(<span class="kw">self</span>, title: str) -&gt; int:
+        <span class="kw">return</span> <span class="kw">self</span>.db.insert(title)
+
+    <span class="kw">def</span> complete(<span class="kw">self</span>, tid: int) -&gt; None:
+        <span class="kw">self</span>.db.set_done(tid)
+        task = <span class="kw">self</span>.db.get(tid)
+        <span class="kw">self</span>.smtp.send(
+            task.owner, task.title
+        )</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+<span class="kw">from</span> typing <span class="kw">import</span> Protocol
+
+<span class="kw">@dataclass</span>(slots=True)
+<span class="kw">class</span> Task:
+    title: str
+    points: int
+    owner: str
+    done: bool = <span class="kw">False</span>
+
+<span class="kw">class</span> Store(Protocol):
+    <span class="kw">def</span> insert(<span class="kw">self</span>, t: str) -&gt; int: ...
+    <span class="kw">def</span> set_done(<span class="kw">self</span>, tid: int) -&gt; None: ...
+    <span class="kw">def</span> get(<span class="kw">self</span>, tid: int) -&gt; Task: ...
+
+<span class="kw">class</span> Mailer(Protocol):
+    <span class="kw">def</span> send(<span class="kw">self</span>, to: str, m: str) -&gt; None:
+        ...
+
+<span class="kw">def</span> create(db: Store, title: str) -&gt; int:
+    <span class="kw">return</span> db.insert(title)
+
+<span class="kw">def</span> complete(
+    db: Store, mail: Mailer, tid: int
+) -&gt; None:
+    db.set_done(tid)
+    task = db.get(tid)
+    mail.send(task.owner, task.title)</code></pre>
+  </div>
+</div>
+<p>The Now side is longer because the wiring the manager hid in
+<code>__init__</code> is now written out in every signature — that is the cost,
+and also the point. A test passes fakes for <code>Store</code> and
+<code>Mailer</code>; swapping one database for another touches a call site, not a
+class hierarchy. Dependency injection, no framework.</p>
+
+<p>In library modules, <code>__all__</code> declares the public API and a leading
+underscore marks everything private. Circular imports get fixed structurally —
+move the shared names to a third module, or import for checkers only, behind
+<code>TYPE_CHECKING</code> with a string annotation:</p>
+
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> TYPE_CHECKING
+
+<span class="kw">if</span> TYPE_CHECKING:
+    <span class="kw">from</span> orders <span class="kw">import</span> Order  <span class="cm"># checkers see it; runtime doesn't</span>
+
+<span class="kw">def</span> discount(order: <span class="st">"Order"</span>) -&gt; float: ...</code></pre>
+
+<p>Function-local imports as a habit are the tell that a cycle is being hidden,
+not fixed. On packaging: an empty <code>__init__.py</code> stays the default.
+Namespace packages (PEP 420) — directories with no <code>__init__.py</code> at
+all — are for plugin systems and distributions split across wheels. If neither
+is your situation, a missing <code>__init__.py</code> is a bug, not a choice.</p>
+
+<h3 id="s5-6">5.6 Lazy imports (3.15)</h3>
+
+<p>PEP 810 ships in 3.15 — release candidate today, final October 2026 — and adds
+a <code>lazy</code> modifier to imports:</p>
+
+<pre><code><span class="cm"># 3.15 (PEP 810) — RC-era; final October 2026</span>
+<span class="kw">lazy import</span> numpy <span class="kw">as</span> np   <span class="cm"># module scope only</span>
+
+<span class="kw">def</span> summarize(values: list[float]) -&gt; float:
+    <span class="kw">return</span> float(np.mean(values))  <span class="cm"># np loads here, on first use</span></code></pre>
+
+<p>The restrictions are the point: module scope only, never inside functions or
+<code>try</code> blocks, and no star imports. For library authors the statement
+retires the <code>__getattr__</code> boilerplate that kept heavy optional
+dependencies out of import time — the PEP cites Instagram's measurements of
+50–80% faster CLI startup. Until 3.15 is your floor, that
+<code>__getattr__</code> pattern remains the way to do it.</p>
+
+<h3 id="s5-7">5.7 Docstrings and comments</h3>
+
+<p>Pick a docstring convention and let Ruff's pydocstyle rules enforce it; Google
+style is the de-facto default for application code, NumPy style holds scientific
+Python. The real shift is what the docstring says. With annotations on the
+signature, a docstring that restates types is noise; its job is the semantics the
+signature cannot carry — which errors, which units, which guarantees.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">def</span> fetch_user(uid: int) -&gt; User:
+    <span class="st">"""Fetch a user.</span>
+
+<span class="st">    Args:</span>
+<span class="st">        uid: An int, the user id.</span>
+
+<span class="st">    Returns:</span>
+<span class="st">        A User object.</span>
+<span class="st">    """</span></code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">def</span> fetch_user(uid: int) -&gt; User:
+    <span class="st">"""Fetch a user, or raise LookupError.</span>
+
+<span class="st">    Deleted accounts raise instead of</span>
+<span class="st">    returning a tombstone: callers treat</span>
+<span class="st">    absence as exceptional, never as data.</span>
+<span class="st">    """</span></code></pre>
+  </div>
+</div>
+<p>The annotations already said <code>uid: int</code> and <code>-&gt; User</code>;
+the Now side spends its lines on what raises, and on why absence never comes back
+as a value.</p>
+
+<p>Comments follow the same rule one level down: explain invariants and intent,
+never narrate the line below. <code># retry: the gateway closes idle connections
+after 60s</code> survives refactors; <code># loop through the tasks</code> does
+not. And delete commented-out code outright — git remembers it better than your
+source file does.</p>
+
+<div class="callout flags">
+<b>Review red flags — error handling.</b><br>
+✗ <code>except:</code> — bare, it catches <code>KeyboardInterrupt</code>,
+<code>SystemExit</code>, and every bug in the block. Fix: name the exception you
+expect; <code>except Exception</code> is the floor, not the goal.<br>
+✗ <code>raise RepoError("lookup failed")</code> inside an <code>except</code>
+block — severs the cause, and the traceback reads as an accident. Fix:
+<code>raise RepoError(...) from exc</code> (5.2).<br>
+✗ <code>except Exception</code> in library code — catches the caller's bugs along
+with your own. Fix: let it propagate, or translate to your own exception type
+with <code>from exc</code>.
+</div>
+
+</section>
+
+
+<section class="chapter" id="ch6">
+<h2><span class="ch">Chapter 6</span>Testing That Scales</h2>
+
+<p>In 2020 the average suite was <code>unittest</code> classes, HTTP patched out of
+existence, and a coverage badge nobody trusted. This chapter is the 2026 practice —
+fixtures, snapshots, async, fakes — the suite a flagship library would recognize
+as normal.</p>
+
+<h3 id="s6-1">6.1 pytest house style</h3>
+
+<p>Write test functions, not <code>TestCase</code> classes. <em>(Book 1, ch. 6.6)</em>
+introduced pytest <span class="pill u">ubiquitous</span>; here is the house style at
+scale. No base class, no <code>setUp</code>, no <code>self.assertEqual</code> — a
+plain <code>assert</code> gets a full diff on failure. Shared state comes from
+fixtures: functions that build whatever a test asks for by name.</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">import</span> unittest
+
+<span class="kw">class</span> TestOrder(unittest.TestCase):
+    <span class="kw">def</span> setUp(<span class="kw">self</span>) -&gt; None:
+        <span class="kw">self</span>.order = Order(
+            id=<span class="st">"o-1"</span>,
+            items=[
+                LineItem(sku=<span class="st">"a"</span>, qty=2,
+                         unit_price=10.0),
+            ],
+        )
+
+    <span class="kw">def</span> test_total(<span class="kw">self</span>) -&gt; None:
+        <span class="kw">self</span>.assertEqual(
+            <span class="kw">self</span>.order.total, 20.0
+        )</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">import</span> pytest
+
+<span class="kw">@pytest.fixture</span>
+<span class="kw">def</span> order() -&gt; Order:
+    <span class="kw">return</span> Order(
+        id=<span class="st">"o-1"</span>,
+        items=[
+            LineItem(sku=<span class="st">"a"</span>, qty=2,
+                     unit_price=10.0),
+        ],
+    )
+
+<span class="kw">def</span> test_total(order: Order) -&gt; None:
+    <span class="kw">assert</span> order.total == 20.0</code></pre>
+  </div>
+</div>
+<p>Same order, same assertion; the plumbing changed. The fixture is one function
+any test can request by name, instead of a <code>setUp</code> every sibling
+inherits whether it wants the object or not.</p>
+
+<p>Fixtures have scopes, and scope is a lifetime decision. The default is right
+almost always; widen it only for expensive, read-only setup:</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Scope</th><th>Lifetime</th><th>Reach for it when</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>function</code></td><td>Per test — the default</td><td>Anything cheap or mutable</td></tr>
+    <tr><td><code>class</code></td><td>Once per test class</td><td>Shared setup within one class</td></tr>
+    <tr><td><code>module</code></td><td>Once per test file</td><td>File-level read-only resources</td></tr>
+    <tr><td><code>session</code></td><td>Once per run</td><td>Expensive read-only: containers, DB engines</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Share fixtures through <code>conftest.py</code> — one per test directory, found
+by path, <em>never imported directly</em>. Importing a conftest is the tell that a
+helper wants to be an ordinary module.</p>
+
+<p>Three more idioms cover the daily work. <code>parametrize</code> runs one test
+over a table of cases; give it readable <code>ids</code>, because those strings are
+what a failure prints. And use the builtins before writing your own:
+<code>tmp_path</code> is a private directory per test, <code>monkeypatch</code>
+swaps an attribute or environment variable and undoes it after:</p>
+
+<pre><code><span class="kw">@pytest.mark.parametrize</span>(
+    <span class="st">"qty,expected"</span>,
+    [(1, 10.0), (7, 70.0)],
+    ids=[<span class="st">"single"</span>, <span class="st">"seven-pack"</span>],
+)
+<span class="kw">def</span> test_line_total(qty: int, expected: float) -&gt; None:
+    item = LineItem(sku=<span class="st">"a"</span>, qty=qty, unit_price=10.0)
+    <span class="kw">assert</span> item.qty * item.unit_price == expected
+
+<span class="kw">def</span> test_report_written(tmp_path: Path) -&gt; None:
+    out = tmp_path / <span class="st">"report.parquet"</span>
+    write_report(orders, out)
+    <span class="kw">assert</span> out.exists()
+
+<span class="kw">def</span> test_api_base(monkeypatch: pytest.MonkeyPatch) -&gt; None:
+    monkeypatch.setenv(<span class="st">"API_BASE"</span>, <span class="st">"http://localhost:9"</span>)
+    <span class="kw">assert</span> get_settings().api_base.startswith(<span class="st">"http"</span>)</code></pre>
+
+<h3 id="s6-2">6.2 Snapshot testing went mainstream</h3>
+
+<p>Snapshot testing — assert the output equals a recorded copy — used to mean
+separate files that drifted out of review. The 2026 default is
+inline-snapshot <span class="pill c">common</span>: the snapshot lives inside the
+test source, and <code>pytest --inline-snapshot=fix</code> rewrites the file when
+the output legitimately changes. pydantic officially recommends it and runs its own
+suite on it. The update lands in code review like any other change, which is the
+whole point.</p>
+
+<p>Snapshot normalized data, not objects. Normalize the model to builtins first —
+the <code>TypeAdapter(...).dump_python</code> move from 4.5 — then snapshot that,
+here against the webhook handler from chapter 4:</p>
+
+<pre><code><span class="kw">from</span> inline_snapshot <span class="kw">import</span> snapshot
+
+<span class="kw">def</span> test_handle_webhook() -&gt; None:
+    raw = (
+        b<span class="st">'{"order_id": "o-1", "items": '</span>
+        b<span class="st">'[{"sku": "a", "qty": 2, "unit_price": 10.0}]}'</span>
+    )
+    order = handle_webhook(raw)
+    result = TypeAdapter(Order).dump_python(order, mode=<span class="st">"json"</span>)
+    <span class="kw">assert</span> result == snapshot(
+        {
+            <span class="st">"id"</span>: <span class="st">"o-1"</span>,
+            <span class="st">"items"</span>: [{<span class="st">"sku"</span>: <span class="st">"a"</span>, <span class="st">"qty"</span>: 2, <span class="st">"unit_price"</span>: 10.0}],
+        }
+    )</code></pre>
+
+<p>You write <code>snapshot()</code> empty, run
+<code>pytest --inline-snapshot=fix</code>, and the expected dict appears in the
+source. Dynamic fields — timestamps, generated ids — come from dirty-equals,
+pydantic's companion library; each value asserts a property instead of an exact
+match, inside the same snapshot:</p>
+
+<pre><code><span class="kw">from</span> datetime <span class="kw">import</span> timezone
+<span class="kw">from</span> dirty_equals <span class="kw">import</span> IsJson, IsNow
+
+<span class="kw">assert</span> event == snapshot(
+    {
+        <span class="st">"type"</span>: <span class="st">"order.created"</span>,
+        <span class="st">"sent_at"</span>: IsNow(tz=timezone.utc),  <span class="cm"># aware, close to now</span>
+        <span class="st">"payload"</span>: IsJson(),  <span class="cm"># a string that parses as JSON</span>
+    }
+)</code></pre>
+
+<p>One gotcha: bare <code>IsNow()</code> compares against a naive
+<code>datetime.now()</code>. With the aware timestamps 2.7 recommends, pass
+<code>tz=timezone.utc</code> as above.</p>
+
+<div class="callout contested">
+<b>Verdict: inline-snapshot vs syrupy.</b><br>
+<b>Our default:</b> inline-snapshot — snapshots in the test source, updated by
+rewriting the file, reviewable in the diff.<br>
+<b>Also reasonable:</b> syrupy, which stores snapshots in separate files — still
+the pick for large or text-heavy snapshots (Textual's terminal-UI tests are
+syrupy-based).<br>
+<b>Why:</b> for the common case — a dict or model of modest size — the snapshot
+next to the assertion reviews better than a second file. pydantic's endorsement
+settled the default. Big payloads are the exception syrupy owns.
+</div>
+
+<h3 id="s6-3">6.3 Three hypothesis properties worth writing</h3>
+
+<p>Property-based testing is real and niche. An ACM empirical study from October
+2025 found it used mainly for roundtrip properties, oracle tests, and math or
+optimization code — PyTorch and NumPy are the flagship users. Skip the methodology;
+keep the three properties that pay for themselves on ordinary code: roundtrip,
+invariant, never-crashes.</p>
+
+<pre><code><span class="kw">from</span> hypothesis <span class="kw">import</span> given, strategies <span class="kw">as</span> st
+<span class="kw">from</span> pydantic <span class="kw">import</span> ValidationError
+
+line_items = st.builds(
+    LineItemIn,
+    sku=st.text(<span class="st">"abc123-"</span>, min_size=1),
+    qty=st.integers(min_value=1),
+    unit_price=st.floats(min_value=0.01, max_value=999.99),
+)
+
+<span class="cm"># 1. Roundtrip: serialize, parse, get the same value back.</span>
+<span class="kw">@given</span>(item=line_items)
+<span class="kw">def</span> test_roundtrip(item: LineItemIn) -&gt; None:
+    raw = item.model_dump_json()
+    <span class="kw">assert</span> LineItemIn.model_validate_json(raw) == item
+
+<span class="cm"># 2. Invariant: holds for every input, not just your examples.</span>
+<span class="kw">@given</span>(items=st.lists(line_items, max_size=8))
+<span class="kw">def</span> test_total_never_negative(items: list[LineItemIn]) -&gt; None:
+    payload = OrderIn(order_id=<span class="st">"o-1"</span>, items=items)
+    order = handle_webhook(payload.model_dump_json().encode())
+    <span class="kw">assert</span> order.total &gt;= 0
+
+<span class="cm"># 3. Never crashes: arbitrary input fails politely or not at all.</span>
+<span class="kw">@given</span>(raw=st.binary())
+<span class="kw">def</span> test_parser_never_crashes(raw: bytes) -&gt; None:
+    <span class="kw">try</span>:
+        OrderIn.model_validate_json(raw)
+    <span class="kw">except</span> ValidationError:
+        <span class="kw">pass</span></code></pre>
+
+<p>Note the bounded strategies: unbounded text and floats produce lone
+surrogates and infinities that no JSON roundtrip survives. Each property is
+five lines replacing a hand-picked table of edge cases, and hypothesis shrinks
+any failure to the smallest reproducer and replays it next run.</p>
+
+<div class="callout contested">
+<b>Verdict: property-based testing.</b><br>
+<b>Our default:</b> the three properties above, on parsers and anything with a
+roundtrip.<br>
+<b>Also reasonable:</b> no PBT at all — most application suites live without it,
+and example-based tests carry CRUD code fine.<br>
+<b>Why:</b> the three properties are cheap and find real bugs — the third one is
+how you learn your parser raises something other than
+<code>ValidationError</code> on malformed bytes. The full methodology is a larger
+commitment than app code repays.
+</div>
+
+<h3 id="s6-4">6.4 Async tests</h3>
+
+<p>Async tests need a plugin; pick one and configure it once. For application code
+the default is pytest-asyncio in strict mode, with one module-level marker. Set
+<code>asyncio_mode = "strict"</code> in pyproject. The <code>"auto"</code> mode,
+which collects every async test without markers, is convenient and debated;
+explicit markers keep collection honest:</p>
+
+<pre><code><span class="kw">import</span> pytest
+
+pytestmark = pytest.mark.asyncio   <span class="cm"># strict mode, per module</span>
+
+<span class="kw">async def</span> test_sync_marks_repo(repo: Repo) -&gt; None:
+    <span class="kw">await</span> repo.sync()
+    <span class="kw">assert</span> repo.last_synced <span class="kw">is not</span> None</code></pre>
+
+<div class="callout contested">
+<b>Verdict: pytest-asyncio vs anyio.</b><br>
+<b>Our default:</b> pytest-asyncio for application code — your app picked its
+event loop at the door, and the tests should run on it.<br>
+<b>Also reasonable:</b> the anyio pytest plugin (<code>@pytest.mark.anyio</code>)
+if you publish a library on anyio or trio — it runs each test on both backends.
+aiobotocore switched its runner to anyio in 2025, and the httpx/starlette family
+tests through it.<br>
+<b>Why:</b> an app tests on the one loop it ships; a library must prove it runs
+on the caller's loop. Follow the runner of the ecosystem you ship into.
+</div>
+
+<h3 id="s6-5">6.5 Fakes over mocks</h3>
+
+<p>Mock what you own, fake what you don't. Deep mocks of a third-party library
+test your guesses about its internals, and they break when those internals move.
+The modern HTTP example is the cleanest: httpx takes a transport, so a fake server
+plugs in at the boundary instead of a patch reaching into <code>requests</code>:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">from</span> unittest.mock <span class="kw">import</span> patch
+
+<span class="kw">def</span> test_fetch_user() -&gt; None:
+    <span class="kw">with</span> patch(<span class="st">"requests.get"</span>) <span class="kw">as</span> get:
+        resp = get.return_value.json
+        resp.return_value = (
+            {<span class="st">"id"</span>: 1, <span class="st">"name"</span>: <span class="st">"Ana"</span>}
+        )
+        <span class="kw">assert</span> fetch_user(1).name == <span class="st">"Ana"</span></code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">import</span> httpx
+
+<span class="kw">def</span> test_fetch_user() -&gt; None:
+    <span class="kw">def</span> handler(
+        req: httpx.Request,
+    ) -&gt; httpx.Response:
+        <span class="kw">return</span> httpx.Response(
+            200,
+            json={<span class="st">"id"</span>: 1, <span class="st">"name"</span>: <span class="st">"Ana"</span>},
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(
+        transport=transport,
+        base_url=<span class="st">"https://api.example.com"</span>,
+    )
+    user = fetch_user(client, 1)
+    <span class="kw">assert</span> user.name == <span class="st">"Ana"</span></code></pre>
+  </div>
+</div>
+<p>The Now side exercises the real client — URL joining, response parsing, error
+handling — and no request leaves the process. The Then side asserts that a
+<code>MagicMock</code> was configured to behave the way you hope
+<code>requests</code> behaves. This works because <code>fetch_user</code> takes
+the client as an argument: the dependency-injection habit from 5.5 is what makes
+fakes possible at all.</p>
+
+<figure>
+<svg viewBox="0 0 360 162" role="img" aria-label="Fake at the boundary: the test swaps in a MockTransport at the client edge, instead of monkeypatching library internals">
+  <text x="8" y="16" font-size="12" font-weight="600" fill="#1f2933">Now — fake at the boundary</text>
+  <rect x="8" y="26" width="52" height="32" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="34" y="46" text-anchor="middle" font-size="12" fill="#1f2933">test</text>
+  <line x1="60" y1="42" x2="68" y2="42" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="68,42 62,38 62,46" fill="#6b7280"/>
+  <rect x="68" y="26" width="52" height="32" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="94" y="46" text-anchor="middle" font-size="12" fill="#1f2933">app</text>
+  <line x1="120" y1="42" x2="128" y2="42" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="128,42 122,38 122,46" fill="#6b7280"/>
+  <rect x="128" y="26" width="84" height="32" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="170" y="46" text-anchor="middle" font-size="12" fill="#1f2933">httpx.Client</text>
+  <line x1="212" y1="42" x2="220" y2="42" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="220,42 214,38 214,46" fill="#6b7280"/>
+  <rect x="220" y="26" width="132" height="32" rx="6" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5"/>
+  <text x="286" y="46" text-anchor="middle" font-size="12" fill="#1f2933">MockTransport</text>
+  <text x="8" y="92" font-size="12" font-weight="600" fill="#1f2933">Then — patch the internals</text>
+  <rect x="8" y="102" width="52" height="32" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="34" y="122" text-anchor="middle" font-size="12" fill="#1f2933">test</text>
+  <rect x="68" y="102" width="52" height="32" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="94" y="122" text-anchor="middle" font-size="12" fill="#1f2933">app</text>
+  <rect x="128" y="102" width="110" height="32" rx="6" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="183" y="122" text-anchor="middle" font-size="12" fill="#1f2933">requests.get</text>
+  <path d="M 34 134 L 34 152 L 183 152 L 183 138" fill="none" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <polygon points="183,134 178,142 188,142" fill="#b91c1c"/>
+  <text x="108" y="148" text-anchor="middle" font-size="11" fill="#b91c1c">monkeypatch</text>
+</svg>
+<figcaption>A fake swaps a boundary you own; a patch rewrites internals you
+don't.</figcaption>
+</figure>
+
+<p>Companions cover the rest: <code>respx</code> mocks httpx at the routing layer
+when you want URL matching instead of client injection.
+<code>time-machine</code> (or freezegun) fakes the clock — <code>datetime.now()</code>
+buried in business logic is otherwise untestable. When you genuinely must mock,
+<code>patch</code> at the use site: <code>patch("orders.billing.stripe.charge")</code>,
+where your code looks the name up, never <code>patch("stripe.charge")</code> at
+the source.</p>
+
+<h3 id="s6-6">6.6 Coverage without worship</h3>
+
+<p>Measure coverage on every run; gate on the diff, not the total. A global
+percentage rewards tests that execute lines without asserting anything, and
+punishes deleting dead code. The honest gate is changed lines only:
+<code>coverage</code> emits the report, <code>diff-cover</code> fails the build if
+the patch itself is undertested:</p>
+
+<pre><code>$ uv run pytest --cov=orders --cov-report=xml
+$ uv run diff-cover coverage.xml --fail-under=80</code></pre>
+
+<p>Around 80% on the diff is the working number: high enough to stop backsliding,
+low enough that nobody writes a test for a <code>__repr__</code>.</p>
+
+<div class="callout contested">
+<b>Verdict: 100% coverage.</b><br>
+<b>Our default:</b> the changed-lines gate above for application code.<br>
+<b>Also reasonable:</b> enforced 100%, the rule FastAPI, httpx, and Litestar all
+run in CI.<br>
+<b>Why:</b> those are libraries with an enormous downstream blast radius — every
+line is somebody's production code, so no line ships untested. An app's blast
+radius is its own deploy; the last 20% of lines cost the most to cover and matter
+the least. Gate the diff; spend the savings on better tests.
+</div>
+
+<h3 id="s6-7">6.7 The declining and the advanced</h3>
+
+<p>Two tools to stop reaching for, one to know about. <strong>tox and nox are
+declining</strong> for most projects. Multi-version testing now lives in the CI
+matrix from 1.7; locally, <code>uv run --python 3.12 pytest</code> covers the
+same ground — you get 90% of tox's value by wrapping uv. The flagship libraries
+agree: nox and tox are simply absent from their repos. nox survives where
+programmatic sessions genuinely help, Google's client libraries being the
+standing example. If you cannot name the session logic you need, the matrix is
+your answer.</p>
+
+<p><strong>Mutation testing is the advanced, optional extra.</strong>
+<code>mutmut</code> rewrites your code in small ways — flipping a comparison,
+deleting a line — and checks that some test fails each time; survivors are
+assertions your suite never actually makes. Run it incrementally on core logic
+only, with a kill threshold in the 75–85% range, and treat it as an occasional
+audit, not a CI gate. It answers "would my tests notice a real bug" better than
+coverage does, at a cost most suites should not pay on every push.</p>
+
+</section>
+
+
+<section class="chapter" id="ch7">
+<h2><span class="ch">Chapter 7</span>Shipping</h2>
+
+<p>In 2020, shipping meant <code>setup.py</code>, a <code>twine upload</code> with a
+password in <code>~/.pypirc</code>, a fat image built <code>FROM python:3.8</code>,
+and docs that rotted in a wiki. The language changed less than the pipeline around
+it. This chapter is the 2026 way out the door: build, version, publish,
+containerize, secure, document.</p>
+
+<h3 id="s7-1">7.1 Build backends are boring (by design)</h3>
+
+<p>Pick hatchling and think about it never again. The canonical pyproject from 1.2
+already names it in <code>[build-system]</code>. A backend has one job — turn your
+source tree into an sdist and a wheel — and in 2026 it does that with no
+configuration. <code>uv build</code> runs whichever backend you named and drops
+both artifacts in <code>dist/</code>:</p>
+
+<pre><code>$ uv build
+Building source distribution...
+Building wheel from source distribution...
+Successfully built dist/orders-0.1.0.tar.gz
+Successfully built dist/orders-0.1.0-py3-none-any.whl</code></pre>
+
+<p>Three backends cover everything this book builds. The choice is one-time and
+low-stakes:</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Backend</th><th>Choose it when</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>hatchling</td><td>The default. Pure-Python libraries; src layout detected with zero config</td></tr>
+    <tr><td>uv_build</td><td>You are all-in on uv. Minimal and opinionated; no arbitrary build steps</td></tr>
+    <tr><td>setuptools</td><td>Extension modules, or a build with custom steps. Still the incumbent there</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Swapping backends edits exactly one section of the file; the
+<code>[project]</code> table, your source tree, and the <code>uv build</code>
+command stay identical. (A workspace member from 1.8 that ships on its own
+simply carries its own <code>[build-system]</code> in its own pyproject.)</p>
+
+<pre><code>[build-system]
+requires = [<span class="st">"uv_build"</span>]          <span class="cm"># was: ["hatchling"]</span>
+build-backend = <span class="st">"uv_build"</span>     <span class="cm"># was: "hatchling.build"</span></code></pre>
+
+<h3 id="s7-2">7.2 Versions</h3>
+
+<p>Libraries get semver, applications get calver, and the git tag is the only
+version string in the repo. A library's version is an API contract:
+<code>MAJOR.MINOR.PATCH</code> tells the resolver what an upgrade can break. An
+app's version is a label — pip and black style <code>2026.8</code> stamps are
+enough for things nobody depends on.</p>
+
+<p>Either way, do not store the number in <code>pyproject.toml</code> or a
+<code>version.py</code>. hatch-vcs derives it from the git tag at build time, so
+the tag is the single source of truth and the version-bump commit disappears:</p>
+
+<pre><code>[build-system]
+requires = [<span class="st">"hatchling"</span>, <span class="st">"hatch-vcs"</span>]
+build-backend = <span class="st">"hatchling.build"</span>
+
+[project]
+name = <span class="st">"orders"</span>
+dynamic = [<span class="st">"version"</span>]   <span class="cm"># no version = "..." line anymore</span>
+
+[tool.hatch.version]
+source = <span class="st">"vcs"</span></code></pre>
+
+<p>Releasing is then <code>git tag v1.4.0 &amp;&amp; git push --tags</code> — also the
+trigger for 7.3's workflow. Built version, PyPI version, and git tag can no
+longer drift apart.</p>
+
+<div class="callout contested">
+<b>Verdict: semver vs calver.</b><br>
+<b>Our default:</b> semver for libraries, calver for applications and CLIs.<br>
+<b>Also reasonable:</b> one scheme for everything — many teams calver their
+libraries too, and the consistency argument is honest.<br>
+<b>Why:</b> a library version carries meaning a resolver can act on; an app
+version only needs to be sortable. Consistency matters more than the scheme —
+pick one, automate it with tags, and never hand-edit a version string.
+</div>
+
+<h3 id="s7-3">7.3 Trusted publishing, or don't publish</h3>
+
+<p>Publish from CI with trusted publishing, or do not publish from CI at all. The
+2020 pattern — a long-lived PyPI API token in repository secrets — is now the
+standard way packages get hijacked. Trusted publishing replaces it with OIDC:
+GitHub mints a short-lived token for one job run, PyPI verifies it against the
+publisher you registered, and nothing long-lived exists to steal. Adoption is
+already mainstream: over a million files published through trusted publishing
+by September 2025, and 132,000+ packages with Sigstore attestations by March
+2026.</p>
+
+<div class="callout warn">
+<b>Why this is not optional.</b> The litellm incident is the standing warning:
+attackers stole the project's publishing token and pushed malicious releases to
+one of the most-installed AI packages. A stolen OIDC token dies with the job
+run; the stolen API token was valid until someone noticed.
+</div>
+
+<p>The publish job extends the CI workflow from 1.7. Version tags join the
+trigger, and the new job runs after the tests pass, inside a GitHub
+environment that requires reviewer approval:</p>
+
+<pre><code><span class="cm"># 1.7's trigger, extended so version tags fire the workflow</span>
+on:
+  push:
+    branches: [<span class="st">"**"</span>]
+    tags: [<span class="st">"v*"</span>]
+  pull_request:
+
+jobs:
+  <span class="cm"># the test job from 1.7 stays unchanged</span>
+  publish:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi          <span class="cm"># configure required reviewers here</span>
+    permissions:
+      id-token: write     <span class="cm"># lets this job mint an OIDC token</span>
+    steps:
+      - uses: actions/checkout@&lt;full-commit-sha&gt;
+      - uses: astral-sh/setup-uv@&lt;full-commit-sha&gt;
+        with:
+          enable-cache: true
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@&lt;full-commit-sha&gt;</code></pre>
+
+<p>Three details do quiet work here. Every action is pinned to a full commit
+SHA, not a movable tag — non-negotiable on this job, and 7.5's zizmor check
+nags until the rest of the workflow matches. The <code>pypi</code> environment
+gates the job on human approval, so a tag proposes a release rather than
+executing one. And the publish action has generated Sigstore attestations
+automatically since v1.11. The one-time setup lives on PyPI: register repo,
+workflow, and environment as a trusted publisher.</p>
+
+<figure>
+<svg viewBox="0 0 360 190" role="img" aria-label="OIDC trusted publishing flow: a tag push runs a GitHub Actions job that mints a short-lived token, which PyPI verifies; the stored long-lived token is gone">
+  <rect x="8" y="24" width="84" height="40" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="50" y="41" text-anchor="middle" font-size="12" fill="#1f2933">git tag</text>
+  <text x="50" y="55" text-anchor="middle" font-size="11" fill="#6b7280">v1.4.0</text>
+  <line x1="92" y1="44" x2="122" y2="44" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="122,44 114,40 114,48" fill="#6b7280"/>
+  <rect x="122" y="24" width="110" height="40" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="177" y="41" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">GitHub Actions</text>
+  <text x="177" y="55" text-anchor="middle" font-size="11" fill="#6b7280">mints OIDC token</text>
+  <text x="246" y="18" text-anchor="middle" font-size="11" fill="#6b7280">short-lived</text>
+  <line x1="232" y1="44" x2="262" y2="44" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="262,44 254,40 254,48" fill="#6b7280"/>
+  <rect x="262" y="24" width="90" height="40" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="307" y="41" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2933">PyPI</text>
+  <text x="307" y="55" text-anchor="middle" font-size="11" fill="#6b7280">verifies, ships</text>
+  <text x="177" y="82" text-anchor="middle" font-size="11" fill="#6b7280">token dies with the job</text>
+  <rect x="40" y="106" width="280" height="34" rx="6" fill="#fef2f2" stroke="#b91c1c" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="180" y="128" text-anchor="middle" font-size="11" fill="#1f2933">long-lived PyPI token, stored in repo secrets</text>
+  <line x1="40" y1="106" x2="320" y2="140" stroke="#b91c1c" stroke-width="1.5"/>
+  <line x1="320" y1="106" x2="40" y2="140" stroke="#b91c1c" stroke-width="1.5"/>
+  <text x="180" y="162" text-anchor="middle" font-size="11" font-style="italic" fill="#6b7280">trusted publishing removes it from the diagram</text>
+</svg>
+<figcaption>The job proves who it is; PyPI hands back a credential that expires
+with the run. No stored secret exists to leak.</figcaption>
+</figure>
+
+<h3 id="s7-4">7.4 The 2026 Dockerfile</h3>
+
+<p>The modern image is two stages and no pip. The builder copies the uv binary
+from its own image and syncs the lockfile into a virtualenv; the runtime stage
+inherits only that venv. Every line earns its place:</p>
+
+<pre><code><span class="cm"># syntax=docker/dockerfile:1</span>
+
+<span class="kw">FROM</span> python:3.13-slim-bookworm <span class="kw">AS</span> builder
+<span class="cm"># the uv binary, straight from its image — no pip install uv</span>
+<span class="kw">COPY</span> --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+<span class="kw">ENV</span> UV_COMPILE_BYTECODE=1   <span class="cm"># compile at build, not at boot</span>
+<span class="kw">WORKDIR</span> /app
+<span class="kw">COPY</span> pyproject.toml uv.lock ./
+<span class="kw">RUN</span> --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev --no-install-project
+<span class="kw">COPY</span> src ./src
+<span class="kw">RUN</span> --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev   <span class="cm"># deps cached; only the app rebuilds</span>
+
+<span class="kw">FROM</span> python:3.13-slim-bookworm
+<span class="kw">COPY</span> --from=builder /app/.venv /app/.venv
+<span class="kw">ENV</span> PATH=<span class="st">"/app/.venv/bin:$PATH"</span>
+<span class="kw">RUN</span> useradd --create-home app
+<span class="kw">USER</span> app                     <span class="cm"># never run as root</span>
+<span class="kw">CMD</span> [<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"orders"</span>]</code></pre>
+
+<p>The ordering is the caching strategy: lockfile first, source second, so a code
+edit rebuilds one fast layer. <code>--locked --no-dev</code> gives the container
+the same hash-verified set CI has, with pytest left behind. Pair it with a
+<code>.dockerignore</code> so your local venv can never leak in:</p>
+
+<pre><code>.venv
+.git
+__pycache__</code></pre>
+
+<div class="callout contested">
+<b>Verdict: base image.</b><br>
+<b>Our default:</b> <code>python:3.13-slim-bookworm</code> — small enough, with a
+shell and package manager when you need to debug.<br>
+<b>Also reasonable:</b> distroless — a smaller attack surface and no shell at
+all, which is also its cost.<br>
+<b>Why:</b> the day you need <code>docker exec</code> into a running container,
+you will want a shell. Teams with mature observability can take the distroless
+trade.
+</div>
+
+<h3 id="s7-5">7.5 Dependency security</h3>
+
+<p>Security in 2026 is a set of small tools in CI, not a posture. The baseline is
+auditing the lockfile for known vulnerabilities on every run:</p>
+
+<pre><code>- run: uv audit   <span class="cm"># checks uv.lock for known vulnerabilities</span></code></pre>
+
+<p><code>uv audit</code> and the PyPA's pip-audit do the same job; run whichever
+matches your toolchain. The lockfile itself is the second layer:
+<code>uv.lock</code> records hashes by default, and <code>--locked</code> makes
+CI fail rather than install a tampered artifact. For update automation, use
+Renovate <span class="pill c">common</span> — Dependabot's pip ecosystem cannot
+read <code>uv.lock</code>; Renovate has native uv support. For a cooling-off
+window against just-published malware, <code>uv pip compile
+--exclude-newer</code> pins resolution to packages older than a date — an
+optional extra layer, not a default.</p>
+
+<p>On the code side, skip bandit and add <code>"S"</code> to the Ruff select list
+from 1.6 — the same checks, in the tool you already run. semgrep earns its place when your
+organization needs its own rules. And run zizmor on your workflows: it flags
+unpinned actions and template injection, the weaknesses behind the GhostAction
+and Shai-Hulud workflow compromises.</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Tool</th><th>What it catches</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>uv audit</code> / pip-audit</td><td>Known vulnerabilities in your locked dependencies</td></tr>
+    <tr><td><code>uv.lock</code> hashes</td><td>A swapped or tampered artifact between lock and install</td></tr>
+    <tr><td>Renovate</td><td>Outdated dependencies — Dependabot cannot read <code>uv.lock</code></td></tr>
+    <tr><td>Ruff <code>S</code> rules</td><td>Insecure calls in your own code (bandit's checks)</td></tr>
+    <tr><td>semgrep</td><td>Your organization's own rules</td></tr>
+    <tr><td>zizmor</td><td>Workflow attacks: unpinned actions, template injection</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>4.3 showed the shape of settings at the edge; here is the policy. Settings load once at startup from the environment. A <code>.env</code> file is
+for development only: listed in <code>.gitignore</code>, never committed — git
+history is forever. Production values come from the platform's real environment
+or secret store. And every credential is a <code>SecretStr</code>, so a stray
+<code>print(settings)</code> or log line shows asterisks instead of the key:</p>
+
+<pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> SecretStr
+<span class="kw">from</span> pydantic_settings <span class="kw">import</span> BaseSettings, SettingsConfigDict
+
+
+<span class="kw">class</span> Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=<span class="st">".env"</span>)
+
+    database_url: str
+    api_key: SecretStr   <span class="cm"># reprs as SecretStr('**********')</span>
+
+
+settings = Settings()
+<span class="cm"># call get_secret_value() only where the key is used</span></code></pre>
+
+<p>Private indexes close the last hole. pip's <code>--extra-index-url</code>
+queries every index and installs the best version found anywhere — the exact
+shape of a dependency-confusion attack. uv's first-match strategy is the
+inverse: the first index that has the package wins, so a public package can
+never shadow your private one. Belt and suspenders: mark the internal index
+<code>explicit = true</code> so it serves only packages that name it:</p>
+
+<pre><code>[[tool.uv.index]]
+name = <span class="st">"acme"</span>
+url = <span class="st">"https://pypi.acme.internal/simple"</span>
+explicit = true          <span class="cm"># nothing resolves here unless asked</span>
+
+[tool.uv.sources]
+acme-lib = { index = <span class="st">"acme"</span> }</code></pre>
+
+<h3 id="s7-6">7.6 Docs that don't rot</h3>
+
+<p>Ship docs with mkdocs-material <span class="pill u">ubiquitous</span> and
+mkdocstrings. It is what FastAPI and pydantic still ship: a Markdown site with
+the Material theme, and an API reference generated from your docstrings so it
+cannot drift from the code:</p>
+
+<pre><code><span class="cm"># mkdocs.yml</span>
+site_name: orders
+theme:
+  name: material
+plugins:
+  - mkdocstrings</code></pre>
+
+<p>For what to write, Diátaxis is the working vocabulary — a checklist, not a
+dogma:</p>
+
+<ul>
+  <li><strong>Tutorial</strong> — learning by doing; a follow-along first hour.</li>
+  <li><strong>How-to</strong> — one task, one answer.</li>
+  <li><strong>Reference</strong> — the facts; mkdocstrings generates these.</li>
+  <li><strong>Explanation</strong> — why it is built this way.</li>
+</ul>
+
+<p>And test the code in the docs, because examples rot fastest. pydantic's own
+pytest-examples plugin runs the blocks in your Markdown as part of the suite:</p>
+
+<pre><code><span class="kw">import</span> pytest
+<span class="kw">from</span> pytest_examples <span class="kw">import</span> (
+    CodeExample,
+    EvalExample,
+    find_examples,
+)
+
+
+<span class="kw">@pytest.mark.parametrize</span>(
+    <span class="st">"example"</span>, find_examples(<span class="st">"docs"</span>), ids=str
+)
+<span class="kw">def</span> test_doc_snippets(
+    example: CodeExample, eval_example: EvalExample
+) -&gt; None:
+    eval_example.run_print_check(example)</code></pre>
+
+<div class="callout contested">
+<b>Verdict: mkdocs-material vs Zensical.</b><br>
+<b>Our default:</b> mkdocs-material plus mkdocstrings, pinned — the stack the
+flagship projects still ship today.<br>
+<b>Also reasonable:</b> Zensical, the same team's successor with a Rust core —
+new, fast, and not compatible with existing MkDocs plugins.<br>
+<b>Why:</b> this is the volatile corner of the chapter. mkdocs-material entered
+maintenance mode in November 2025, MkDocs itself has a breaking 2.0 rewrite
+looming, and Zensical's plugin story is unfinished. The content outlives the
+renderer: write Markdown, generate reference from docstrings, pin your docs
+dependencies, and budget a migration when the successor stabilizes.
+</div>
+
+</section>
+
+
+<section class="chapter" id="ch8">
+<h2><span class="ch">Chapter 8</span>Running It: Logs, Traces, Speed</h2>
+
+<p>Writing the code was the first seven chapters. Now it has to run: emit logs
+you can query, traces that cross service boundaries, and responses fast enough
+that nobody files a ticket. The 2026 defaults for all three are cheap to adopt
+— structured logs, OpenTelemetry, and profiling before optimizing.</p>
+
+<h3 id="s8-1">8.1 The logging policy</h3>
+
+<p>Logging splits cleanly by what you ship. A library emits; an application
+configures. The one unforgivable sin is mixing them up: a library that calls
+<code>basicConfig</code> hijacks the application's handlers and format. Inside
+a library, emit only:</p>
+
+<pre><code><span class="cm"># inside a library — emit, never configure</span>
+<span class="kw">import</span> logging
+
+log = logging.getLogger(__name__)
+
+<span class="cm"># in the package __init__.py, once:</span>
+logging.getLogger(<span class="st">"orders"</span>).addHandler(logging.NullHandler())</code></pre>
+
+<p>The <code>NullHandler</code> silences the "no handlers found" warning; where
+records go is the application's decision. 5.3's
+<code>log.warning(..., exc_info=exc)</code> is this pattern — stdlib logging
+stays the library default, full stop.</p>
+
+<p>An application owns its logging end to end, and the 2026 default for that is
+structlog <span class="pill c">common</span>. The evidence line: Airflow 3.1
+switched all of its logging to structlog. The reason: your logs are data. A
+processor pipeline turns every event into structured JSON that log systems can
+query, instead of regex fodder from 2009.</p>
+
+<div class="callout contested">
+<b>Verdict: loguru.</b><br>
+<b>Our default:</b> structlog for services; stdlib <code>logging</code> for
+libraries.<br>
+<b>Also reasonable:</b> loguru for scripts and small apps — the developer
+experience is genuinely good, and <code>logger.catch</code> is a delight.<br>
+<b>Why:</b> one global logger, an <code>InterceptHandler</code> needed to unify
+stdlib records, and no processor pipeline. Those costs land exactly when a
+script grows into a service, so start services on structlog.
+</div>
+
+<h3 id="s8-2">8.2 structlog in practice</h3>
+
+<p>A structlog event is a dict flowing through a pipeline of processors. Each
+one adds or transforms keys; the last one renders. Configure once, at startup.
+The renderer switch is one field on the <code>Settings</code> class from 4.3
+and 7.5: <code>debug: bool = False</code>.</p>
+
+<pre><code><span class="kw">import</span> logging
+<span class="kw">import</span> sys
+
+<span class="kw">import</span> structlog
+
+<span class="kw">if</span> settings.debug:  <span class="cm"># pretty console in dev</span>
+    renderer = structlog.dev.ConsoleRenderer(colors=True)
+<span class="kw">else</span>:               <span class="cm"># JSON in prod</span>
+    renderer = structlog.processors.JSONRenderer()
+
+shared = [
+    structlog.contextvars.merge_contextvars,
+    structlog.stdlib.add_log_level,
+    structlog.processors.TimeStamper(fmt=<span class="st">"iso"</span>),
+]
+
+structlog.configure(
+    processors=[
+        *shared,
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+formatter = structlog.stdlib.ProcessorFormatter(
+    foreign_pre_chain=shared,  <span class="cm"># stdlib records join the pipeline</span>
+    processors=[
+        structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+        renderer,
+    ],
+)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(formatter)
+logging.basicConfig(handlers=[handler], level=logging.INFO)</code></pre>
+
+<p>Two pieces do the heavy lifting. <code>LoggerFactory</code> routes structlog
+events through stdlib, and <code>ProcessorFormatter</code> with
+<code>foreign_pre_chain</code> runs the <em>same</em> pipeline over records
+from httpx, SQLAlchemy, and every library doing the 8.1 thing. One format out,
+no matter who logged.</p>
+
+<p>Per-request context goes in contextvars, not in every call:</p>
+
+<pre><code><span class="kw">from</span> structlog.contextvars <span class="kw">import</span> bind_contextvars
+
+bind_contextvars(request_id=request.id)  <span class="cm"># once, in middleware</span>
+
+log = structlog.get_logger()
+log.info(<span class="st">"order.placed"</span>, order_id=order.id)
+<span class="cm"># every record this request now carries request_id</span></code></pre>
+
+<figure>
+<svg viewBox="0 0 640 190" role="img" aria-label="structlog pipeline: an event dict flows through context, level, and timestamp processors, then renders as JSON in production or pretty console in development">
+  <rect x="10" y="20" width="130" height="40" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="75" y="37" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2933">event dict</text>
+  <text x="75" y="51" text-anchor="middle" font-size="11" fill="#6b7280">log.info(...)</text>
+  <polygon points="148,40 140,35 140,45" fill="#6b7280"/>
+  <line x1="140" y1="40" x2="156" y2="40" stroke="#6b7280" stroke-width="1.5"/>
+  <rect x="158" y="20" width="130" height="40" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="223" y="37" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2933">merge context</text>
+  <text x="223" y="51" text-anchor="middle" font-size="11" fill="#6b7280">contextvars</text>
+  <polygon points="296,40 288,35 288,45" fill="#6b7280"/>
+  <line x1="288" y1="40" x2="304" y2="40" stroke="#6b7280" stroke-width="1.5"/>
+  <rect x="306" y="20" width="130" height="40" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="371" y="37" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2933">level + time</text>
+  <text x="371" y="51" text-anchor="middle" font-size="11" fill="#6b7280">add_log_level, ts</text>
+  <polygon points="444,40 436,35 436,45" fill="#6b7280"/>
+  <line x1="436" y1="40" x2="452" y2="40" stroke="#6b7280" stroke-width="1.5"/>
+  <rect x="454" y="20" width="130" height="40" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="519" y="37" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2933">renderer</text>
+  <text x="519" y="51" text-anchor="middle" font-size="11" fill="#6b7280">one of two</text>
+  <line x1="519" y1="60" x2="519" y2="78" stroke="#6b7280" stroke-width="1.5"/>
+  <line x1="175" y1="78" x2="519" y2="78" stroke="#6b7280" stroke-width="1.5"/>
+  <line x1="175" y1="78" x2="175" y2="92" stroke="#6b7280" stroke-width="1.5"/>
+  <line x1="465" y1="78" x2="465" y2="92" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="175,96 170,88 180,88" fill="#6b7280"/>
+  <polygon points="465,96 460,88 470,88" fill="#6b7280"/>
+  <rect x="90" y="96" width="170" height="28" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="175" y="114" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2933">JSONRenderer · prod</text>
+  <rect x="380" y="96" width="170" height="28" rx="6" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="465" y="114" text-anchor="middle" font-size="11" font-weight="600" fill="#1f2933">ConsoleRenderer · dev</text>
+  <rect x="30" y="140" width="300" height="30" rx="6" fill="#111827"/>
+  <text x="180" y="159" text-anchor="middle" font-size="11" fill="#e5e7eb">{"event":"order.placed","level":"info",...}</text>
+  <rect x="350" y="140" width="270" height="30" rx="6" fill="#111827"/>
+  <text x="485" y="159" text-anchor="middle" font-size="11" fill="#e5e7eb">12:00:00 [info] order.placed order_id=42</text>
+</svg>
+<figcaption>One pipeline; only the last processor changes between production
+and your laptop.</figcaption>
+</figure>
+
+<h3 id="s8-3">8.3 Telemetry without vendor lock</h3>
+
+<p>Logs are one signal; traces and metrics are the other two. OpenTelemetry
+<span class="pill c">common</span> is the standard for all three — tracing and
+metrics stable for years, logs stable since 2025 — and its Python agent needs
+no code changes at all:</p>
+
+<pre><code>$ uv add opentelemetry-distro opentelemetry-exporter-otlp
+$ uv run opentelemetry-bootstrap -a install
+$ OTEL_SERVICE_NAME=orders-api \
+  OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com \
+  uv run opentelemetry-instrument uvicorn orders.main:app</code></pre>
+
+<p><code>opentelemetry-bootstrap</code> installs instrumentation for what you
+actually import — FastAPI, requests, SQLAlchemy — and
+<code>opentelemetry-instrument</code> wraps the process so spans flow with zero
+application code. The OTLP environment variables are the lock-in insurance:
+point them at Jaeger, Grafana, or your next vendor by changing an endpoint,
+not a codebase.</p>
+
+<p>If you want a nicer developer experience on top, Logfire — from the pydantic
+team — is OpenTelemetry under the hood:</p>
+
+<pre><code><span class="kw">import</span> logfire
+
+logfire.configure()  <span class="cm"># speaks OTLP like everything else</span>
+logfire.instrument_fastapi(app)
+logfire.info(<span class="st">"order.placed"</span>, order_id=order.id)</code></pre>
+
+<p>Because it is OTel underneath, the same spans export anywhere OTLP goes. You
+are choosing a UI, not a prison.</p>
+
+<h3 id="s8-4">8.4 Profile first</h3>
+
+<p>Speed work starts with a measurement, not a hunch. The first tool is py-spy:
+a sampling profiler that attaches to a running process — production included —
+and writes a flamegraph, with zero code changes:</p>
+
+<pre><code>$ py-spy record -o profile.svg --pid 4821   <span class="cm"># live process</span>
+$ py-spy top --pid 4821                     <span class="cm"># live top(1)</span>
+
+$ python -m cProfile -o orders.pstats -m orders.worker
+$ uvx snakeviz orders.pstats                <span class="cm"># local deep dive</span></code></pre>
+
+<p>A true story in one act. An orders API is slow; the team's guess says JSON
+serialization, so someone reaches for orjson. py-spy says otherwise:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code><span class="kw">import</span> json
+<span class="kw">import</span> re
+
+<span class="kw">def</span> normalize(code: str) -&gt; str:
+    <span class="kw">return</span> re.sub(<span class="st">r"[^A-Z0-9]"</span>, <span class="st">""</span>, code)
+
+<span class="kw">def</span> render_orders(rows: list[dict]) -&gt; bytes:
+    out = [
+        {
+            <span class="st">"id"</span>: r[<span class="st">"id"</span>],
+            <span class="st">"code"</span>: normalize(r[<span class="st">"code"</span>]),
+        }
+        <span class="kw">for</span> r <span class="kw">in</span> rows
+    ]
+    <span class="kw">return</span> json.dumps(out).encode()</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code><span class="kw">import</span> json
+<span class="kw">import</span> re
+
+<span class="cm"># flamegraph: 70% of request time was</span>
+<span class="cm"># re.compile, inside normalize(), per row.</span>
+<span class="cm"># module scope:</span>
+CLEAN = re.compile(<span class="st">r"[^A-Z0-9]"</span>)
+
+<span class="kw">def</span> normalize(code: str) -&gt; str:
+    <span class="kw">return</span> CLEAN.sub(<span class="st">""</span>, code)
+
+<span class="cm"># render_orders unchanged.</span></code></pre>
+  </div>
+</div>
+<p>The guess would have optimized the wrong quarter of the request. The
+flamegraph showed 70% of request time inside <code>re.compile</code> — the
+pattern was recompiled on every row — and the fix was one module-level
+constant. orjson never shipped.</p>
+
+<figure>
+<svg viewBox="0 0 640 190" role="img" aria-label="Flamegraph of one request: handle_request at the base, render_orders above it, then normalize taking 75 percent, and re.compile highlighted in red taking 70 percent of total time">
+  <text x="10" y="16" font-size="11" fill="#6b7280">width = share of samples; bottom = entry point</text>
+  <rect x="10" y="56" width="434" height="26" rx="3" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/>
+  <text x="24" y="73" font-size="11" font-weight="600" fill="#b91c1c">re.compile · 70%</text>
+  <rect x="448" y="56" width="27" height="26" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1"/>
+  <text x="490" y="66" font-size="11" font-weight="600" fill="#b91c1c">the real bottleneck —</text>
+  <text x="490" y="80" font-size="11" fill="#6b7280">one line to fix</text>
+  <rect x="10" y="86" width="465" height="26" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="24" y="103" font-size="11" fill="#1f2933">normalize · 75%</text>
+  <rect x="479" y="86" width="151" height="26" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="491" y="103" font-size="11" fill="#1f2933">json.dumps · 25%</text>
+  <rect x="10" y="116" width="620" height="26" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="24" y="133" font-size="11" fill="#1f2933">render_orders · 100%</text>
+  <rect x="10" y="146" width="620" height="26" rx="3" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="24" y="163" font-size="11" fill="#1f2933">handle_request · 100%</text>
+</svg>
+<figcaption>Reading a flamegraph: each box is a stack frame, its width is its
+share of samples, and anything wide and flat near the top is where the time
+went. Here it is the red frame, not the serializer.</figcaption>
+</figure>
+
+<h3 id="s8-5">8.5 The usual wins (and the usual wastes)</h3>
+
+<p>Once a profile points, these are the fixes that usually pay. For new data
+code, polars' lazy frames over pandas row loops. Databricks' comparison puts
+polars around 10× faster on joins and groupbys, on roughly an eighth of the
+memory — and the lazy query plan is the actual win. In hot JSON paths, orjson —
+after the profile says so, not before (8.4). And before you reach for Redis,
+reach for <code>functools.cache</code>:</p>
+
+<pre><code><span class="kw">import</span> functools
+
+<span class="kw">@functools.cache</span>
+<span class="kw">def</span> load_tax_table(region: str) -&gt; dict[str, float]:
+    ...  <span class="cm"># process-local, free, and usually enough</span>
+
+resp = httpx.get(url, timeout=10)  <span class="cm"># explicit, every call</span></code></pre>
+
+<p>That last line is a standing rule: <code>timeout=</code> on every network
+call, no exceptions. <code>requests</code> waits forever by default, which
+means one hung dependency can pin every worker you have.</p>
+
+<p>The usual wastes: string formatting, micro-loop tweaks, and anything
+unprofiled. And do not hand-roll what polars, pydantic-core, and numpy already
+do in Rust or C — your Python loop will not beat their query optimizer. One
+emerging item to watch: free-threaded CPython (3.13+) makes threads viable for
+CPU-bound work where today only <code>ProcessPoolExecutor</code> is; check
+whether your dependencies support it before planning around it.</p>
+
+<div class="callout flags">
+<b>Review red flags — performance.</b><br>
+✗ <code>requests.get(...)</code> inside <code>async def</code> — a sync call
+blocks the whole event loop for its duration. Fix: <code>httpx.AsyncClient</code>,
+or <code>asyncio.to_thread</code> for libraries with no async API.<br>
+✗ <code>asyncio.gather(...)</code> for structured fan-out — one failing task
+leaves the rest orphaned. Fix: <code>asyncio.TaskGroup</code> <em>(Book 1, ch. 5)</em>,
+which cancels its siblings and reports every failure.<br>
+✗ network calls without <code>timeout=</code> — an unbounded wait dressed up as
+a call. Fix: pick a number, any number, and pass it.
+</div>
+
+</section>
+
+
+<section class="chapter" id="ch9">
+<h2><span class="ch">Capstone</span>The Review</h2>
+
+<p>Chapters 1 through 8 each fixed one habit. Real reviews do not arrive one
+habit at a time. This capstone is the whole book read the way the job actually
+happens: a dated service lands on your desk, you flag it, you rebuild it. The
+service is new — the running cast's <code>Task</code>, as a small API. Every
+flaw in it is one this book taught, and every fix is a page you have
+already read.</p>
+
+<h3 id="sC-1">C.1 The code as found</h3>
+
+<p>A tasks API, written in 2020 by a competent team and touched only lightly
+since. It works. It ships. The listing is complete: a requirements file, two
+modules, the tests, and the workflow that publishes it. Read it the way a
+senior reviewer would — slowly, pen in hand.</p>
+
+<pre><code><span class="cm"># requirements.txt</span>
+flask==2.0.1
+requests==2.26.0
+pytest==6.2.5
+twine==3.4.2</code></pre>
+
+<p>The data layer, in full:</p>
+
+<pre><code><span class="cm"># tasks/models.py</span>
+import sqlite3
+from datetime import datetime
+from typing import Dict, List
+
+SCHEMA = (
+    <span class="st">"CREATE TABLE IF NOT EXISTS tasks ("</span>
+    <span class="st">"id INTEGER PRIMARY KEY, title TEXT,"</span>
+    <span class="st">" points INTEGER, owner TEXT, done INTEGER)"</span>
+)
+
+
+<span class="kw">class</span> TaskStore:
+    <span class="st">"""Every question the API asks the database."""</span>
+
+    <span class="kw">def</span> __init__(<span class="kw">self</span>, dsn: str = <span class="st">"tasks.db"</span>):
+        <span class="kw">self</span>.conn = sqlite3.connect(dsn)
+        <span class="kw">self</span>.conn.execute(SCHEMA)
+
+    <span class="kw">def</span> add(<span class="kw">self</span>, title, points, owner):
+        <span class="kw">self</span>.conn.execute(
+            <span class="st">"INSERT INTO tasks (title, points, owner, done)"</span>
+            <span class="st">" VALUES ('%s', %d, '%s', 0)"</span> % (title, points, owner),
+        )
+        <span class="kw">self</span>.conn.commit()
+
+    <span class="kw">def</span> get(<span class="kw">self</span>, task_id):
+        cur = <span class="kw">self</span>.conn.execute(
+            <span class="st">"SELECT * FROM tasks WHERE id = %d"</span> % task_id
+        )
+        row = cur.fetchone()
+        <span class="kw">if</span> row <span class="kw">is</span> None:
+            <span class="kw">raise</span> KeyError(task_id)
+        <span class="kw">return</span> <span class="kw">self</span>._to_dict(row)
+
+    <span class="kw">def</span> open_tasks(<span class="kw">self</span>) -&gt; List[Dict]:
+        cur = <span class="kw">self</span>.conn.execute(<span class="st">"SELECT * FROM tasks WHERE done = 0"</span>)
+        <span class="kw">return</span> [<span class="kw">self</span>._to_dict(r) <span class="kw">for</span> r <span class="kw">in</span> cur.fetchall()]
+
+    <span class="kw">def</span> _to_dict(<span class="kw">self</span>, row) -&gt; Dict:
+        keys = (<span class="st">"id"</span>, <span class="st">"title"</span>, <span class="st">"points"</span>, <span class="st">"owner"</span>, <span class="st">"done"</span>)
+        <span class="kw">return</span> dict(zip(keys, row))
+
+
+<span class="kw">def</span> summary(tasks: List[Dict]) -&gt; str:
+    <span class="cm"># weekly digest, mailed every Monday</span>
+    report = <span class="st">"Open tasks as of %s\n"</span> % datetime.utcnow()
+    <span class="kw">for</span> t <span class="kw">in</span> tasks:
+        report += <span class="st">"- %s (%s, %d pts)\n"</span> % (
+            t[<span class="st">"title"</span>], t[<span class="st">"owner"</span>], t[<span class="st">"points"</span>],
+        )
+    <span class="kw">return</span> report
+
+
+<span class="kw">def</span> tag(task: Dict, labels: List[str] = []) -&gt; Dict:
+    labels.append(task[<span class="st">"owner"</span>])
+    task[<span class="st">"labels"</span>] = labels
+    <span class="kw">return</span> task</code></pre>
+
+<p>The service layer on top of it:</p>
+
+<pre><code><span class="cm"># tasks/api.py</span>
+import json
+import smtplib
+from typing import Any, Callable, Dict, List, Optional
+
+import requests
+from flask import Flask, request
+
+from tasks.models import TaskStore, summary, tag
+
+HOOKS_URL = <span class="st">"https://hooks.example.com/tasks"</span>
+
+
+<span class="kw">def</span> timed(fn: Callable[..., Any]) -&gt; Callable[..., Any]:
+    <span class="kw">def</span> wrapper(*args, **kwargs):
+        print(<span class="st">"calling"</span>, fn.__name__)
+        <span class="kw">return</span> fn(*args, **kwargs)
+    <span class="kw">return</span> wrapper
+
+
+<span class="kw">class</span> TaskError(Exception):
+    <span class="kw">pass</span>
+
+
+<span class="kw">class</span> TaskManager:
+    <span class="st">"""Creates tasks, pings the hook, mails the digest."""</span>
+
+    <span class="kw">def</span> __init__(<span class="kw">self</span>, dsn, smtp_host):
+        <span class="kw">self</span>.store = TaskStore(dsn)
+        <span class="kw">self</span>.smtp_host = smtp_host
+
+    <span class="kw">def</span> create_task(<span class="kw">self</span>, payload: Dict[str, Any]) -&gt; Any:
+        <span class="kw">if</span> type(payload) != dict:
+            <span class="kw">raise</span> ValueError(<span class="st">"payload must be a dict"</span>)
+        task = tag(payload)  <span class="cm"># TODO: real validation someday</span>
+        <span class="kw">self</span>.store.add(
+            task[<span class="st">"title"</span>],
+            task.get(<span class="st">"points"</span>, 1),
+            task.get(<span class="st">"owner"</span>),
+        )
+        print(<span class="st">"created task:"</span>, task[<span class="st">"title"</span>])
+        <span class="kw">self</span>.notify(task)
+        <span class="kw">return</span> task
+
+    <span class="kw">def</span> notify(<span class="kw">self</span>, task):
+        <span class="kw">try</span>:
+            requests.post(HOOKS_URL, data=json.dumps(task))
+        <span class="kw">except</span>:
+            <span class="kw">pass</span>
+
+    @timed
+    <span class="kw">def</span> open_items(<span class="kw">self</span>) -&gt; Optional[List[Dict]]:
+        <span class="kw">return</span> <span class="kw">self</span>.store.open_tasks()
+
+    <span class="kw">def</span> complete(<span class="kw">self</span>, task_id: int) -&gt; None:
+        <span class="kw">try</span>:
+            <span class="kw">self</span>.store.get(task_id)
+        <span class="kw">except</span> KeyError <span class="kw">as</span> e:
+            <span class="kw">raise</span> TaskError(<span class="st">"task lookup failed"</span>)
+
+    <span class="kw">def</span> weekly_digest(<span class="kw">self</span>) -&gt; None:
+        report = summary(<span class="kw">self</span>.store.open_tasks())
+        <span class="kw">with</span> smtplib.SMTP(<span class="kw">self</span>.smtp_host) <span class="kw">as</span> server:
+            server.sendmail(
+                <span class="st">"bot@acme.com"</span>, [<span class="st">"team@acme.com"</span>], report)
+
+
+app = Flask(__name__)
+mgr = TaskManager(<span class="st">"tasks.db"</span>, <span class="st">"smtp.acme.com"</span>)
+
+
+@app.route(<span class="st">"/tasks"</span>, methods=[<span class="st">"POST"</span>])
+<span class="kw">def</span> create():
+    mgr.create_task(request.get_json(force=True))
+    <span class="kw">return</span> <span class="st">""</span>, 201</code></pre>
+
+<p>The tests, and the workflow that ships the package:</p>
+
+<pre><code><span class="cm"># tests/test_tasks.py</span>
+import unittest
+from unittest.mock import patch
+
+from tasks.api import TaskError, TaskManager
+
+
+<span class="kw">class</span> TestTaskManager(unittest.TestCase):
+    <span class="kw">def</span> setUp(<span class="kw">self</span>):
+        <span class="kw">self</span>.mgr = TaskManager(<span class="st">":memory:"</span>, <span class="st">"smtp.acme.com"</span>)
+
+    <span class="kw">def</span> test_create_notifies_hook(<span class="kw">self</span>):
+        <span class="kw">with</span> patch(<span class="st">"requests.post"</span>) <span class="kw">as</span> post:
+            <span class="kw">self</span>.mgr.create_task(
+                {<span class="st">"title"</span>: <span class="st">"Ship report"</span>, <span class="st">"points"</span>: 3,
+                 <span class="st">"owner"</span>: <span class="st">"ada"</span>})
+            <span class="kw">self</span>.assertTrue(post.called)
+
+    <span class="kw">def</span> test_complete_missing_task(<span class="kw">self</span>):
+        <span class="kw">with</span> <span class="kw">self</span>.assertRaises(TaskError):
+            <span class="kw">self</span>.mgr.complete(999)
+
+
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    unittest.main()</code></pre>
+
+<pre><code><span class="cm"># .github/workflows/publish.yml</span>
+name: publish
+on: [push]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - run: pip install -r requirements.txt
+      - run: pytest
+      - run: python setup.py sdist bdist_wheel
+      - run: twine upload dist/*
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}</code></pre>
+
+<p>Before you turn to C.2, grade it yourself. Six questions to start from:</p>
+
+<ul>
+  <li>What shape is a task, and where is that shape checked?</li>
+  <li>What happens when the hook endpoint hangs for ten minutes?</li>
+  <li>Who finds out when <code>notify</code> fails, and how?</li>
+  <li>What exactly did CI prove before the last release?</li>
+  <li>What does the publish job hand to PyPI, and what could an attacker do
+  with it?</li>
+  <li>Which lines would a linter rewrite on sight?</li>
+</ul>
+
+<h3 id="sC-2">C.2 The review</h3>
+
+<p>Here is the same read with the book's full checklist applied. Every flag the
+book taught, what it looks like in C.1, the fix, and the chapter that owns
+it.</p>
+
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>Red flag</th><th>In C.1</th><th>Fix</th><th>Chapter</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>requirements.txt</code>, no lockfile</td><td>Four <code>==</code> pins, no hashes, no lock</td><td>pyproject + committed <code>uv.lock</code>; <code>uv sync --locked</code> in CI</td><td>1.4</td></tr>
+    <tr><td>Legacy typing imports</td><td><code>from typing import Dict, List, Optional</code></td><td>Builtin generics, <code>X | None</code>; <code>ruff check --select UP --fix</code></td><td>2.1</td></tr>
+    <tr><td>SQL built with <code>%</code> formatting</td><td><code>" VALUES ('%s', %d, '%s', 0)" % (...)</code></td><td><code>execute(sql, params)</code>, parameterized</td><td>2.3</td></tr>
+    <tr><td><code>datetime.utcnow()</code></td><td><code>summary()</code> stamps the digest with it</td><td><code>datetime.now(UTC)</code></td><td>2.7</td></tr>
+    <tr><td>Mutable default argument</td><td><code>labels: List[str] = []</code></td><td><code>None</code> sentinel</td><td>2.4</td></tr>
+    <tr><td><code>type(x)</code> comparison</td><td><code>if type(payload) != dict</code></td><td><code>isinstance(payload, dict)</code></td><td>2.4</td></tr>
+    <tr><td><code>+=</code> in a string loop</td><td><code>report += "- %s ..."</code> in <code>summary()</code></td><td>Accumulate a list, <code>"".join(...)</code></td><td>2.4</td></tr>
+    <tr><td>Public functions unannotated</td><td><code>add</code>, <code>get</code>, <code>notify</code> take anything</td><td>Annotate the surface; ratchet flags in CI</td><td>3.1</td></tr>
+    <tr><td><code>Any</code> at the boundary</td><td><code>Dict[str, Any]</code> in, <code>-&gt; Any</code> out</td><td>Model the boundary once</td><td>3.8</td></tr>
+    <tr><td>Signature-erasing decorator</td><td><code>timed(fn: Callable[..., Any])</code></td><td><code>ParamSpec</code></td><td>3.6</td></tr>
+    <tr><td>Dicts as models</td><td><code>request.get_json(force=True)</code> feeds <code>create_task</code> directly</td><td>pydantic at the edge, dataclass inside</td><td>4.3</td></tr>
+    <tr><td>Bare <code>except</code></td><td><code>notify()</code> swallows everything</td><td>Name the exception you expect</td><td>5.1</td></tr>
+    <tr><td>Missing <code>from exc</code></td><td><code>raise TaskError("task lookup failed")</code></td><td><code>raise TaskError(...) from e</code></td><td>5.2</td></tr>
+    <tr><td>God-object</td><td><code>TaskManager</code> opens its own db and SMTP</td><td>Functions + Protocol seams</td><td>5.5</td></tr>
+    <tr><td><code>unittest.TestCase</code> style</td><td><code>setUp</code>, <code>self.assertTrue</code></td><td>pytest functions + fixtures</td><td>6.1</td></tr>
+    <tr><td>Monkeypatched HTTP</td><td><code>patch("requests.post")</code></td><td>Injected <code>httpx.Client</code> + <code>MockTransport</code></td><td>6.5</td></tr>
+    <tr><td>No coverage gate</td><td>CI runs a bare <code>pytest</code></td><td>coverage + <code>diff-cover</code> at ~80%</td><td>6.6</td></tr>
+    <tr><td>Token-based publish</td><td><code>TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}</code></td><td>Trusted publishing over OIDC</td><td>7.3</td></tr>
+    <tr><td>Unpinned actions</td><td><code>actions/checkout@v2</code></td><td>Pin to a full SHA; run zizmor</td><td>7.5</td></tr>
+    <tr><td>No <code>timeout=</code></td><td><code>requests.post(HOOKS_URL, ...)</code></td><td><code>timeout=10</code> on every call</td><td>8.5</td></tr>
+    <tr><td><code>print</code> as logging</td><td>Two <code>print(...)</code> calls in <code>api.py</code></td><td>structlog, configured at startup</td><td>8.1</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Twenty-one findings in under 180 lines, and not one of them exotic. That is the
+point of the table: a dated codebase fails review on volume, not on any single
+clever mistake.</p>
+
+<h3 id="sC-3">C.3 The rebuild, compressed</h3>
+
+<p>The rebuild, down to the interesting lines. Each step is a diff hunk and a
+chapter reference; nothing is re-taught.</p>
+
+<p><strong>Step 1 — scaffold (chapter 1).</strong> <code>uv init --package</code>
+writes the src layout (1.1). Dependencies, Ruff, mypy, and pytest config move
+into <code>pyproject.toml</code> (1.2). The lockfile appears on the first add
+and gets committed (1.4):</p>
+
+<pre><code>$ uv init --package tasks
+$ uv add pydantic structlog httpx
+$ uv add --dev pytest inline-snapshot</code></pre>
+
+<p><code>ruff check --select UP --fix</code> (1.6) rewrites the legacy imports and
+the <code>utcnow()</code> call on sight. The rest of the idiom rows — the
+mutable default, the <code>type()</code> check, the <code>+=</code> loop — are
+one-line edits from 2.4.</p>
+
+<p><strong>Step 2 — models at the boundary (chapters 4, 2).</strong> The payload
+gets a shape at the edge (4.3). The inside gets a dataclass (4.2), and the SQL
+takes parameters (2.3):</p>
+
+<pre><code><span class="cm"># src/tasks/models.py</span>
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
+
+<span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+
+
+<span class="kw">class</span> TaskIn(BaseModel):      <span class="cm"># the edge: the payload's shape</span>
+    title: str
+    points: int = 1
+    owner: str
+
+
+<span class="kw">@dataclass</span>(slots=True)       <span class="cm"># inside: the trusted object</span>
+<span class="kw">class</span> Task:
+    title: str
+    points: int
+    owner: str
+    done: bool = <span class="kw">False</span>
+
+<span class="cm"># src/tasks/store.py</span>
+conn.execute(
+    <span class="st">"INSERT INTO tasks (title, points, owner, done)"</span>
+    <span class="st">" VALUES (?, ?, ?, 0)"</span>,
+    (task.title, task.points, task.owner),
+)</code></pre>
+
+<p>The manager class dissolves with it: <code>create_task(store, client,
+payload: TaskIn)</code> is a function, and the store is a Protocol seam (5.5).
+<code>complete</code> keeps its cause with <code>raise TaskError(...) from
+e</code> (5.2).</p>
+
+<p><strong>Step 3 — logs (chapter 8).</strong> The prints become events;
+structlog is configured once at startup (8.2), app-side per the logging policy
+(8.1):</p>
+
+<pre><code><span class="kw">import</span> structlog
+
+log = structlog.get_logger()
+
+<span class="cm"># in create_task, replacing print("created task:", ...):</span>
+log.info(<span class="st">"task.created"</span>, title=task.title, owner=task.owner)</code></pre>
+
+<p><strong>Step 4 — tests (chapter 6).</strong> Functions, not
+<code>TestCase</code> (6.1). The hook call moves to an injected
+<code>httpx.Client</code> with a <code>timeout=</code> (8.5), so the test fakes
+the transport instead of patching <code>requests</code> (6.5). The assertion is
+a snapshot of normalized data (6.2, via 4.5):</p>
+
+<pre><code><span class="kw">import</span> httpx
+<span class="kw">from</span> inline_snapshot <span class="kw">import</span> snapshot
+<span class="kw">from</span> pydantic <span class="kw">import</span> TypeAdapter
+
+adapter = TypeAdapter(Task)  <span class="cm"># 4.5's normalization step</span>
+
+
+<span class="kw">def</span> test_create_task_notifies() -&gt; None:
+    client = httpx.Client(
+        transport=httpx.MockTransport(
+            <span class="kw">lambda</span> req: httpx.Response(200),
+        ),
+        base_url=<span class="st">"https://hooks.example.com"</span>,
+    )
+    task = create_task(
+        store=FakeStore(),
+        client=client,
+        payload=TaskIn(title=<span class="st">"Ship report"</span>, points=3, owner=<span class="st">"ada"</span>),
+    )
+    <span class="kw">assert</span> adapter.dump_python(task, mode=<span class="st">"json"</span>) == snapshot(
+        {<span class="st">"title"</span>: <span class="st">"Ship report"</span>, <span class="st">"points"</span>: 3,
+         <span class="st">"owner"</span>: <span class="st">"ada"</span>, <span class="st">"done"</span>: <span class="kw">False</span>}
+    )</code></pre>
+
+<p>CI runs this with coverage plus <code>diff-cover</code> on the patch (6.6),
+in the matrix workflow from 1.7.</p>
+
+<p><strong>Step 5 — ship it (chapter 7).</strong> The Dockerfile is the
+two-stage build from 7.4, lockfile and non-root user included:</p>
+
+<pre><code><span class="kw">FROM</span> python:3.13-slim-bookworm <span class="kw">AS</span> builder
+<span class="kw">COPY</span> --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+<span class="kw">WORKDIR</span> /app
+<span class="kw">COPY</span> pyproject.toml uv.lock ./
+<span class="kw">RUN</span> uv sync --locked --no-dev --no-install-project
+<span class="kw">COPY</span> src ./src
+<span class="kw">RUN</span> uv sync --locked --no-dev
+
+<span class="kw">FROM</span> python:3.13-slim-bookworm
+<span class="kw">COPY</span> --from=builder /app/.venv /app/.venv
+<span class="kw">ENV</span> PATH=<span class="st">"/app/.venv/bin:$PATH"</span>
+<span class="kw">RUN</span> useradd --create-home app
+<span class="kw">USER</span> app
+<span class="kw">CMD</span> [<span class="st">"python"</span>, <span class="st">"-m"</span>, <span class="st">"tasks"</span>]</code></pre>
+
+<p>And the publish job loses its token. OIDC mints a credential that dies with
+the run; every action pins to a full SHA (7.3, 7.5):</p>
+
+<pre><code>publish:
+  needs: test
+  <span class="kw">if</span>: startsWith(github.ref, 'refs/tags/v')
+  permissions:
+    id-token: write   <span class="cm"># OIDC — no token stored anywhere</span>
+  steps:
+    - run: uv build
+    - uses: pypa/gh-action-pypi-publish@&lt;full-commit-sha&gt;</code></pre>
+
+<p>Same service, same behavior. The two trees side by side:</p>
+
+<div class="pair">
+  <div class="panel then">
+    <div class="tag">Then · 2020</div>
+<pre><code>tasks/
+├── requirements.txt
+├── setup.py
+├── tasks/
+│   ├── models.py
+│   └── api.py
+├── tests/
+│   └── test_tasks.py
+└── .github/
+    └── workflows/
+        └── publish.yml</code></pre>
+  </div>
+  <div class="panel now">
+    <div class="tag">Now</div>
+<pre><code>tasks/
+├── pyproject.toml
+├── uv.lock
+├── Dockerfile
+├── src/
+│   └── tasks/
+│       ├── models.py
+│       ├── store.py
+│       ├── api.py
+│       └── logging.py
+├── tests/
+│   ├── conftest.py
+│   └── test_tasks.py
+└── .github/
+    └── workflows/
+        └── ci.yml</code></pre>
+  </div>
+</div>
+<p>The right side is not more files for the sake of files. Most new entries
+answer a flag from C.2 directly: the lockfile takes row one, <code>ci.yml</code>
+absorbs rows seventeen through nineteen, and <code>logging.py</code> is where
+the prints went.</p>
+
+<h3 id="sC-4">C.4 The checklist</h3>
+
+<p>Print this page. It is the book as a merge-time checklist — the defaults,
+phrased as what you verify before you hit the button.</p>
+
+<ul>
+  <li><strong>Project setup.</strong> <code>pyproject.toml</code> is the only
+  config file. <code>uv.lock</code> is committed. src layout for anything that
+  ships. Ruff and mypy run in CI on every pull request.</li>
+  <li><strong>Code.</strong> Builtin generics and <code>X | None</code>.
+  pathlib at the boundaries. f-strings. <code>None</code> sentinels, never
+  <code>[]</code>. <code>isinstance</code>, never <code>type() ==</code>.
+  <code>join</code>, never a <code>+=</code> loop.</li>
+  <li><strong>Typing.</strong> Every public function annotated. Decorators use
+  <code>ParamSpec</code>. No <code>type: ignore</code> without an error code.
+  No <code>Any</code> leaking past a boundary.</li>
+  <li><strong>Data.</strong> pydantic parses at the edge; dataclasses inside.
+  SQL takes parameters, never formatting. Secrets are <code>SecretStr</code>,
+  loaded from the environment at startup.</li>
+  <li><strong>Errors.</strong> Catch what you expect, in the smallest try that
+  works. Translate with <code>raise ... from exc</code>. No bare
+  <code>except</code>, anywhere, ever.</li>
+  <li><strong>Tests.</strong> pytest functions with fixtures. Fakes at the
+  boundary — <code>MockTransport</code>, not patched internals. Snapshots of
+  normalized data. <code>diff-cover</code> gates the patch at ~80%.</li>
+  <li><strong>Shipping.</strong> The git tag derives the version. Publishing is
+  trusted (OIDC), never a stored token. Actions pin to a full SHA.
+  <code>uv audit</code> and zizmor run in CI. The image is two stages and does
+  not run as root.</li>
+  <li><strong>Running.</strong> structlog emits JSON in prod, pretty console in
+  dev. Every network call carries a <code>timeout=</code>. Nobody optimizes
+  without a profile.</li>
+</ul>
+
+<p>The 2020 listing was not bad work. It was 2020 work, and it passed every
+review 2020 gave it. What changed is the baseline: six years of defaults, each
+one cheap to adopt and expensive to skip. You now have all of them, and one
+table to check them with.</p>
+
+</section>
+
+
+
+</article>
+</main>
+
+</body>
+</html>

@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Harness 架构解析 — 一切皆插件的 Agent 运行时</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --ink-2: #3d4451;
+    --ink-3: #6b7280;
+    --line: #e3e6eb;
+    --bg: #ffffff;
+    --bg-soft: #f6f7f9;
+    --bg-code: #f2f4f8;
+    --accent: #4d6bfe;
+    --accent-soft: #eef1ff;
+    --green: #0f9d6c;
+    --green-soft: #e8f7f1;
+    --orange: #d9730d;
+    --orange-soft: #fdf1e3;
+    --purple: #7c53c9;
+    --purple-soft: #f3edfc;
+    --red: #d64545;
+    --red-soft: #fdecec;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.75;
+    font-size: 16px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+
+  /* ---------- header ---------- */
+  header.hero {
+    border-bottom: 1px solid var(--line);
+    padding: 72px 0 48px;
+    background: linear-gradient(180deg, #f7f8ff 0%, #ffffff 100%);
+  }
+  .hero .kicker {
+    font-family: var(--mono); font-size: 13px; color: var(--accent);
+    letter-spacing: .12em; text-transform: uppercase; margin-bottom: 16px;
+  }
+  .hero h1 { font-size: 40px; line-height: 1.25; letter-spacing: -0.02em; font-weight: 750; }
+  .hero .sub { margin-top: 16px; font-size: 18px; color: var(--ink-2); max-width: 760px; }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px; background: var(--line); border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden; margin-top: 36px;
+  }
+  .meta-cell { background: #fff; padding: 16px 18px; }
+  .meta-cell .v { font-family: var(--mono); font-size: 22px; font-weight: 600; color: var(--ink); }
+  .meta-cell .k { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+
+  /* ---------- nav ---------- */
+  nav.toc {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav.toc .wrap { display: flex; gap: 4px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; }
+  nav.toc a {
+    font-size: 13px; color: var(--ink-2); text-decoration: none; white-space: nowrap;
+    padding: 5px 12px; border-radius: 999px; border: 1px solid transparent;
+  }
+  nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- sections ---------- */
+  section { padding: 56px 0 8px; }
+  h2 {
+    font-size: 27px; letter-spacing: -0.01em; font-weight: 720; margin-bottom: 8px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  h2 .no { font-family: var(--mono); font-size: 14px; color: var(--accent); font-weight: 500; }
+  h3 { font-size: 19px; font-weight: 680; margin: 36px 0 10px; }
+  h4 { font-size: 16px; font-weight: 650; margin: 24px 0 8px; }
+  p { margin: 10px 0; color: var(--ink-2); }
+  p.lead { font-size: 17px; color: var(--ink); }
+  ul, ol { margin: 10px 0 10px 22px; color: var(--ink-2); }
+  li { margin: 4px 0; }
+  strong { color: var(--ink); }
+  code {
+    font-family: var(--mono); font-size: .875em;
+    background: var(--bg-code); border: 1px solid var(--line);
+    padding: 1px 6px; border-radius: 5px; color: #243b8b;
+    word-break: break-word;
+  }
+  a { color: var(--accent); }
+  .note {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 18px; border-radius: 0 8px 8px 0; margin: 18px 0;
+    font-size: 14.5px; color: var(--ink-2);
+  }
+  .note b { color: var(--accent); }
+
+  /* ---------- cards ---------- */
+  .card {
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px 24px; margin: 16px 0; background: #fff;
+  }
+  .card h4 { margin-top: 0; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* ---------- diagrams (pure CSS) ---------- */
+  .diagram {
+    border: 1px solid var(--line); border-radius: 14px;
+    background: var(--bg-soft); padding: 28px; margin: 22px 0; overflow-x: auto;
+  }
+  .diagram .cap {
+    font-size: 13px; color: var(--ink-3); margin-top: 16px; text-align: center;
+    font-family: var(--mono);
+  }
+  .layer {
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    border: 1px solid var(--line); background: #fff;
+  }
+  .layer .lt {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .boxes { display: flex; flex-wrap: wrap; gap: 7px; }
+  .bx {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.4;
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 5px 11px; background: var(--bg-soft); color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .bx b { font-weight: 600; color: var(--ink); display: block; font-size: 12.5px; }
+  .bx small { color: var(--ink-3); font-size: 11px; }
+  .bx.c-blue   { background: var(--accent-soft); border-color: #c4cffe; color: #2c44b8; }
+  .bx.c-green  { background: var(--green-soft);  border-color: #b7e4d2; color: #0a6b4a; }
+  .bx.c-orange { background: var(--orange-soft); border-color: #f3d3ac; color: #96510a; }
+  .bx.c-purple { background: var(--purple-soft); border-color: #d9c8f2; color: #5a379c; }
+  .bx.c-red    { background: var(--red-soft);    border-color: #f3c1c1; color: #a13131; }
+  .bx.c-solid  { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .layer-arrow {
+    text-align: center; color: var(--ink-3); font-size: 15px; line-height: 1;
+    margin: -4px 0 6px; user-select: none;
+  }
+
+  /* ---------- tables ---------- */
+  .tbl-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 650; background: var(--bg-soft);
+    padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  td { padding: 8px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 12px; }
+
+  /* ---------- bar chart ---------- */
+  .bars { margin: 18px 0; }
+  .bar-row { display: grid; grid-template-columns: 150px 1fr 70px; align-items: center; gap: 12px; margin: 5px 0; }
+  .bar-row .bl { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); text-align: right; }
+  .bar-row .bt { height: 18px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), #8299ff); min-width: 2px; }
+  .bar-row .bv { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+
+  /* ---------- sequence flow ---------- */
+  .seq { display: flex; flex-direction: column; gap: 0; min-width: 640px; }
+  .seq-row { display: grid; grid-template-columns: 120px 26px 1fr; gap: 12px; align-items: start; }
+  .seq-who { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--ink-3); padding-top: 7px; }
+  .seq-rail { position: relative; width: 26px; align-self: stretch; }
+  .seq-rail::before { content: ""; position: absolute; left: 12px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+  .seq-row:last-child .seq-rail::before { bottom: auto; height: 14px; }
+  .seq-dot {
+    position: absolute; left: 7px; top: 9px; width: 12px; height: 12px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--accent); z-index: 1;
+  }
+  .seq-dot.durable { border-color: var(--green); }
+  .seq-dot.live { border-color: var(--orange); }
+  .seq-body { padding: 4px 0 14px; }
+  .seq-evt { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--ink); }
+  .seq-evt .tag { font-weight: 500; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; margin-left: 8px; vertical-align: 1px; }
+  .tag.t-durable { background: var(--green-soft); color: var(--green); }
+  .tag.t-live { background: var(--orange-soft); color: var(--orange); }
+  .tag.t-wf { background: var(--purple-soft); color: var(--purple); }
+  .seq-desc { font-size: 13px; color: var(--ink-3); margin-top: 1px; }
+
+  /* ---------- code ---------- */
+  pre {
+    background: #14161c; color: #d8dee9; border-radius: 10px;
+    padding: 18px 22px; overflow-x: auto; margin: 16px 0;
+    font-family: var(--mono); font-size: 12.8px; line-height: 1.65;
+  }
+  pre .c { color: #697386; } pre .k { color: #8ab4ff; } pre .s { color: #a8d3a0; } pre .f { color: #e5c07b; }
+
+  /* ---------- pipeline flowchart ---------- */
+  .pipe { display: flex; flex-direction: column; align-items: stretch; gap: 0; min-width: 620px; }
+  .pipe-node {
+    border: 1px solid var(--line); border-radius: 9px; background: #fff;
+    padding: 10px 16px; font-size: 13px;
+  }
+  .pipe-node .pn-t { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  .pipe-node .pn-d { color: var(--ink-3); font-size: 12.5px; margin-top: 2px; }
+  .pipe-node.n-durable { border-left: 4px solid var(--green); }
+  .pipe-node.n-wf { border-left: 4px solid var(--purple); }
+  .pipe-node.n-guard { border-left: 4px solid var(--red); }
+  .pipe-node.n-plain { border-left: 4px solid var(--accent); }
+  .pipe-arrow { text-align: center; color: var(--ink-3); padding: 3px 0; font-size: 13px; user-select: none; }
+  .pipe-arrow small { font-size: 11px; }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 72px;
+    padding: 32px 0 56px; color: var(--ink-3); font-size: 13px;
+  }
+  .kbd-legend { display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--ink-3); margin-top:10px; }
+  .kbd-legend span { display:inline-flex; align-items:center; gap:6px; }
+  .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">Architecture Deep Dive · deepseek-ai/deepseek-harness</div>
+    <h1>DeepSeek Harness：一切皆插件的 Agent 运行时</h1>
+    <p class="sub">一个构建在 vendored Cordis 之上的插件化 Agent Harness。模型适配器、工具注册表、会话日志乃至 Agent 主循环本身，全部是可在配置期替换的插件。</p>
+    <div class="meta-grid">
+      <div class="meta-cell"><div class="v">219</div><div class="k">workspace 包（packages/）</div></div>
+      <div class="meta-cell"><div class="v">49</div><div class="k">包组（capability group）</div></div>
+      <div class="meta-cell"><div class="v">~198k</div><div class="k">TypeScript 源码行（src/）</div></div>
+      <div class="meta-cell"><div class="v">~2.7k</div><div class="k">vendored Cordis 核心行数</div></div>
+      <div class="meta-cell"><div class="v">ESM</div><div class="k">pnpm monorepo · Node ^22.19 ‖ ≥24</div></div>
+      <div class="meta-cell"><div class="v">0.1.0-rc</div><div class="k">开发者预览阶段</div></div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#overview">总览</a>
+    <a href="#abstractions">核心抽象</a>
+    <a href="#turnflow">Turn 数据流</a>
+    <a href="#toolpipe">工具管线</a>
+    <a href="#seams">能力缝地图</a>
+    <a href="#codebase">代码库脉络</a>
+    <a href="#boot">启动链路</a>
+    <a href="#web">Web 架构</a>
+    <a href="#takeaway">设计启示</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============================== 总览 ============================== -->
+<section id="overview">
+  <h2><span class="no">01</span>总览：一张分层图</h2>
+  <p class="lead">DeepSeek Harness（命令行 <code>dsh</code>）的定位是 <strong>agent harness</strong>——不是 Agent 产品本身，而是驱动 Agent 的运行时骨架：会话管理、提示词装配、工具执行、模型适配、持久化、沙箱、审批、Web UI，全部以插件形式挂在一棵 Cordis 插件树上。它的第一性原理写在根 <code>AGENTS.md</code> 里：<strong>everything is a plugin</strong>。</p>
+  <p>整个系统没有"特权核心"。所谓核心脊柱（session / tools / agent-loop）也只是第一批被挂载的插件——可以被 patch 层整体替换。这带来一个直接的工程后果：<strong>扩展 dsh 不需要改代码，改组合即可</strong>。</p>
+
+  <div class="diagram">
+    <div class="layer">
+      <div class="lt" style="color:var(--ink-3)">入口层 apps/ — 薄壳 launcher</div>
+      <div class="boxes">
+        <div class="bx"><b>apps/cli</b><small>dsh bin：解析 --profile，分流</small></div>
+        <div class="bx"><b>apps/web</b><small>浏览器 SPA 产物（Vite build）</small></div>
+      </div>
+    </div>
+    <div class="layer-arrow">▼ 组合（compose）</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--orange)">组合层 boot/ + bundle/ — profile 即插件树</div>
+      <div class="boxes">
+        <div class="bx c-orange"><b>app-boot</b><small>profile 解析 · patch 层叠 · boot()</small></div>
+        <div class="bx c-orange"><b>dsh-base</b><small>451 行 YAML / 78 条目：LLM/工具/持久化/沙箱/审批</small></div>
+        <div class="bx c-orange"><b>dsh-web-app</b><small>+ host 传输 / SPA / 27 个 ui-* 行</small></div>
+        <div class="bx c-orange"><b>dsh-headless</b><small>+ 一次性 runner，无 server</small></div>
+        <div class="bx"><b>cordis.patch.yml</b><small>profile 层 / home 层 / --patch 覆盖</small></div>
+      </div>
+    </div>
+    <div class="layer-arrow">▼ 挂载（mount）</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--accent)">核心脊柱 core/ — 产品 API 主线</div>
+      <div class="boxes">
+        <div class="bx c-blue"><b>session</b><small>ctx.sessions · 事件溯源日志</small></div>
+        <div class="bx c-blue"><b>system-prompt</b><small>ctx.systemPrompt · 提示词装配</small></div>
+        <div class="bx c-blue"><b>tools</b><small>ctx.tools · 工具注册 + 执行管线</small></div>
+        <div class="bx c-blue"><b>agent</b><small>ctx.agents · Agent 契约 + inbox</small></div>
+        <div class="bx c-blue"><b>agent-loop</b><small>ctx.agentLoop · React 循环驱动</small></div>
+        <div class="bx c-blue"><b>scope</b><small>per-agent 作用域原语（库）</small></div>
+      </div>
+    </div>
+    <div class="layer-arrow">▼ 提供 / 消费（provide / inject）</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--green)">能力缝 capability seams — 三角色可替换能力</div>
+      <div class="boxes">
+        <div class="bx c-green">llm · shell · fs · subprocess</div>
+        <div class="bx c-green">sandbox · terminal · lsp · web</div>
+        <div class="bx c-green">subagent · workflow · jobs · compaction</div>
+        <div class="bx c-green">settings · credentials · storage · session-persistence</div>
+        <div class="bx c-green">skill · approval · code-runtime · spill …</div>
+      </div>
+    </div>
+    <div class="layer-arrow">▼ 继承（extend）</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--purple)">基座 vendor/cordis — vendored 插件框架（~2.7k 行核心）</div>
+      <div class="boxes">
+        <div class="bx c-purple"><b>Context</b><small>服务容器（Proxy）</small></div>
+        <div class="bx c-purple"><b>Service</b><small>插件基类</small></div>
+        <div class="bx c-purple"><b>events</b><small>emit / waterfall / serial / parallel</small></div>
+        <div class="bx c-purple"><b>fiber + effect()</b><small>可逆注册</small></div>
+        <div class="bx c-purple"><b>loader + include</b><small>cordis.yml 挂载</small></div>
+        <div class="bx c-purple"><b>schemastery</b><small>Config 校验</small></div>
+      </div>
+    </div>
+    <div class="cap">图 1 · 分层视图。每层只通过声明式组合与服务注入与下层交互，不存在越层 import 硬编码。</div>
+  </div>
+
+  <p>两侧还有三个"旁路"子系统没有画进主链：<strong>session/ 数据平面</strong>（JSONL/SQLite 持久化、projection、标题、telemetry）、<strong>api/ + typert/</strong>（类型图驱动的 RPC 网关，Host↔Browser 通信）、<strong>interaction/</strong>（审批、人类命令、ask-user）。它们同样以插件身份挂树，后文详述。</p>
+</section>
+
+<!-- ============================== 核心抽象 ============================== -->
+<section id="abstractions">
+  <h2><span class="no">02</span>核心抽象</h2>
+
+  <h3>2.1 Cordis 五要素</h3>
+  <p>dsh 的一切都建立在 vendored Cordis 之上（源码钉在 <code>vendor/</code>，上游是 <a href="https://github.com/cordiverse/cordis">cordiverse/cordis</a>）。它的模型可以压缩成五个概念：</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr><th style="width:180px">概念</th><th>语义</th><th style="width:300px">dsh 中的体现</th></tr>
+      <tr><td><code>Plugin</code></td><td>实现 Service 的对象：可以是带 <code>inject</code>/<code>apply(ctx)</code> 的函数，也可以是 <code>Service</code> 子类。</td><td>每个 <code>@deepseek-ai/dsh-*</code> 包默认导出一个插件。</td></tr>
+      <tr><td><code>Context</code></td><td>服务仓库。服务以稳定键 <code>ctx.&lt;key&gt;</code> 注册，消费者按键取用而非 import 具体实现。</td><td><code>ctx.tools</code>、<code>ctx.llm</code>、<code>ctx.sessions</code> 等约 50 个键。</td></tr>
+      <tr><td><code>inject</code></td><td>声明服务依赖。依赖未就绪则挂载等待——<strong>启动顺序由依赖图推导，而不是手工编排</strong>。</td><td><code>agent-loop</code> inject 五个服务后才就绪。</td></tr>
+      <tr><td>Typed Events</td><td>经 TS declaration merging 声明的事件，按四种模式分发：<code>emit</code>（观察）、<code>waterfall</code>（链式改写，须 <code>next()</code> 委托）、<code>serial</code>（保序）、<code>parallel</code>（并发）。</td><td>全部拦截点：prompt 装配、请求构造、工具执行、turn 终止。</td></tr>
+      <tr><td>Reversible Effects</td><td>注册即效果（<code>ctx.effect()</code>），返回 disposer；插件卸载/热重载时自动回卷。</td><td>工具 schema、prompt section、adapter 全部可热拔插。</td></tr>
+    </table>
+  </div>
+
+  <div class="note"><b>waterfall 是 dsh 最重要的扩展机制。</b>它是 around-middleware：监听器收到 <code>(...args, next)</code>，调 <code>next()</code> 则委托下游并透传返回值，直接返回则短路。权限拒绝、请求改写、重试包装都靠短路或包裹实现。规约明确要求：<em>waterfall listener 必须调 next()，否则即为有意短路</em>。</div>
+
+  <h3>2.2 Profile 与 Bundle：组合优先于代码</h3>
+  <p>一个运行中的 <code>dsh</code> 实例 = 一棵在 boot 时由<strong>有序层叠</strong>拼出的插件树。层叠顺序固定：</p>
+  <pre><span class="c"># 层叠顺序（后者覆盖前者，按 row id 定位整条替换）</span>
+<span class="k">bundle 层</span>（profile manifest 中 dsh.profile.bundles 列出的顺序）
+  → <span class="k">profile 的 cordis.patch.yml</span>
+  → <span class="k">$DSH_HOME/cordis.patch.yml</span>（home 级，HMR 热重载）
+  → <span class="k">--patch</span> 命令行覆盖
+  → 派生补丁（telemetry 开关等）</pre>
+  <p><strong>Bundle</strong> 是分发单元：一个普通 npm 包，在 <code>package.json</code> 里声明 <code>dsh.bundle.patch</code> 指向一个 YAML patch 文件。<code>dsh-base</code> 是所有 profile 的第一层，451 行 YAML、78 个条目，涵盖模型适配器、工具集、持久化、沙箱与审批策略、设置、凭据、telemetry；<code>dsh-web-app</code> 在其上加 Web 应用（host 传输 + SPA + 27 个 ui-* 行），并<strong>把 24 个 agent 面插件从进程级撤下、改由 per-session preset 挂载</strong>；<code>dsh-headless</code> 只加 3 行：一个一次性 runner，无 server。</p>
+  <p>任何一层打印出来的 row 都可以被上层 patch 替换——<code>dsh --profile web --dump-config</code> 就是系统的"组合真相"。</p>
+
+  <h3>2.3 Capability Seam：三角色能力缝</h3>
+  <p>可替换能力的标准形态叫 <strong>seam</strong>，由三个角色构成，缺一不可：</p>
+  <div class="grid-3">
+    <div class="card" style="border-top:3px solid var(--accent)">
+      <h4>Service Definition</h4>
+      <p>声明接口与 <code>ctx.&lt;key&gt;</code> 的 Cordis <code>Service</code>（抽象类或注册表类，<strong>不是</strong> TS interface），同时拥有词汇类型。</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--green)">
+      <h4>Service Provider</h4>
+      <p>实现方。可多个并存、按配置选择。例如 <code>ctx.shell</code> 有 bash-local / bash-sandbox / pwsh-local / pwsh-sandbox 四个 provider。</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--orange)">
+      <h4>Consumer</h4>
+      <p>消费方，通常是 model-facing 工具。例如 <code>dsh-tool-bash</code> 只依赖 <code>ctx.shell</code> 抽象，不知道背后是本地还是沙箱。</p>
+    </div>
+  </div>
+  <p>设计纪律：<strong>扩展插件依赖 Service Definition，永不依赖具体 provider</strong>。换一个 provider，整个产品的行为随之切换——把 <code>ctx.fs</code> 与 <code>ctx.subprocess</code> 指向 E2B 远程沙箱，Bash、PTY、LSP 会一起迁移到远端，无需 fork 任何 provider。</p>
+
+  <h3>2.4 Session Log：事件溯源 + "模型可见即可回放"</h3>
+  <p><code>packages/core/session</code> 是系统的事实源：<strong>append-only 的 <code>SessionEvent</code> 日志</strong>（<code>turn/start</code>、<code>user/message</code>、<code>assistant/chunk</code>、<code>tool/call</code>…），加上由日志派生的模型消息历史 <code>deriveMessages()</code>（带增量缓存）。</p>
+  <ul>
+    <li><strong>model-visible ⟺ logged</strong>：任何进入模型请求的内容必须能从日志重建，这是有运行时不变量（invariant）断言的。新增一种模型可见输入 = 扩展 <code>SessionEventMap</code>（declaration merging）。</li>
+    <li><strong>Surface 机制</strong>：<code>SurfaceManager</code> 维护有序节点序列，compaction 用 <code>{op:'replace', start, end}</code> 遮蔽旧节点，从而"改写历史呈现"而不篡改日志本身。</li>
+    <li><strong>持久化是插件</strong>：session 包自己只订阅 <code>session/event</code> 广播；落盘由 <code>session-persistence-jsonl</code> / <code>-sqlite</code> 两个 provider 竞争同一 seam。Fork、resume、transcript、telemetry 全部从同一事件流派生。</li>
+  </ul>
+
+  <h3>2.5 Agent、Inbox 与 Turn/Step 循环层级</h3>
+  <p><code>packages/core/agent</code> 定义公共契约（<code>Agent</code> 接口、<code>ctx.agents</code> 注册表、<code>agent/*</code> 事件、双队列 inbox），<strong>刻意不含驱动逻辑</strong>；驱动实现 <code>ReactLoopAgent</code> 在 <code>agent-loop</code> 包，是可以整体替换的。对外交互收敛到一小组方法：</p>
+  <div class="tbl-wrap">
+    <table>
+      <tr><th style="width:200px">Agent 方法</th><th>语义</th></tr>
+      <tr><td><code>followup(msg)</code></td><td>排入 next-turn 队列并唤醒 driver——普通用户输入。</td></tr>
+      <tr><td><code>steer(msg)</code></td><td>排入 next-step 队列并唤醒——在 step 边界插入引导。</td></tr>
+      <tr><td><code>inject(msg)</code></td><td>排入 next-step 但不唤醒——上下文注入，等下一条唤醒消息一起被 claim。</td></tr>
+      <tr><td><code>cancel(cause)</code> / <code>whenIdle()</code></td><td>取消与空闲等待。</td></tr>
+    </table>
+  </div>
+  <p>循环层级有严格术语：<strong>step</strong> = 一次模型请求 + 其引发的工具执行；<strong>turn</strong> = 一批已接纳输入的排空（0..n 个 step）；<strong>round</strong> = 外层策略迭代（goal round / Ralph round）。inbox 的每次变更先记 <code>agent/inbox/spliced</code> 会话事件再改内存投影，因此 inbox 状态同样可回放。</p>
+
+  <h3>2.6 Scope：per-agent 的注册可见性</h3>
+  <p><code>packages/core/scope</code>（纯库，约 560 行）提供横切原语：一个贡献（工具、prompt section、变量、监听器）要么是<strong>全局</strong>的，要么<strong>scoped 到某个 scope key</strong>——harness 约定"活 Agent 实例就是自己 scope 的 key"。两个机制：</p>
+  <ul>
+    <li><strong>ScopedLayers / shadowing</strong>：注册表存储分全局层 + 按 key 的 overlay 层；同名 scoped 注册遮蔽全局项（most-specific-wins）。这就是 per-agent persona 与 per-agent 工具变体的实现基础。</li>
+    <li><strong>Scoped dispatch</strong>：关于某 agent 活动的事件，用该 agent 的载体（carrier）分发——未打标的监听器全局收，打标的只收自己 key（及后代）的事件。<code>agent.ctx</code> 上的注册同时获得可见性与生命周期。</li>
+  </ul>
+  <p>加上 <code>tools.restrict</code>（按交集过滤全局工具集，被过滤的工具在 prompt 与执行两侧同时"不存在"），dsh 用同一套原语实现了 agent preset、子 agent 差异化能力、plan mode 工具门禁。</p>
+</section>
+
+<!-- ============================== Turn 数据流 ============================== -->
+<section id="turnflow">
+  <h2><span class="no">03</span>Turn 数据流：一次用户输入的完整旅程</h2>
+  <p class="lead">驱动主循环是 <code>ReactLoopAgent.kick()</code>（<code>packages/core/agent-loop/src/agent.ts</code>，496 行）：<code>while (await this.turn())</code>。下面把 <code>docs/agent-lifecycle.md</code> 的时序图压成一条事件链。<span style="color:var(--green)">● 绿点 = 持久会话事件（可回放）</span>，<span style="color:var(--orange)">● 橙点 = 活的协调事件</span>，<span style="color:var(--purple)">◆ 紫标 = waterfall 拦截点</span>。</p>
+
+  <div class="diagram">
+    <div class="seq">
+      <div class="seq-row"><div class="seq-who">User → Agent</div><div class="seq-rail"><div class="seq-dot live"></div></div>
+        <div class="seq-body"><div class="seq-evt">followup(content)<span class="tag t-live">agent/inbox/inserted</span></div>
+        <div class="seq-desc">入 next-turn 队列，先记 agent/inbox/spliced 会话事件再改内存；唤醒 driver，agent/status → running</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Session</div><div class="seq-rail"><div class="seq-dot durable"></div></div>
+        <div class="seq-body"><div class="seq-evt">turn/start<span class="tag t-durable">durable</span></div>
+        <div class="seq-desc">claim next-step 输入 + 一条排队消息（agent/inbox/claimed）</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Hooks</div><div class="seq-rail"><div class="seq-dot live"></div></div>
+        <div class="seq-body"><div class="seq-evt">agent/pre-step<span class="tag t-wf">waterfall</span></div>
+        <div class="seq-desc">权威裁决：reject 或 enter(messages)。被拒绝/首条为空 → 关掉一个不耗 step 的空 turn（日志仍记录尝试）。compaction 在压力时从这里介入</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Session</div><div class="seq-rail"><div class="seq-dot durable"></div></div>
+        <div class="seq-body"><div class="seq-evt">step/start · user/message<span class="tag t-durable">durable</span></div>
+        <div class="seq-desc">进入的消息落账；deriveMessages() 从日志推导模型历史</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Prompt</div><div class="seq-rail"><div class="seq-dot live"></div></div>
+        <div class="seq-body"><div class="seq-evt">system-prompt/assemble<span class="tag t-wf">waterfall</span></div>
+        <div class="seq-desc">汇总插件注册的 sections / contexts / tool schemas / variables，按 scope 分层合并、排序、插值</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → LLM</div><div class="seq-rail"><div class="seq-dot live"></div></div>
+        <div class="seq-body"><div class="seq-evt">agent/request → llm/stream<span class="tag t-wf">waterfall ×2</span></div>
+        <div class="seq-desc">请求构造可拦截；llm/stream 包装每次流式调用（重试、replay、路由挂这里）</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">LLM → Session</div><div class="seq-rail"><div class="seq-dot durable"></div></div>
+        <div class="seq-body"><div class="seq-evt">assistant/chunk* → assistant/message<span class="tag t-durable">durable</span></div>
+        <div class="seq-desc">原始 chunk 全量落账（保 UI/回放保真）；message 记录 usage 与 sourceEventSeqs。失败则走 agent/request-error waterfall 决定重试或保留原错误</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Tools</div><div class="seq-rail"><div class="seq-dot durable"></div></div>
+        <div class="seq-body"><div class="seq-evt">tool/call* → tool/result*<span class="tag t-durable">durable</span></div>
+        <div class="seq-desc">按 executionMode 分组：exclusive 屏障 / parallel 有界滚动池（默认并发 10）；管线见下节</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Session</div><div class="seq-rail"><div class="seq-dot durable"></div></div>
+        <div class="seq-body"><div class="seq-evt">step/end<span class="tag t-durable">durable</span></div>
+        <div class="seq-desc">工具欠新请求，或 next-step 输入到达 → claim → 下一 step（回到 pre-step）</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Hooks</div><div class="seq-rail"><div class="seq-dot live"></div></div>
+        <div class="seq-body"><div class="seq-evt">agent/turn-stopping<span class="tag t-live">serial</span></div>
+        <div class="seq-desc">自然停止且 inbox 空时的终末检查点——goal 驱动、Ralph 等 continuation 策略在此决定继续或放行</div></div></div>
+
+      <div class="seq-row"><div class="seq-who">Driver → Session</div><div class="seq-rail"><div class="seq-dot durable"></div></div>
+        <div class="seq-body"><div class="seq-evt">turn/end<span class="tag t-durable">durable</span></div>
+        <div class="seq-desc">agent/status → idle，等待下一次唤醒</div></div></div>
+    </div>
+    <div class="cap">图 2 · Turn/Step 事件链。SDK/UI 要回放数据就消费 session/event；要介入协调就挂 agent/* 或 waterfall。</div>
+  </div>
+
+  <p>这条链上有三个值得记住的设计决策：</p>
+  <ul>
+    <li><strong>三个域的事件分离</strong>：<code>turn/*</code>、<code>step/*</code>、<code>user/message</code>、<code>assistant/*</code>、<code>tool/*</code> 是持久事实；<code>agent/*</code> 携带活 Agent 做协调；<code>tools/*</code>、<code>fs/*</code> 等能力事件挂策略与适配器。选哪个域是大多数改动的第一个决策。</li>
+    <li><strong>被工具结果触发的新请求仍是同一 turn</strong>：turn 的边界由"还欠不欠"决定，而不是由模型调用次数决定。</li>
+    <li><strong>空 turn 也落账</strong>：pre-step 拒绝会关闭一个未耗 step 的 turn——尝试本身是可回放的事实。</li>
+  </ul>
+</section>
+
+<!-- ============================== 工具管线 ============================== -->
+<section id="toolpipe">
+  <h2><span class="no">04</span>工具执行管线：策略全部外挂</h2>
+  <p class="lead"><code>ctx.tools</code>（<code>packages/core/tools/src/index.ts</code>，1946 行）是工具注册表 + 受守护的执行管线。权限、审批、超时、重试、结果改写、溢出落盘，<strong>没有一个写在循环里</strong>——全部是三个 waterfall + 单调 guard + 一个审批 seam 上的监听器。</p>
+
+  <div class="diagram">
+    <div class="pipe">
+      <div class="pipe-node n-durable"><div class="pn-t">tool/call</div><div class="pn-d">会话事件，执行前落账 → UI 挂起卡片 presentCall(args)</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-wf"><div class="pn-t">tools/pre-execute <small>waterfall</small></div><div class="pn-d">hooks / 权限 / 沙箱策略：allow · deny · ask</div></div>
+      <div class="pipe-arrow">▼ <small>ask → ctx.approval 一次性裁决（无应答者 fail-closed 为 unavailable）</small></div>
+      <div class="pipe-node n-guard"><div class="pn-t">monotonic guards</div><div class="pn-d">注册的守卫只可 deny 或弃权，不可放行逆转；身份类决策受保护、不可被重排</div></div>
+      <div class="pipe-arrow">▼ allow</div>
+      <div class="pipe-node n-wf"><div class="pn-t">tools/execute <small>waterfall · around-dispatch</small></div><div class="pn-d">超时、重试、metrics 包裹 dispatch；内层默认 next 是工具 execute() 本体（tool-fs 的写/改会再过 fs/write-intent 门）</div></div>
+      <div class="pipe-arrow">▼ <small>deny 也走这里——被拒的调用同样产生结果</small></div>
+      <div class="pipe-node n-wf"><div class="pn-t">tools/post-execute <small>waterfall</small></div><div class="pn-d">accept / block / replace / additionalContext（spill-policy 在此把超大结果落盘换 locator）</div></div>
+      <div class="pipe-arrow">▼ <small>任何环节抛异常 → 外层归一化为 isError 结果快照</small></div>
+      <div class="pipe-node n-plain"><div class="pn-t">finalizeContent</div><div class="pn-d">ToolDefinition 自有的最后内容不变量（纯函数、同步）</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-plain"><div class="pn-t">tools/result <small>emit</small></div><div class="pn-d">冻结的权威结果，同步通知（无损 JSON 快照）</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-durable"><div class="pn-t">tool/result</div><div class="pn-d">单一 model-facing 结果落账 → UI 完成卡片；批齐后 additionalContexts 按 FIFO 注入为后续 user/message</div></div>
+    </div>
+    <div class="cap">图 3 · 工具管线。调度侧由 TOOL_RUNTIME_SCHEDULER 暴露 prepare/dispatch/finalize 分段接口，agent-loop 得以 pre/post 保序、dispatch 重叠并行。</div>
+  </div>
+
+  <p><strong>Code Mode</strong> 是管线的压力测试：<code>run_code</code> 传输工具把它序列化的子调用也送进同一管线（子调用携带父 token、记 <code>tool/code-dispatch</code>、拒绝以 binding rejection 返回），证明"策略外挂"在嵌套执行下依然成立。工具定义本身（<code>ToolDefinition</code>）约定：<code>presentCall/presentResult</code> 是 args 的纯函数，UI 渲染意图（<code>generic</code>/<code>terminal</code>/<code>diff</code>）在设计期定死——展示不属于运行时策略。</p>
+</section>
+
+<!-- ============================== 能力缝地图 ============================== -->
+<section id="seams">
+  <h2><span class="no">05</span>能力缝地图：ctx 键即产品表面</h2>
+  <p class="lead">全仓约 50 个 <code>ctx.*</code> 服务键，每个键是一个可替换点。下表摘录关键 seam（完整版由 <code>scripts/gen-doc-graphs.ts</code> 生成，CI 保鲜门禁）。</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <tr><th>ctx 键</th><th>Service Definition</th><th>Provider（实现）</th><th>Consumer（消费方）</th></tr>
+      <tr><td><code>ctx.llm</code></td><td><code>llm</code></td><td>llm-deepseek · llm-pi-ai · llm-replay(测试)</td><td>agent-loop · compaction-basic</td></tr>
+      <tr><td><code>ctx.shell</code></td><td><code>shell</code></td><td>bash-local · bash-sandbox · pwsh-local · pwsh-sandbox</td><td>tool-bash · tool-pwsh · hooks-*</td></tr>
+      <tr><td><code>ctx.fs</code></td><td><code>fs</code></td><td>fs-local · fs-sandbox · fs-e2b</td><td>tool-fs</td></tr>
+      <tr><td><code>ctx.subprocess</code></td><td><code>subprocess</code></td><td>subprocess-local · subprocess-e2b</td><td>bash-* · terminal-bash · lsp-stdio · subagent-{acp,codex,claude-code}</td></tr>
+      <tr><td><code>ctx.sandbox</code></td><td><code>sandbox</code></td><td>sandbox-local（bwrap/Landlock/Seatbelt）</td><td>bash-sandbox · terminal-bash</td></tr>
+      <tr><td><code>ctx.subagents</code></td><td><code>subagent</code></td><td>spawn-in-process · fork-in-process · acp · codex · claude-code · dsh-sdk</td><td>tool-subagent · tool-subagent-control · tool-ralph</td></tr>
+      <tr><td><code>ctx.sessionPersistence</code></td><td><code>session-persistence</code></td><td>jsonl · sqlite</td><td>agent-loop · session-query · hooks-* …</td></tr>
+      <tr><td><code>ctx.compaction</code></td><td><code>compaction</code></td><td>compaction-basic</td><td>（事件驱动，无 model-facing 工具）</td></tr>
+      <tr><td><code>ctx.web</code></td><td><code>web</code></td><td>search-{deepseek,exa,perplexity} · fetch-http</td><td>tool-web</td></tr>
+      <tr><td><code>ctx.jobs</code></td><td><code>jobs</code></td><td>jobs-local</td><td>tool-jobs · tool-bash · tool-subagent …</td></tr>
+      <tr><td><code>ctx.settings</code> / <code>ctx.credentials</code></td><td>settings / credentials</td><td>settings-file / credentials-local</td><td>llm-deepseek · llm-pi-ai · apiproxy</td></tr>
+      <tr><td><code>ctx.approval</code></td><td>approval</td><td>（监听器应答，如 ACP 桥）</td><td>tools · tool-bash</td></tr>
+    </table>
+  </div>
+
+  <p>读这张表的方式：<strong>横向看替换面</strong>（换 provider 不动 consumer），<strong>纵向看组合爆炸</strong>——例如 <code>ctx.subprocess</code> 换成 E2B provider 后，bash、terminal、LSP、三种 out-of-process 子代理后端同时迁到远程 Linux 沙箱，因为它们全都经由此缝 spawn。subagent seam 最能说明接口的弹性：同一个 <code>SubagentProvider.start(request)</code> 背后，可以是进程内新建空会话、带父历史前缀的 fork、stdio JSON-RPC 上的完整 harness 实例（dsh-sdk）、ACP 协议的任意外部 agent、Claude SDK、Codex app-server。</p>
+</section>
+
+<!-- ============================== 代码库脉络 ============================== -->
+<section id="codebase">
+  <h2><span class="no">06</span>代码库脉络</h2>
+
+  <h3>6.1 Monorepo 布局</h3>
+  <pre><span class="c"># pnpm workspaces，全部 ESM（"type": "module"），npm scope 统一 @deepseek-ai/dsh-*</span>
+<span class="k">vendor/</span>     vendored Cordis 及插件（cordis, loader, include, schemastery, hmr, group, timer…）
+<span class="k">packages/</span>   49 个组、219 个包，路径 packages/&lt;group&gt;/&lt;pkg&gt;/
+<span class="k">apps/</span>       cli（dsh bin）+ web（SPA 构建产物）
+<span class="k">python/</span>     Python SDK 与捆绑运行时
+<span class="k">native/</span>     landlock-run node addon（Linux 沙箱原生件）
+<span class="k">examples/</span>   可直接跑的 cordis.yml 组合叶（headless / acp / jsonrpc…）
+<span class="k">scripts/</span>    130+ 个门禁与生成器脚本（doc 目录、模块图、校验器…）
+<span class="k">docs/</span>       架构文档、生成目录、postmortem、cookbook（中英双语）</pre>
+
+  <h3>6.2 包组体量分布</h3>
+  <p>源码体量直接反映复杂度分布：<strong>浏览器端（client）接近全仓四分之一</strong>，其次是自修改扩展（extensions）与核心脊柱（core）。</p>
+  <div class="bars">
+    <div class="bar-row"><div class="bl">client (39 pkgs)</div><div class="bt" style="width:89%"></div><div class="bv">43.6k</div></div>
+    <div class="bar-row"><div class="bl">extensions</div><div class="bt" style="width:31%"></div><div class="bv">15.3k</div></div>
+    <div class="bar-row"><div class="bl">core (8 pkgs)</div><div class="bt" style="width:27%"></div><div class="bv">13.5k</div></div>
+    <div class="bar-row"><div class="bl">host (8 pkgs)</div><div class="bt" style="width:22%"></div><div class="bv">10.6k</div></div>
+    <div class="bar-row"><div class="bl">typert</div><div class="bt" style="width:18%"></div><div class="bv">8.9k</div></div>
+    <div class="bar-row"><div class="bl">subagent (11 pkgs)</div><div class="bt" style="width:17%"></div><div class="bv">8.4k</div></div>
+    <div class="bar-row"><div class="bl">session (13 pkgs)</div><div class="bt" style="width:17%"></div><div class="bv">8.4k</div></div>
+    <div class="bar-row"><div class="bl">llm (5 pkgs)</div><div class="bt" style="width:16%"></div><div class="bv">8.0k</div></div>
+    <div class="bar-row"><div class="bl">test-support</div><div class="bt" style="width:14%"></div><div class="bv">7.0k</div></div>
+    <div class="bar-row"><div class="bl">fs (7 pkgs)</div><div class="bt" style="width:12%"></div><div class="bv">5.7k</div></div>
+    <div class="bar-row"><div class="bl">session-query</div><div class="bt" style="width:11%"></div><div class="bv">5.2k</div></div>
+    <div class="bar-row"><div class="bl">sandbox</div><div class="bt" style="width:8%"></div><div class="bv">3.9k</div></div>
+    <div class="bar-row"><div class="bl">shell (9 pkgs)</div><div class="bt" style="width:8%"></div><div class="bv">3.7k</div></div>
+    <div class="bar-row"><div class="bl">workflow</div><div class="bt" style="width:7%"></div><div class="bv">3.6k</div></div>
+    <div class="bar-row"><div class="bl">context</div><div class="bt" style="width:7%"></div><div class="bv">3.4k</div></div>
+    <div class="bar-row" style="margin-top:8px"><div class="bl" style="color:var(--ink-3)">其余 34 组</div><div class="bt" style="width:100%;background:var(--line)"></div><div class="bv">~49.2k</div></div>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">图 4 · packages/*/src TypeScript 行数（不含测试）。全仓 src 合计约 198k 行。</p>
+
+  <h3>6.3 core 组内部：严格上行的四层依赖</h3>
+  <div class="diagram">
+    <div class="layer" style="border-left:4px solid var(--accent)">
+      <div class="lt" style="color:var(--accent)">装配驱动</div>
+      <div class="boxes">
+        <div class="bx c-blue"><b>agent-loop</b><small>ReactLoopAgent：turn/step 状态机 · buildRequest · 工具调度（tool-calls.ts）· 创建/恢复事务</small></div>
+      </div>
+    </div>
+    <div class="layer-arrow">▲ inject: agents / sessions / llm / tools / systemPrompt</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--ink-3)">契约层</div>
+      <div class="boxes">
+        <div class="bx"><b>agent</b><small>Agent 接口 · ctx.agents · inbox（双队列）· agent/* 事件 · 无驱动逻辑</small></div>
+        <div class="bx"><b>tools</b><small>ctx.tools · ToolDefinition · pre/execute/post 管线 · Code Mode</small></div>
+      </div>
+    </div>
+    <div class="layer-arrow">▲</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--ink-3)">数据与视图</div>
+      <div class="boxes">
+        <div class="bx"><b>session</b><small>Session 类 · SessionEventMap · deriveMessages() · SurfaceManager（compaction 遮蔽）</small></div>
+        <div class="bx"><b>system-prompt</b><small>ctx.systemPrompt · section/context/tools/variable 注册 · assemble()</small></div>
+      </div>
+    </div>
+    <div class="layer-arrow">▲</div>
+    <div class="layer">
+      <div class="lt" style="color:var(--ink-3)">原语</div>
+      <div class="boxes">
+        <div class="bx"><b>scope</b><small>纯库：ScopedLayers 分层存储 + scopeTarget 事件路由载体（key = 活 Agent 实例）</small></div>
+      </div>
+    </div>
+    <div class="cap">图 5 · core 组依赖方向（自下而上被依赖），无环。两侧另有 agent-default-model / agent-tool-presentation 两个小型配置插件。</div>
+  </div>
+
+  <h3>6.4 脊柱之外的关键子系统</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4>session/ 数据平面（13 包，8.4k 行）</h4>
+      <p>持久化 seam（JSONL / SQLite 两 backend 持久化同一 SessionEvent 词汇）、projection（状态驱动的 fold 单元 + 持久化缓存，列表页永不加载全量日志）、log-backed 标题生成、OpenTelemetry telemetry。外加 <code>session-query/</code> 组提供精确读、过滤、trace 与 SQLite 全文搜索。</p>
+    </div>
+    <div class="card">
+      <h4>subagent/（11 包，8.4k 行）</h4>
+      <p><code>SubagentProvider.start(request) → SubagentRun</code> 一个接口覆盖六种传输：进程内 spawn/fork、stdio JSON-RPC 的完整 harness（dsh-sdk）、ACP 外部 agent、Claude SDK、Codex app-server。可选 <code>prepareContinuable()</code> 表达"可持续子代理"（父→子 followup/interrupt，子→父 report）。</p>
+    </div>
+    <div class="card">
+      <h4>typert/ + api/（类型图 RPC）</h4>
+      <p>构建期 generator 把 TS 类型树分析成编译器无关的 TypeGraph，发射 Zod codec + InvocationDescriptor；运行期 registry/loader 注册，api-gateway 据此把标了 <code>@Remote</code> 的 Cordis 服务暴露为严格校验的跨进程 RPC。Host 与 Browser 共享同一份类型真相。</p>
+    </div>
+    <div class="card">
+      <h4>sdk/ + acp/ + python/（进程外驱动）</h4>
+      <p>sdk 三件套：换行分隔 JSON-RPC 2.0 协议库、stdio server 插件（每 sessionId get-or-create 一个 agent）、TS 客户端；Python SDK 是其设计孪生。acp/ 是 automation-only 的 Agent Client Protocol server，供程序化客户端创建 agent、发 prompt、按策略解决审批。</p>
+    </div>
+    <div class="card">
+      <h4>interaction/（人在回路）</h4>
+      <p>approval seam（一次性权限裁决，无应答 fail-closed）、permission presets（workspace-write / danger-full-access 两档打包沙箱模式 + 审批策略）、commands（slash 人类命令，不经模型）、user-questions（ask-user 工具暂停在 provider 中立 promise 上）。</p>
+    </div>
+    <div class="card">
+      <h4>extensions/（自修改，15.3k 行）</h4>
+      <p>agent 检视并挂载自己的插件：cordis-host-runner 在 vm 沙箱里跑模型写的插件代码，tool-cordis 让模型查询/安装/卸载运行时插件。<code>pnpm run demo:cordis</code> 演示 agent 修改自己的运行时。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== 启动链路 ============================== -->
+<section id="boot">
+  <h2><span class="no">07</span>启动链路：从 bin 到插件树就绪</h2>
+  <p class="lead"><code>apps/cli</code> 是刻意做薄的 launcher（6 个文件）：它只认识 <code>--profile</code> / <code>--patch</code> / <code>--dump-config</code>，其余 argv 原样传给插件树——<code>cmdlineArgs</code> 本身是树里的一个服务，应用插件自行 inject 解析。</p>
+
+  <div class="diagram">
+    <div class="pipe">
+      <div class="pipe-node n-plain"><div class="pn-t">dsh --profile web</div><div class="pn-d">bin.ts 解析参数 → runProfile()；dsh web 只是 --profile web 的硬编码别名</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-plain"><div class="pn-t">loadProfile()</div><div class="pn-d">定位 $DSH_HOME/profiles/&lt;name&gt;（首次自动初始化模板），读 dsh.profile.bundles；双锚解析每个 bundle 的 cordis.patch.yml（安装目录优先，profile 目录其次）；BFS 修复 profiles/node_modules 平铺 symlink</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-plain"><div class="pn-t">composeEntries()</div><div class="pn-d">bundle 层 → profile patch → home patch → --patch → 派生补丁，flat 后一次性 applyEntryPatches（与 dump-config 同一代码路径，保证所见即所挂）</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-plain"><div class="pn-t">boot()</div><div class="pn-d">new Context() → 挂 vendored Loader → mountRootInclude（空根 cordis.yml + 全部 patch）→ loader.await() 并发挂载，激活顺序完全由 inject 依赖图驱动</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-guard"><div class="pn-t">assertEntriesActivated()</div><div class="pn-d">settle 后审计：fiber 缺失 / FAILED / PENDING 一律报错，dispose 整树并带最深 cause 重抛——misconfiguration fails loud</div></div>
+      <div class="pipe-arrow">▼</div>
+      <div class="pipe-node n-durable"><div class="pn-t">watchUserPatches()</div><div class="pn-d">cordis HMR 热重载两个用户 patch 层；树上应用行（webserver / headless-runner）开始对外服务</div></div>
+    </div>
+    <div class="cap">图 6 · boot 链路。配置里的 !!js 表达式在声明 inject 激活后求值，实现环境相关的条件组合。</div>
+  </div>
+</section>
+
+<!-- ============================== Web 架构 ============================== -->
+<section id="web">
+  <h2><span class="no">08</span>Web 架构：Host / Client 双面插件</h2>
+  <p class="lead">Web UI 不是独立前端项目，而是同一棵插件树的"另一半"。<code>dsh-web-app</code> bundle 同时挂载 host 侧（HTTP/API）与 client 侧（浏览器）插件，二者共用 Cordis 词汇，经 Typert 描述符做严格类型校验的 RPC。</p>
+
+  <div class="diagram">
+    <div style="display:grid;grid-template-columns:1fr 90px 1fr;gap:0;align-items:stretch;min-width:680px">
+      <div class="layer" style="margin-bottom:0;border-left:4px solid var(--accent)">
+        <div class="lt" style="color:var(--accent)">HOST（Node 进程）</div>
+        <div class="boxes">
+          <div class="bx c-blue"><b>webserver</b><small>node:http 路由载体，不懂 harness 概念</small></div>
+          <div class="bx c-blue"><b>frontend-static</b><small>SPA dist 伺服（fallback 席位）</small></div>
+          <div class="bx c-blue"><b>api-gateway</b><small>ctx.typertGateway：Remote 描述符 → 活服务调用，zod 校验出入参</small></div>
+          <div class="bx c-blue"><b>apiproxy</b><small>ctx.apiProxy：传输无关 BFF 网关，流式订阅事件转发</small></div>
+          <div class="bx c-blue"><b>connection (node half)</b><small>/api 路由 + 信任栅栏（Host 头 loopback/trustedHosts，DNS-rebinding 防御）</small></div>
+          <div class="bx c-blue"><b>workspace · message-feedback · storage …</b><small>host 侧业务插件</small></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;padding:0 8px">
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-align:center">HTTP POST<br>unary ↑</div>
+        <div style="width:2px;flex:1;background:var(--line)"></div>
+        <div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);text-align:center">WebSocket ↓<br>/api/events.mux<br>/api/events.host</div>
+      </div>
+      <div class="layer" style="margin-bottom:0;border-left:4px solid var(--green)">
+        <div class="lt" style="color:var(--green)">CLIENT（浏览器）</div>
+        <div class="boxes">
+          <div class="bx c-green"><b>modules</b><small>扫 dsh.client 行组成 __DSH_BOOT__ 入口图，伺服 /plugins/&lt;id&gt;/client.js</small></div>
+          <div class="bx c-green"><b>connection (browser half)</b><small>ctx.remote：$mount / $on / $dispatch</small></div>
+          <div class="bx c-green"><b>web / web-react</b><small>AppWebEntry 壳引导 + React 渲染</small></div>
+          <div class="bx c-green"><b>runtime</b><small>共享 client 服务：会话/工作区/UI 组合</small></div>
+          <div class="bx c-green"><b>31 个 ui-* 包</b><small>conversation · tool 卡片 · slots · settings · sidebar …</small></div>
+        </div>
+      </div>
+    </div>
+    <div class="cap">图 7 · 双面架构。上行 HTTP POST（unary），下行两条只下发 WebSocket；UI 扩展走 ui-slots 槽位，渲染数据全部来自 session/event 投影。ui-* 按组内包计 31 个，dsh-web-app 实际挂载 27 行。</div>
+  </div>
+
+  <p>值得注意的一个组合决策：web profile 把 24 个 agent 面行（tool-bash、tool-fs、tool-subagent、tool-workflow 等 model-facing 插件）从进程级 <code>disabled</code>，改由 <strong>agent preset</strong>（<code>agent-presets</code>，per-session 的 preset cordis.yml）在每个会话创建时挂载——多会话 Web 场景下，每个 session 可以得到独立组合的能力集，而注册表类服务（subagents、goals、shell-env）留在 host 面共享。这正是 scope 原语 + seam 分离的实战用法。</p>
+</section>
+
+<!-- ============================== 设计启示 ============================== -->
+<section id="takeaway">
+  <h2><span class="no">09</span>设计启示</h2>
+  <div class="grid-2">
+    <div class="card">
+      <h4>1. 把"可替换性"做成结构，而不是约定</h4>
+      <p>seam 三角色、waterfall 拦截点、effect 可逆注册，都是机制而非文档要求。"换 provider 不改 consumer"不是靠 code review 守住的，是靠 consumer 物理上 import 不到 provider 守住的。</p>
+    </div>
+    <div class="card">
+      <h4>2. 事件溯源作为单一事实源</h4>
+      <p>"model-visible ⟺ logged" 一条不变量，统一了持久化、回放、fork、telemetry、UI 投影、snapshot 测试六个子系统的数据源。append-only 日志 + surface 遮蔽投影，让 compaction 可以"改写呈现"而不篡改历史。</p>
+    </div>
+    <div class="card">
+      <h4>3. 组合层是一等公民</h4>
+      <p>profile/bundle/patch 分层 + <code>--dump-config</code> 单一组合路径，把"我的实例到底跑了什么"变成可打印、可 diff、可审计的事实。预发布期的立场很激进：<em>foundation over blast radius</em>——允许自由重命名，拒绝兼容 shim。</p>
+    </div>
+    <div class="card">
+      <h4>4. 工程门禁即架构文档</h4>
+      <p>130+ 个 scripts：能力缝图、模块图、工具目录、事件目录全部由生成器产出并被 CI 保鲜校验；每文件 100% 覆盖率门禁、keyless snapshot 回放测试、运行时不变量注册表。架构文档不是写出来的，是<strong>生成出来且拒绝过时</strong>的。</p>
+    </div>
+  </div>
+
+  <h3>延伸入口</h3>
+  <ul>
+    <li>架构主文档：<code>docs/architecture.md</code> · 事件全表：<code>docs/event-producer-consumer.md</code> · 术语：<code>docs/glossary.md</code></li>
+    <li>序列图：<code>docs/agent-lifecycle.md</code> · 工具管线：<code>docs/tool-execution-pipeline.md</code> · 能力缝全图：<code>docs/capability-seams.md</code></li>
+    <li>扩展方法论：<code>docs/cookbook/extension-cookbook.md</code>（加包 / 加工具 / 加 LLM 适配器 / 加 Chat 节点）</li>
+    <li>上手：<code>npx @deepseek-ai/dsh web</code>，或 <code>pnpm dsh --profile headless "task"</code> 从源码跑一次任务</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>DeepSeek Harness 架构解析 · 基于仓库 <code>deepseek-ai/deepseek-harness</code>（v0.1.0-rc.5，开发者预览）源码与文档分析生成 · 行数统计口径：packages/*/src 下 TypeScript 源文件，不含测试</p>
+  </div>
+</footer>
+
+</body>
+</html>
