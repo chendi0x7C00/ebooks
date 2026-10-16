@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0F1A">
+<title>Anatomy of a Grokbot — The Design of an Always-On Agent</title>
+<style>
+  :root {
+    --bg: #0A0F1A;
+    --bg-soft: #0D1422;
+    --panel: #121B2E;
+    --panel-2: #16213638;
+    --line: #263450;
+    --line-soft: #1C2A44;
+    --ink: #E9EEF7;
+    --ink-2: #B9C4D8;
+    --muted: #8493AC;
+    --amber: #FFB454;
+    --amber-dim: #C98B3F;
+    --amber-soft: rgba(255,180,84,.12);
+    --blue: #6FA8FF;
+    --blue-soft: rgba(111,168,255,.12);
+    --green: #5FD6A4;
+    --green-soft: rgba(95,214,164,.10);
+    --purple: #B49CFF;
+    --purple-soft: rgba(180,156,255,.12);
+    --red: #FF8585;
+    --red-soft: rgba(255,133,133,.10);
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16.5px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+  ::selection { background: var(--amber-soft); color: var(--amber); }
+
+  /* ---------- chrome ---------- */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 2px; width: 0%;
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    z-index: 50;
+  }
+  nav.topnav {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(10,15,26,.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  nav.topnav .rail {
+    max-width: 1080px; margin: 0 auto; padding: 0 20px;
+    display: flex; align-items: center; gap: 4px;
+    overflow-x: auto; scrollbar-width: none;
+    white-space: nowrap;
+  }
+  nav.topnav .rail::-webkit-scrollbar { display: none; }
+  nav.topnav .brand {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    color: var(--amber); text-transform: uppercase;
+    padding-right: 14px; margin-right: 6px;
+    border-right: 1px solid var(--line-soft); flex: none;
+  }
+  nav.topnav a {
+    color: var(--muted); text-decoration: none;
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .04em;
+    padding: 12px 9px; display: inline-block; flex: none;
+  }
+  nav.topnav a:hover, nav.topnav a:focus-visible { color: var(--ink); }
+  a { color: var(--blue); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 3px; }
+
+  /* ---------- layout ---------- */
+  main { max-width: 840px; margin: 0 auto; padding: 0 20px 40px; }
+  .wide { max-width: 1080px; }
+  section { padding-top: 52px; }
+  .partlabel {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--amber);
+    display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+  }
+  .partlabel::after { content: ""; height: 1px; flex: 1; background: var(--line-soft); }
+  h1 {
+    font-size: clamp(34px, 5.4vw, 56px); line-height: 1.04;
+    letter-spacing: -0.022em; margin: 26px 0 18px; font-weight: 750;
+  }
+  h1 .thin { color: var(--muted); font-weight: 600; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); letter-spacing: -0.015em; margin: 0 0 14px; line-height: 1.18; }
+  h3 { font-size: 18px; margin: 30px 0 8px; }
+  p { margin: 0 0 16px; color: var(--ink-2); }
+  p strong, li strong { color: var(--ink); font-weight: 640; }
+  .lede { font-size: 19px; color: var(--ink); line-height: 1.6; }
+  .small { font-size: 13.5px; color: var(--muted); }
+  em.quiet { color: var(--muted); }
+
+  /* timestamp chip */
+  .ts {
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    text-decoration: none; border: 1px solid rgba(255,180,84,.35);
+    border-radius: 99px; padding: 1px 8px 2px; white-space: nowrap;
+    vertical-align: 2px; margin-left: 4px;
+  }
+  .ts:hover { background: var(--amber-soft); }
+
+  /* ---------- hero ---------- */
+  header.hero { padding: 64px 0 8px; }
+  .specgrid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 760px) { .specgrid { grid-template-columns: 1fr; } }
+  .speccard {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: linear-gradient(180deg, var(--panel), var(--bg-soft));
+    font-family: var(--mono); font-size: 12.5px; overflow: hidden;
+  }
+  .speccard .row { display: flex; border-top: 1px solid var(--line-soft); }
+  .speccard .row:first-child { border-top: none; }
+  .speccard .k {
+    color: var(--muted); width: 88px; flex: none; padding: 9px 12px;
+    letter-spacing: .12em; font-size: 10.5px; text-transform: uppercase;
+    border-right: 1px solid var(--line-soft); background: rgba(255,255,255,.015);
+  }
+  .speccard .v { padding: 9px 12px; color: var(--ink-2); }
+  .speccard .v b { color: var(--ink); font-weight: 600; }
+
+  .tldr {
+    margin: 34px 0 0; border: 1px solid var(--line); border-left: 3px solid var(--amber);
+    border-radius: 10px; background: var(--bg-soft); padding: 18px 22px 8px;
+  }
+  .tldr h2 { font-size: 13px; font-family: var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--amber); margin: 0 0 10px; }
+  .tldr ul { margin: 0; padding-left: 20px; }
+  .tldr li { margin-bottom: 8px; color: var(--ink-2); }
+
+  /* ---------- figures ---------- */
+  figure {
+    margin: 26px 0; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--bg-soft); overflow: hidden;
+  }
+  figure .figbody { padding: 20px 18px 8px; }
+  figure.widefig { max-width: 1080px; }
+  @media (min-width: 881px) {
+    figure.widefig {
+      width: min(1040px, calc(100vw - 40px));
+      margin-left: calc((800px - min(1040px, 100vw - 40px)) / 2);
+      margin-right: auto;
+    }
+  }
+  figcaption {
+    padding: 12px 18px 14px; border-top: 1px dashed var(--line-soft);
+    font-size: 13px; color: var(--muted); line-height: 1.55;
+  }
+  figcaption b { color: var(--ink-2); font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; }
+  .fig-scroll { overflow-x: auto; scrollbar-width: thin; }
+  .fig-scroll svg { min-width: 720px; }
+  .swipehint { display: none; }
+  @media (max-width: 720px) {
+    .swipehint {
+      display: inline-block; margin: 0 6px 0 2px; vertical-align: 1px;
+      font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+      text-transform: uppercase; color: var(--amber);
+      border: 1px solid rgba(255,180,84,.4); border-radius: 99px; padding: 2px 9px 3px;
+    }
+    figure .figbody { padding: 14px 12px 6px; }
+    figcaption { padding: 10px 12px 12px; }
+    figure { border-radius: 10px; }
+  }
+  @media (pointer: coarse) {
+    .ts { padding: 4px 12px 5px; }
+    nav.topnav a { padding: 14px 11px; }
+  }
+  .fig svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: var(--mono); }
+
+  /* svg shared classes */
+  .b  { fill: var(--panel); stroke: var(--line); stroke-width: 1.2; }
+  .bA { fill: var(--amber-soft); stroke: rgba(255,180,84,.55); stroke-width: 1.2; }
+  .bB { fill: var(--blue-soft); stroke: rgba(111,168,255,.5); stroke-width: 1.2; }
+  .bG { fill: var(--green-soft); stroke: rgba(95,214,164,.5); stroke-width: 1.2; }
+  .bP { fill: var(--purple-soft); stroke: rgba(180,156,255,.5); stroke-width: 1.2; }
+  .t  { fill: var(--ink); font-size: 13.5px; font-weight: 600; }
+  .tA { fill: var(--amber); font-size: 13.5px; font-weight: 600; }
+  .tB { fill: var(--blue); font-size: 13.5px; font-weight: 600; }
+  .tG { fill: var(--green); font-size: 13.5px; font-weight: 600; }
+  .tP { fill: var(--purple); font-size: 13.5px; font-weight: 600; }
+  .s  { fill: var(--muted); font-size: 11px; }
+  .l  { fill: var(--ink-2); font-size: 11.5px; }
+  .zone { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-dasharray: 5 5; }
+  .zt  { fill: var(--muted); font-size: 11px; letter-spacing: .16em; }
+  .arrow { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#ah); }
+  .arrowA { stroke: var(--amber-dim); stroke-width: 1.4; fill: none; marker-end: url(#ahA); }
+  .dash { stroke-dasharray: 4 4; }
+
+  /* ---------- html figure pieces ---------- */
+  .eras { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 760px) { .eras { grid-template-columns: repeat(2, 1fr); } }
+  .era {
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 12px;
+    background: var(--panel); position: relative;
+  }
+  .era .no { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; color: var(--muted); }
+  .era h4 { margin: 6px 0 6px; font-size: 14.5px; line-height: 1.3; }
+  .era p { font-size: 12.8px; line-height: 1.5; margin-bottom: 8px; color: var(--muted); }
+  .era .lim {
+    font-family: var(--mono); font-size: 11px; color: var(--amber-dim);
+    border-top: 1px dashed var(--line-soft); padding-top: 8px; margin-top: auto;
+  }
+  .era.now { border-color: rgba(255,180,84,.55); background: linear-gradient(180deg, var(--amber-soft), var(--panel)); }
+  .era.now .no { color: var(--amber); }
+  .era { display: flex; flex-direction: column; }
+
+  .bridge { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; }
+  @media (max-width: 700px) { .bridge { grid-template-columns: 1fr; } }
+  .colbox { border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--panel); }
+  .colbox h5 { margin: 0 0 10px; font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+    border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; background: var(--bg-soft);
+  }
+  .chip.hot { color: var(--amber); border-color: rgba(255,180,84,.5); }
+  .senduser {
+    align-self: center; text-align: center; padding: 0 6px;
+  }
+  .senduser .pill {
+    display: inline-block; font-family: var(--mono); font-size: 13px; font-weight: 700;
+    color: #14100A; background: var(--amber); border-radius: 99px; padding: 8px 16px;
+    letter-spacing: .02em;
+  }
+  .senduser .cap { font-size: 11px; color: var(--muted); margin-top: 8px; max-width: 170px; line-height: 1.5; }
+  .richrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  @media (max-width: 700px) { .richrow { grid-template-columns: repeat(2, 1fr); } }
+  .rich {
+    border: 1px dashed var(--line); border-radius: 9px; padding: 10px 12px;
+    font-size: 12.5px; color: var(--muted); line-height: 1.45; background: var(--bg-soft);
+  }
+  .rich b { display: block; color: var(--ink-2); font-size: 12.8px; margin-bottom: 2px; }
+
+  .ctxbar { border-radius: 8px; overflow: hidden; display: flex; height: 52px; margin: 10px 0 4px; border: 1px solid var(--line); }
+  .ctxbar div {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    font-family: var(--mono); font-size: 10.8px; line-height: 1.35; padding: 4px 6px; color: var(--ink);
+  }
+  .ctxbar + .barlabel { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-bottom: 14px; }
+  .seg-static { background: var(--blue-soft); }
+  .seg-schemas { background: var(--red-soft); color: var(--red) !important; }
+  .seg-work { background: var(--green-soft); }
+  .seg-names { background: rgba(255,255,255,.045); }
+  .seg-free { background: var(--green-soft); color: var(--green); }
+  .seg-hatch { background: repeating-linear-gradient(45deg, rgba(133,147,171,.10) 0 6px, transparent 6px 12px); color: var(--muted); }
+
+  .ladders { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 700px) { .ladders { grid-template-columns: 1fr; } }
+  .ladder { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 14px 16px 12px; }
+  .ladder h5 { margin: 0 0 4px; font-size: 13.5px; }
+  .ladder .sub { font-size: 11.5px; color: var(--muted); font-family: var(--mono); margin-bottom: 12px; }
+  .rung {
+    display: flex; gap: 10px; align-items: baseline;
+    border-top: 1px dashed var(--line-soft); padding: 7px 0 6px;
+    font-size: 13.2px; color: var(--ink-2);
+  }
+  .rung:first-of-type { border-top: none; }
+  .rung .n { font-family: var(--mono); font-size: 10.5px; color: var(--amber-dim); flex: none; width: 18px; }
+  .rung.top { color: var(--red); }
+  .rung.top .n { color: var(--red); }
+  .costarrow { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; display: flex; justify-content: space-between; margin-top: 10px; border-top: 1px solid var(--line-soft); padding-top: 8px; }
+
+  .layers { display: flex; flex-direction: column; gap: 8px; }
+  .layer {
+    display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: baseline;
+    border: 1px solid var(--line); border-radius: 9px; padding: 11px 14px; background: var(--panel);
+  }
+  @media (max-width: 620px) { .layer { grid-template-columns: 1fr; gap: 2px; } }
+  .layer .name { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; font-weight: 700; }
+  .layer .ttl { font-family: var(--mono); font-size: 10.5px; color: var(--muted); display: block; }
+  .layer .desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .l1 .name { color: var(--amber); } .l2 .name { color: var(--blue); }
+  .l3 .name { color: var(--purple); } .l4 .name { color: var(--green); }
+
+  .grid6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 700px) { .grid6 { grid-template-columns: repeat(2, 1fr); } }
+  .cell { border: 1px solid var(--line); border-radius: 9px; padding: 12px 13px; background: var(--panel); }
+  .cell b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+  .cell span { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+  .sixgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 760px) { .sixgrid { grid-template-columns: 1fr; } }
+  .six { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--panel); }
+  .six .n { font-family: var(--mono); font-size: 10.5px; color: var(--amber-dim); letter-spacing: .14em; }
+  .six b { display: block; margin: 4px 0 3px; font-size: 14px; }
+  .six p { font-size: 12.8px; color: var(--muted); margin: 0; line-height: 1.5; }
+
+  ol.steps { counter-reset: step; list-style: none; padding: 0; margin: 20px 0 0; }
+  ol.steps li {
+    counter-increment: step; position: relative; padding: 0 0 18px 52px;
+    border-left: 1px dashed var(--line); margin-left: 18px;
+  }
+  ol.steps li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute; left: -18px; top: -2px;
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg); border: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12px; color: var(--amber);
+  }
+  ol.steps li::after {
+    content: ""; position: absolute; left: -23px; top: 38px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--bg); border: 1px solid var(--amber-dim);
+  }
+  ol.steps li b { display: block; font-size: 15.5px; margin-bottom: 3px; }
+  ol.steps li p { font-size: 13.8px; margin: 0; }
+
+  .callout {
+    border: 1px dashed rgba(255,180,84,.45); background: var(--amber-soft);
+    border-radius: 10px; padding: 14px 18px; margin: 20px 0; font-size: 14.5px;
+  }
+  .callout b { color: var(--amber); }
+  .callout p { margin: 0; }
+
+  .quote {
+    border-left: 3px solid var(--line); padding: 2px 0 2px 18px; margin: 22px 0;
+    font-size: 17px; color: var(--ink); line-height: 1.55;
+  }
+  .quote .who { display: block; margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .1em; }
+
+  footer {
+    border-top: 1px solid var(--line-soft); margin-top: 70px; padding: 26px 20px 60px;
+    max-width: 840px; margin-left: auto; margin-right: auto;
+    font-size: 12.5px; color: var(--muted); line-height: 1.7;
+  }
+  footer b { color: var(--ink-2); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  @media print {
+    #progress, nav.topnav { display: none; }
+    body { background: #fff; color: #111; }
+    p, li, figcaption, .small { color: #222; }
+    figure, .era, .cell, .six, .ladder, .layer, .colbox, .speccard, .tldr { background: #fff; border-color: #bbb; }
+  }
+</style>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+
+<nav class="topnav" aria-label="Sections">
+  <div class="rail">
+    <span class="brand">GROKBOT / TEARDOWN</span>
+    <a href="#overview">00 Intro</a>
+    <a href="#eras">01 Eras</a>
+    <a href="#models">02 Models</a>
+    <a href="#system">03 System</a>
+    <a href="#lifecycle">04 Sleep/Wake</a>
+    <a href="#server">05 Server</a>
+    <a href="#computer">06 Computer</a>
+    <a href="#harness">07 Harness</a>
+    <a href="#context">08 Context</a>
+    <a href="#security">09 Security</a>
+    <a href="#flywheel">10 Flywheel</a>
+    <a href="#next">11 Outlook</a>
+    <a href="#blueprint">12 Blueprint</a>
+  </div>
+</nav>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <header class="hero">
+    <div class="specgrid">
+      <div>
+        <p class="partlabel">Engineering teardown · FIG.01–10</p>
+        <h1>Anatomy of a<br>Grokbot<span class="thin">.</span></h1>
+        <p class="lede">How an <strong>always-on, proactive, persistent agent</strong> is actually built — taken apart, layer by layer, from Lee Robinson's Stanford <span style="font-family:var(--mono);font-size:.85em">CS146S</span> lecture, until you could sketch the whole machine on a napkin.</p>
+      </div>
+      <div class="speccard" role="group" aria-label="Source material">
+        <div class="row"><div class="k">Source</div><div class="v"><b>“How always-on agents work”</b><br>youtu.be/L1OBRtfPS34</div></div>
+        <div class="row"><div class="k">Speaker</div><div class="v">Lee Robinson — previously <b>Cursor</b>, now building bots at <b>SpaceX</b></div></div>
+        <div class="row"><div class="k">Length</div><div class="v">45:17 · published Oct 2026</div></div>
+        <div class="row"><div class="k">Subject</div><div class="v"><b>Grokbot</b> — an agent with its own computer, memory, and event triggers</div></div>
+        <div class="row"><div class="k">Reader</div><div class="v">Engineers who want to <b>rebuild this design from memory</b></div></div>
+      </div>
+    </div>
+
+    <div class="tldr">
+      <h2>TL;DR — the whole design in six lines</h2>
+      <ul>
+        <li><strong>A bot is the week-one harness — a model calling tools in a loop — relocated to a server</strong> that sleeps when idle and wakes on demand with full state, plus its own cloud computer, memory, and event triggers.</li>
+        <li><strong>Thick server, thin clients:</strong> exactly one tool, <code style="font-family:var(--mono);font-size:.9em">send_user</code>, crosses the client/server boundary.</li>
+        <li><strong>The computer is a disposable Firecracker microVM</strong> — boot it on demand, snapshot it, rebuild it. The agent loop never lives on it.</li>
+        <li><strong>Everything expensive is kept out of the context window:</strong> files, subagents, tool-name-only discovery, aggressive prompt caching, compaction while the cache is warm.</li>
+        <li><strong>Security is a second model (autoreview) plus product guardrails</strong> — not a human approving hundreds of shell commands.</li>
+        <li><strong>Improvement runs on two loops:</strong> a daily bug → eval → fix loop, and a monthly train-a-new-model loop.</li>
+      </ul>
+    </div>
+  </header>
+
+  <!-- ============ 00 OVERVIEW ============ -->
+  <section id="overview">
+    <p class="partlabel">00 · From harness to bot</p>
+    <h2>A model calling tools in a loop — that's the seed</h2>
+    <p>Everything in this teardown grows out of one small idea that you can build in a week: <strong>give a model tools and let it call them in a loop</strong>. That simple harness unlocks enormous capability — but it has a fatal flaw. <em class="quiet">Close your laptop and the process is dead.</em> <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=21">▶ 00:21</a></p>
+    <p>An <strong>always-on agent</strong> — Lee calls it a <strong>bot</strong> — keeps the loop but changes where it lives and when it runs:</p>
+    <p>
+      <strong>It runs on a server, not your terminal.</strong> It survives crashes and reboots, and keeps working after you close your laptop.<br>
+      <strong>It owns a computer.</strong> A Linux machine in the cloud with its own desktop, files, and browser — where it saves state and builds a memory of how you work.<br>
+      <strong>It knows when to be quiet.</strong> Unlike a terminal harness that responds to every message, a bot behaves like a colleague: it works in the background and only reports when there's something worth saying.<br>
+      <strong>It can be woken by more than you.</strong> A Slack message, an email, a phone call, a meeting, a scheduled routine — any event can trigger work. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=101">▶ 01:41</a>
+    </p>
+    <p>The interface got <em>simpler</em> as the system got more capable: it feels like texting a friend, because everyone already knows how to text. And the safety story inverts, too — instead of you approving every shell command (approval fatigue), a <strong>separate AI model reviews every command</strong> before it runs — the industry calls this <strong>autoreview</strong> (<a href="#security">§09</a>). <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=302">▶ 05:02</a></p>
+  </section>
+
+  <!-- ============ 01 ERAS ============ -->
+  <section id="eras">
+    <p class="partlabel">01 · How we got here</p>
+    <h2>Four eras of developers working with AI</h2>
+    <p class="small" style="margin-top:-6px">Context for the impatient: the machine itself starts at <a href="#system">§03</a>.</p>
+    <p>Each era removed a bottleneck. The first three still had <em>you</em> in the loop; the fourth finally doesn't. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=159">▶ 02:39</a></p>
+
+    <figure>
+      <div class="figbody">
+        <div class="fig fig-scroll" style="min-width:0">
+          <div class="eras" style="min-width:640px">
+            <div class="era">
+              <span class="no">ERA 1 · ~2022</span>
+              <h4>Copy-paste</h4>
+              <p>ChatGPT on one screen, your editor on the other. The human is the harness: you read, you paste, you fix.</p>
+              <div class="lim">LIMIT: your typing speed</div>
+            </div>
+            <div class="era">
+              <span class="no">ERA 2 · ~2023</span>
+              <h4>Terminal harness</h4>
+              <p>The model edits files and runs shell commands in a loop, inside your terminal. Massively more capable — but it dies when your laptop closes.</p>
+              <div class="lim">LIMIT: your machine, your session</div>
+            </div>
+            <div class="era">
+              <span class="no">ERA 3 · ~2024</span>
+              <h4>Dedicated apps &amp; cloud agents</h4>
+              <p>Agents move into apps and the cloud; you run many in parallel. But you still review every command — you are the bottleneck.</p>
+              <div class="lim">LIMIT: your attention</div>
+            </div>
+            <div class="era now">
+              <span class="no">ERA 4 · NOW</span>
+              <h4>Always-on bots</h4>
+              <p>Ambient agents with their own computer, memory, and skills. Triggered by events, safe to leave alone, working while you sleep.</p>
+              <div class="lim">LIMIT: the design in this document</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>FIG.01</b><span class="swipehint">swipe →</span> — The four eras. The shift that matters: from <em>you approving every command</em> to <em>autoreview + steering</em> — how steering works arrives in <a href="#lifecycle">§04</a>.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 02 MODELS ============ -->
+  <section id="models">
+    <p class="partlabel">02 · Why now</p>
+    <h2>Six model changes that made bots possible</h2>
+    <p>Bots are a co-design of product and model. Six training-side changes did the heavy lifting: <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=375">▶ 06:15</a></p>
+
+    <div class="sixgrid">
+      <div class="six"><span class="n">M1</span><b>Long-horizon instruction following</b><p>Models stop drifting over hours or days of work — provided the harness compacts (summarizes) context well (<a href="#context">§08</a>).</p></div>
+      <div class="six"><span class="n">M2</span><b>Hand-off to helpers</b><p>Subagents with fresh working memory absorb the token-expensive work and report back — effectively unlimited context.</p></div>
+      <div class="six"><span class="n">M3</span><b>Reliable tool calling</b><p>Hallucinated tool calls are mostly a solved problem. You can onboard the model like a new hire: shell, files, then far more powerful tools.</p></div>
+      <div class="six"><span class="n">M4</span><b>Computer use</b><p>The model clicks around a screen like a human. Any SaaS or website without an API or MCP server (the standard agent-to-tool protocol) is now usable headlessly.</p></div>
+      <div class="six"><span class="n">M5</span><b>Files as memory</b><p>State lives in files the model can grep and search on demand — “what did I do last week?” becomes a lookup, not a hallucination.</p></div>
+      <div class="six"><span class="n">M6</span><b>Learning skills on the job</b><p>Show the bot a process once and it encodes it as a skill, memory, or routine it can reuse — markdown files all the way down.</p></div>
+    </div>
+
+    <p style="margin-top:18px">That last one deserves a concrete shape, because under the hood it's all files: <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=511">▶ 08:31</a> a <strong>user profile</strong> (“texts in lowercase”) injected into every prompt; a <strong>working log</strong> — a colleague's dated notebook, searchable later; <strong>skills</strong> as markdown recipes for bespoke processes, written by you or by an ecosystem of authors; and in Grokbot, every tool arrives as a <strong>plugin</strong> (skills + servers), while <strong>routines</strong> are cron jobs for prompts — an instruction on a schedule. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=560">▶ 09:20</a></p>
+  </section>
+
+  <!-- ============ 03 SYSTEM ============ -->
+  <section id="system">
+    <p class="partlabel">03 · Everything is a computer</p>
+    <h2>The system at a glance</h2>
+    <p>Here is the whole machine. Triggers wake the agent; a router decides what matters; a durable workflow runs the agent loop; state survives in a database; and a disposable virtual machine is the bot's hands. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=603">▶ 10:03</a></p>
+
+    <figure class="widefig">
+      <div class="figbody">
+        <div class="fig fig-scroll">
+          <svg viewBox="0 0 1080 660" role="img" aria-label="Grokbot architecture: triggers feed a router, which feeds a queue and the agent loop on the server; state persists to a database; the agent loop calls tools on a Firecracker VM; clients connect through the send_user tool" style="min-width:860px">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8493AC"></path></marker>
+              <marker id="ahA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#C98B3F"></path></marker>
+              <marker id="ahB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6FA8FF"></path></marker>
+            </defs>
+
+            <!-- triggers -->
+            <text x="24" y="42" class="zt">TRIGGERS</text>
+            <rect x="24" y="60" width="172" height="52" rx="9" class="bA"/><text x="110" y="82" text-anchor="middle" class="tA">You — chat</text><text x="110" y="99" text-anchor="middle" class="s">highest priority</text>
+            <rect x="24" y="124" width="172" height="52" rx="9" class="b"/><text x="110" y="146" text-anchor="middle" class="t">Slack · email</text><text x="110" y="163" text-anchor="middle" class="s">group chats queue</text>
+            <rect x="24" y="188" width="172" height="52" rx="9" class="b"/><text x="110" y="210" text-anchor="middle" class="t">Call · meeting join</text><text x="110" y="227" text-anchor="middle" class="s">bot takes notes</text>
+            <rect x="24" y="252" width="172" height="52" rx="9" class="b"/><text x="110" y="274" text-anchor="middle" class="t">Routine (cron)</text><text x="110" y="291" text-anchor="middle" class="s">a prompt on a schedule</text>
+            <rect x="24" y="316" width="172" height="52" rx="9" class="b"/><text x="110" y="338" text-anchor="middle" class="t">Background job done</text><text x="110" y="355" text-anchor="middle" class="s">“task finished” event</text>
+
+            <!-- router -->
+            <path d="M196,86 C232,86 216,180 240,188" class="arrowA"/>
+            <path d="M196,150 L240,192" class="arrowA"/>
+            <path d="M196,214 L240,206" class="arrow"/>
+            <path d="M196,278 C232,278 216,222 240,212" class="arrow"/>
+            <path d="M196,342 C238,342 220,230 240,218" class="arrow"/>
+            <rect x="242" y="162" width="152" height="96" rx="10" class="bB"/>
+            <text x="318" y="188" text-anchor="middle" class="tB">ROUTER</text>
+            <text x="318" y="207" text-anchor="middle" class="s">dedupe · batch · route</text>
+            <text x="318" y="223" text-anchor="middle" class="s">into the conversation</text>
+            <text x="318" y="243" text-anchor="middle" class="l">bug the user?</text>
+            <path d="M394,206 C426,206 420,112 450,100" class="arrow" style="stroke:#6FA8FF;marker-end:url(#ahB)"/>
+
+            <!-- server zone -->
+            <rect x="434" y="24" width="330" height="560" rx="14" class="zone"/>
+            <text x="452" y="50" class="zt">THE SERVER — rebuildable</text>
+
+            <rect x="454" y="70" width="290" height="56" rx="9" class="b"/>
+            <text x="599" y="93" text-anchor="middle" class="t">QUEUE</text>
+            <text x="599" y="111" text-anchor="middle" class="s">one turn at a time · batches rapid sends</text>
+
+            <rect x="454" y="168" width="290" height="150" rx="10" class="bP"/>
+            <text x="599" y="196" text-anchor="middle" class="tP" style="font-size:15px">AGENT LOOP</text>
+            <text x="599" y="217" text-anchor="middle" class="l">model ⇄ tools, in a loop</text>
+            <text x="599" y="236" text-anchor="middle" class="s">the week-one harness, still the heart</text>
+            <rect x="474" y="256" width="250" height="42" rx="7" fill="rgba(255,255,255,.045)"/>
+            <text x="599" y="274" text-anchor="middle" class="l">wrapped in a durable workflow</text>
+            <text x="599" y="290" text-anchor="middle" class="s">(Temporal: resume, never replay)</text>
+
+            <rect x="454" y="470" width="290" height="88" rx="9" class="bG"/>
+            <text x="599" y="494" text-anchor="middle" class="tG">STATE DB</text>
+            <text x="599" y="513" text-anchor="middle" class="s">conversations · memories · skills</text>
+            <text x="599" y="529" text-anchor="middle" class="s">routines · queue state</text>
+
+            <path d="M599,126 L599,164" class="arrow"/>
+            <path d="M563,318 L563,466" class="arrow"/>
+            <text x="555" y="398" text-anchor="end" class="s">persist</text>
+            <path d="M655,466 L655,322" class="arrow dash"/>
+            <text x="663" y="398" class="s">restore on boot</text>
+
+            <!-- computer zone -->
+            <rect x="800" y="24" width="256" height="560" rx="14" class="zone" style="stroke:rgba(95,214,164,.45)"/>
+            <text x="818" y="50" class="zt" fill="#5FD6A4">THE COMPUTERS · microVM pool</text>
+            <rect x="818" y="70" width="106" height="56" rx="8" class="b"/><text x="871" y="94" text-anchor="middle" class="t" style="font-size:12.5px">Files</text><text x="871" y="111" text-anchor="middle" class="s">working set</text>
+            <rect x="932" y="70" width="106" height="56" rx="8" class="b"/><text x="985" y="94" text-anchor="middle" class="t" style="font-size:12.5px">Shell</text><text x="985" y="111" text-anchor="middle" class="s">commands</text>
+            <rect x="818" y="138" width="106" height="56" rx="8" class="b"/><text x="871" y="162" text-anchor="middle" class="t" style="font-size:12.5px">Chrome</text><text x="871" y="179" text-anchor="middle" class="s">browser use</text>
+            <rect x="932" y="138" width="106" height="56" rx="8" class="b"/><text x="985" y="162" text-anchor="middle" class="t" style="font-size:12.5px">Desktop</text><text x="985" y="179" text-anchor="middle" class="s">per active bot</text>
+            <rect x="818" y="206" width="106" height="56" rx="8" class="b"/><text x="871" y="230" text-anchor="middle" class="t" style="font-size:12.5px">Snapshots</text><text x="871" y="247" text-anchor="middle" class="s">sleep / resume</text>
+            <rect x="932" y="206" width="106" height="56" rx="8" class="b"/><text x="985" y="230" text-anchor="middle" class="t" style="font-size:12.5px">Live view</text><text x="985" y="247" text-anchor="middle" class="s">watch &amp; drive</text>
+            <text x="928" y="296" text-anchor="middle" class="l" style="font-size:11.5px">shared pool — one per active bot</text>
+            <text x="928" y="314" text-anchor="middle" class="s">cheap to boot &amp; kill · rebuild</text>
+            <text x="928" y="330" text-anchor="middle" class="s">anytime; durable state is server-side</text>
+
+            <path d="M744,240 L796,240" class="arrow"/>
+            <path d="M796,262 L744,262" class="arrow dash"/>
+            <text x="770" y="228" text-anchor="middle" class="s">tools</text>
+            <path d="M764,430 C775,430 780,430 796,430" class="arrow dash"/>
+            <text x="777" y="418" text-anchor="middle" class="s">boot</text>
+
+            <!-- clients -->
+            <rect x="24" y="500" width="340" height="70" rx="10" class="b"/>
+            <text x="194" y="524" text-anchor="middle" class="t" style="font-size:12.5px">CLIENTS — thin by design</text>
+            <text x="194" y="545" text-anchor="middle" class="s">iOS · Android · web · Slack · email</text>
+            <path d="M368,518 L430,518" class="arrowA"/>
+            <text x="399" y="506" text-anchor="middle" style="fill:#FFB454;font-size:8.5px">your texts</text>
+            <path d="M430,552 L368,552" class="arrow" style="stroke:#6FA8FF;marker-end:url(#ahB)"/>
+            <text x="399" y="568" text-anchor="middle" style="fill:#6FA8FF;font-size:9px;font-weight:700">send_user</text>
+            <text x="194" y="596" text-anchor="middle" class="s">one tool crosses the boundary — and it points outward</text>
+          </svg>
+        </div>
+      </div>
+      <figcaption><b>FIG.02</b><span class="swipehint">swipe →</span> — The whole machine. <span style="color:var(--amber)">Amber</span>: what wakes it up. <span style="color:var(--blue)">Blue</span>: routing and clients. <span style="color:var(--purple)">Purple</span>: the agent loop (a durable workflow). <span style="color:var(--green)">Green</span>: persistent state. Right zone: the disposable computers the agent uses as its hands. Solid arrows carry tool calls; dashed arrows are results and boot/restore paths.</figcaption>
+    </figure>
+
+    <p>Two design rules explain almost everything else in this document:</p>
+    <p><strong>1. The agent loop runs on the server, never on the VM.</strong> If the loop lived on the virtual machine, you could never shut that machine down independently — and you will need to. Keep durable state on the server and the VM stays disposable. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=893">▶ 14:53</a></p>
+    <p><strong>2. Thick server, thin client.</strong> Push agent-code updates to servers instantly — not through an app-store release. Heavy work (transcription, image generation) runs on server hardware. Servers scale with well-understood patterns. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=847">▶ 14:07</a></p>
+  </section>
+
+  <!-- ============ 04 LIFECYCLE ============ -->
+  <section id="lifecycle">
+    <p class="partlabel">04 · Always-on ≠ always-running</p>
+    <h2>The sleep / wake cycle</h2>
+    <p>“Always-on” is a product experience, not an infrastructure fact. Both the server process and the computer are normally <strong>asleep</strong> — there aren't enough computers in the world to give every user a machine that idles 24/7. What's always-on is the <em>ability to wake up instantly with full memory</em>. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=614">▶ 10:14</a></p>
+
+    <figure class="widefig">
+      <div class="figbody">
+        <div class="fig fig-scroll">
+          <svg viewBox="0 0 1080 250" role="img" aria-label="State machine: asleep, booting, running, sleeping, back to asleep; state persisted to database throughout">
+            <rect x="20" y="90" width="200" height="86" rx="10" class="bG"/>
+            <text x="120" y="118" text-anchor="middle" class="tG">ASLEEP</text>
+            <text x="120" y="138" text-anchor="middle" class="s">server down · VM down</text>
+            <text x="120" y="154" text-anchor="middle" class="s">all state in the DB</text>
+
+            <rect x="300" y="90" width="190" height="86" rx="10" class="bA"/>
+            <text x="395" y="118" text-anchor="middle" class="tA">BOOTING</text>
+            <text x="395" y="138" text-anchor="middle" class="s">load profile · memories</text>
+            <text x="395" y="154" text-anchor="middle" class="s">skills · routines</text>
+
+            <rect x="570" y="90" width="220" height="86" rx="10" class="bP"/>
+            <text x="680" y="118" text-anchor="middle" class="tP">RUNNING</text>
+            <text x="680" y="138" text-anchor="middle" class="s">agent loop live</text>
+            <text x="680" y="154" text-anchor="middle" class="s">VM starts only if needed</text>
+
+            <rect x="870" y="90" width="190" height="86" rx="10" class="b"/>
+            <text x="965" y="118" text-anchor="middle" class="t">PERSISTING</text>
+            <text x="965" y="138" text-anchor="middle" class="s">persist logs · snapshot VM</text>
+            <text x="965" y="154" text-anchor="middle" class="s">then everything powers down</text>
+
+            <path d="M220,133 L296,133" class="arrow"/>
+            <text x="258" y="112" text-anchor="middle" class="s">trigger</text>
+            <path d="M490,133 L566,133" class="arrow"/>
+            <text x="528" y="112" text-anchor="middle" class="s">state loaded</text>
+            <path d="M790,133 L866,133" class="arrow"/>
+            <text x="828" y="112" text-anchor="middle" class="s">work done</text>
+            <path d="M965,176 C965,212 120,212 120,180" class="arrow dash"/>
+            <text x="543" y="234" text-anchor="middle" class="s">idle → back to sleep (next trigger wakes it again)</text>
+          </svg>
+        </div>
+      </div>
+      <figcaption><b>FIG.03</b><span class="swipehint">swipe →</span> — Boot on trigger, work, persist, sleep. Conversation logs, memories, skills and routines all live in the database, so any component can die at any moment without losing the bot's identity.</figcaption>
+    </figure>
+
+    <h3>The router's two judgment calls</h3>
+    <p><strong>How does a trigger become a turn?</strong> Everything — your chat, a Slack ping, a call, a finished background job — lands in one router that <strong>deduplicates</strong>, decides how events fold into the conversation, and applies a <strong>priority</strong>: your direct message can interrupt the current agent loop (“actually, move that event to Thursday”); group chats and routine results wait in line. Three or four rapid messages from you get <strong>batched into a single turn</strong>. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1055">▶ 17:35</a></p>
+    <p><strong>Should the bot speak at all?</strong> Not everything deserves a ping. The router runs a heuristic — <em>do I need to bug the user about this?</em> — because a colleague who announces every inch of progress is unbearable. Daily status updates, not per-commit narration. Getting this silence/proactivity balance right is still an open problem. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=720">▶ 12:00</a></p>
+  </section>
+
+  <!-- ============ 05 SERVER ============ -->
+  <section id="server">
+    <p class="partlabel">05 · The server side</p>
+    <h2>Queue → agent loop → save everything</h2>
+    <p>The server's core is small: commands enter a <strong>queue</strong>, the <strong>agent loop</strong> processes one turn (model calls tools until it's done), and every step is written to the <strong>database</strong>. All the sophistication is in what surrounds that small piece. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=812">▶ 13:32</a></p>
+
+    <h3>When you hit send <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=927">▶ 15:27</a></h3>
+    <p>
+      <strong>1. Acknowledge instantly.</strong> The client confirms your message locally before the server has done anything — no spinner on send.<br>
+      <strong>2. Run the turn.</strong> The loop executes, writing each step to the DB as it goes.<br>
+      <strong>3. Notify by subscription.</strong> Clients hold subscriptions to server signals; on a change, they fetch the latest state.<br>
+      <strong>4. Dedupe.</strong> Retries can duplicate messages; deduping keeps the transcript clean.
+    </p>
+    <p>This is a distributed-systems exercise in strong vs. eventual consistency — and it leads straight to the most important infrastructure choice.</p>
+
+    <div class="callout">
+      <p><b>Durable workflows, not job queues.</b> A job queue that dies mid-task replays the whole task on retry — re-sending the email, re-running the migration. A <b>durable workflow</b> (Grokbot uses <b>Temporal</b>, open source) resumes exactly where it stopped, completed work intact. An agent that runs for hours <em>will</em> hit infrastructure failures; this choice is the difference between an annoyance and a catastrophe. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=980" style="margin-left:6px">▶ 16:20</a></p>
+    </div>
+  </section>
+
+  <!-- ============ 06 COMPUTER ============ -->
+  <section id="computer">
+    <p class="partlabel">06 · The bot's hands</p>
+    <h2>A disposable Linux computer</h2>
+    <p>The computer is a <strong>Firecracker virtual machine</strong> — Firecracker is AWS's open-source microVM toolkit, chosen because it makes it trivial to snapshot the machine's state, shut it down, and bring it back exactly as it was. Computers come from a shared pool: when a bot needs hands, it gets a machine of its own — its own screen and browser — in seconds, and hands it back on sleep. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=740">▶ 12:20</a></p>
+
+    <div class="grid6">
+      <div class="cell"><b>Files &amp; shell</b><span>The bot saves its work, its notes, its skills. Commands run in a secured environment — not on your laptop.</span></div>
+      <div class="cell"><b>Chrome + computer use</b><span>A full browser, driven by clicks, for anything without an API or MCP server.</span></div>
+      <div class="cell"><b>Virtual desktops</b><span>Running many bots? Each gets its own screen and browser session — no cross-talk between them.</span></div>
+      <div class="cell"><b>Live view</b><span>You can connect in and watch the bot's screen — or take the wheel yourself.</span></div>
+      <div class="cell"><b>Snapshots</b><span>State persists across sleep/wake; the machine is exactly as the bot left it.</span></div>
+      <div class="cell"><b>Rebuildable</b><span>Zero-day patch? Throw the VM away and rebuild it — durable state lives on the server, so nothing irreplaceable is lost.</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 07 HARNESS ============ -->
+  <section id="harness">
+    <p class="partlabel">07 · The harness</p>
+    <h2>One boundary, cheap ladders, a sparse main agent</h2>
+    <p>The boldest decision in Grokbot's harness: of all the tools the system has, <strong>exactly one crosses the client/server boundary — <code style="font-family:var(--mono);font-size:.9em">send_user</code> — and it points outward, from the agent to you</strong>. Inbound, you just text it; your messages are triggers for the router, not tools. Outbound, <code style="font-family:var(--mono);font-size:.9em">send_user</code> is the only tool the client ever has to understand. Every heavy tool — shell, files, cloud agents, screen recording, demos — lives server-side, so new clients (iOS, web, Slack, email) are trivial to build: one integration point. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1110">▶ 18:30</a></p>
+
+    <figure>
+      <div class="figbody">
+        <div class="fig" style="min-width:0">
+          <div class="bridge">
+            <div class="colbox">
+              <h5>Thin client — renders</h5>
+              <div class="chips"><span class="chip">iOS / Android</span><span class="chip">Web app</span><span class="chip">Desktop</span><span class="chip">Slack</span><span class="chip">Email</span></div>
+            </div>
+            <div class="senduser">
+              <span class="pill">send_user()</span>
+              <div class="cap">the single tool the client ever has to understand — everything else stays server-side</div>
+            </div>
+            <div class="colbox">
+              <h5>Thick server — acts</h5>
+              <div class="chips"><span class="chip">shell</span><span class="chip">read/write files</span><span class="chip">cloud agents</span><span class="chip">screen recording</span><span class="chip">demos</span><span class="chip hot">+plugins</span></div>
+            </div>
+          </div>
+          <div class="richrow">
+            <div class="rich"><b>Sign-in form</b>Server says “user must log in” — client renders a form, wired to 1Password.</div>
+            <div class="rich"><b>Payment</b>One-tap checkout (Stripe Link, X Money) inside the chat.</div>
+            <div class="rich"><b>Draft approval</b>Non-reversible actions (send email / Slack) come back as editable drafts.</div>
+            <div class="rich"><b>Emoji reaction</b>Sometimes 👍 is the whole reply — no message needed.</div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>FIG.04</b> — The send_user bridge. One tool on the wire; the client decides how to <em>render</em> each server event richly and interactively.</figcaption>
+    </figure>
+
+    <h3>Dynamic tool discovery <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1201">▶ 20:01</a></h3>
+    <p>A context window is finite, and every installed connector (Google Drive, Gmail, YouTube…) brings a pile of tool schemas. Stuff them all in and there's no room left for actual work. The fix — some harnesses call it the <strong>tool search tool</strong> — is to keep only <strong>tool names</strong> in the prompt; the model reads a tool's full schema from a file only when it decides to use it.</p>
+
+    <figure>
+      <div class="figbody">
+        <div class="fig fig-scroll">
+         <div style="min-width:540px">
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--muted);margin-bottom:2px">NAÏVE — EVERY SCHEMA IN CONTEXT</div>
+          <div class="ctxbar" aria-hidden="true">
+            <div class="seg-static" style="width:14%">system<br>prompt</div>
+            <div class="seg-schemas" style="width:56%">every installed connector dumps its tool schemas into the window</div>
+            <div class="seg-names" style="width:12%">names</div>
+            <div class="seg-work" style="width:18%">actual work</div>
+          </div>
+          <div class="barlabel"><span>context window (tokens)</span><span style="color:var(--red)">starved</span></div>
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--muted);margin-bottom:2px">GROKBOT — TOOL SEARCH TOOL</div>
+          <div class="ctxbar" aria-hidden="true">
+            <div class="seg-static" style="width:14%">system<br>prompt</div>
+            <div class="seg-names" style="width:12%">tool names only</div>
+            <div class="seg-hatch" style="width:12%">schemas in files</div>
+            <div class="seg-free" style="width:62%">room to work</div>
+          </div>
+          <div class="barlabel"><span>context window (tokens)</span><span style="color:var(--green)">healthy</span></div>
+         </div>
+        </div>
+      </div>
+      <figcaption><b>FIG.05</b><span class="swipehint">swipe →</span> — Same window, two strategies. Keeping schemas on disk (read on demand) cuts token cost and leaves the model room to think.</figcaption>
+    </figure>
+
+    <h3>Always climb the cheapest ladder first <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1292">▶ 21:32</a></h3>
+    <p>Two ladders govern how the bot solves problems without bothering you. The instinct in both: <strong>try the cheap and reliable option first; escalate only when it fails</strong> — the way a good colleague exhausts their options before interrupting you.</p>
+
+    <figure>
+      <div class="figbody">
+        <div class="fig" style="min-width:0">
+          <div class="ladders">
+            <div class="ladder">
+              <h5>Ladder 1 — Answering a question</h5>
+              <div class="sub">FROM CHEAPEST TO MOST EXPENSIVE</div>
+              <div class="rung"><span class="n">1</span>Conversation history — what it already knows</div>
+              <div class="rung"><span class="n">2</span>A plugin / MCP server / API — e.g. Plaid for banking</div>
+              <div class="rung"><span class="n">3</span>Web search — “what was the Cubs score?”</div>
+              <div class="rung"><span class="n">4</span>The computer's browser — search and click like a human</div>
+              <div class="rung"><span class="n">5</span>The full desktop — scripts, builds, long jobs</div>
+              <div class="rung top"><span class="n">6</span>Ask the user — last resort, not first resort</div>
+              <div class="costarrow"><span>↑ cheap / fast</span><span>expensive / slow ↑</span></div>
+            </div>
+            <div class="ladder">
+              <h5>Ladder 2 — Reading a screen</h5>
+              <div class="sub">FROM FEWEST TOKENS TO MOST</div>
+              <div class="rung"><span class="n">1</span>Accessibility tree — the page as structured text; few tokens</div>
+              <div class="rung"><span class="n">2</span>Page HTML — more detail, more tokens</div>
+              <div class="rung"><span class="n">3</span>Screenshot — pixels, when structure isn't enough</div>
+              <div class="rung"><span class="n">4</span>Click by pixel coordinates — for uncrawlable modals and dialogs</div>
+              <div class="rung top"><span class="n">5</span>Ask the user — 2FA codes, captchas, judgment calls</div>
+              <div class="costarrow"><span>↑ cheap / fast</span><span>expensive / slow ↑</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>FIG.06</b> — The two escalation ladders. Each rung is tried only after the cheaper one fails.</figcaption>
+    </figure>
+
+    <h3>The orchestrator and its helpers <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1410">▶ 23:30</a></h3>
+    <p>The <strong>main agent</strong> is an orchestrator, and its conversation is kept <strong>deliberately sparse</strong>. Token-heavy work — hundreds of shell commands, screenshot analysis, long research — is handed to <strong>helper subagents</strong>, each with its own fresh context and its own skills. Helpers are durable workflows too: if the video helper crashes or eats all its memory, it restarts <em>without losing progress</em>. Only the finished result returns to the main agent's context. That's the trick behind a product that feels like it has <strong>infinite context</strong> — no model does, but the main conversation never bloats, so you never feel the wall.</p>
+
+    <figure class="widefig">
+      <div class="figbody">
+        <div class="fig fig-scroll">
+          <svg viewBox="0 0 1080 400" role="img" aria-label="Main agent at center with sparse context; four helper subagents around it receive tasks and return only results; each helper is a durable workflow with its own skills">
+            <rect x="400" y="150" width="280" height="110" rx="12" class="bP"/>
+            <text x="540" y="182" text-anchor="middle" class="tP" style="font-size:15px">MAIN AGENT</text>
+            <text x="540" y="204" text-anchor="middle" class="l">orchestrator · sparse context</text>
+            <text x="540" y="222" text-anchor="middle" class="s">keeps a to-do list of helpers:</text>
+            <text x="540" y="238" text-anchor="middle" class="s">check on them · message them · stop them</text>
+
+            <rect x="60" y="52" width="230" height="74" rx="10" class="b"/>
+            <text x="175" y="78" text-anchor="middle" class="t" style="font-size:13px">Helper — deep research</text>
+            <text x="175" y="97" text-anchor="middle" class="s">durable workflow · own skills</text>
+            <text x="175" y="113" text-anchor="middle" class="s">fresh context, hours of reading</text>
+
+            <rect x="790" y="52" width="230" height="74" rx="10" class="b"/>
+            <text x="905" y="78" text-anchor="middle" class="t" style="font-size:13px">Helper — video render</text>
+            <text x="905" y="97" text-anchor="middle" class="s">durable workflow · own skills</text>
+            <text x="905" y="113" text-anchor="middle" class="s">crash → resume, no lost work</text>
+
+            <rect x="60" y="272" width="230" height="74" rx="10" class="b"/>
+            <text x="175" y="298" text-anchor="middle" class="t" style="font-size:13px">Helper — browser ops</text>
+            <text x="175" y="317" text-anchor="middle" class="s">durable workflow · own skills</text>
+            <text x="175" y="333" text-anchor="middle" class="s">screenshots never reach the lead</text>
+
+            <rect x="790" y="272" width="230" height="74" rx="10" class="b"/>
+            <text x="905" y="298" text-anchor="middle" class="t" style="font-size:13px">Helper — big refactor</text>
+            <text x="905" y="317" text-anchor="middle" class="s">durable workflow · own skills</text>
+            <text x="905" y="333" text-anchor="middle" class="s">hundreds of shell calls, absorbed</text>
+
+            <path d="M294,102 C360,110 380,140 402,158" class="arrow"/>
+            <text x="342" y="96" text-anchor="middle" class="s">task</text>
+            <path d="M400,186 C330,176 300,150 292,120" class="arrow dash"/>
+            <text x="330" y="182" text-anchor="middle" class="s">result only</text>
+
+            <path d="M786,102 C720,110 700,140 678,158" class="arrow"/>
+            <text x="738" y="96" text-anchor="middle" class="s">task</text>
+            <path d="M680,186 C750,176 780,150 788,120" class="arrow dash"/>
+            <text x="752" y="182" text-anchor="middle" class="s">result only</text>
+
+            <path d="M294,300 C360,292 380,266 402,250" class="arrow"/>
+            <text x="342" y="322" text-anchor="middle" class="s">task</text>
+            <path d="M400,224 C330,234 300,258 292,290" class="arrow dash"/>
+            <text x="330" y="230" text-anchor="middle" class="s">result only</text>
+
+            <path d="M786,300 C720,292 700,266 678,250" class="arrow"/>
+            <text x="738" y="322" text-anchor="middle" class="s">task</text>
+            <path d="M680,224 C750,234 780,258 788,290" class="arrow dash"/>
+            <text x="752" y="230" text-anchor="middle" class="s">result only</text>
+          </svg>
+        </div>
+      </div>
+      <figcaption><b>FIG.07</b><span class="swipehint">swipe →</span> — Modeled on how you'd scale a team of engineers on a hard problem: a lead who tracks the plan, and specialists who do the expensive work and report conclusions, not screenshots.</figcaption>
+    </figure>
+
+    <h3>Engineering tidbits from the team <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1514">▶ 25:14</a></h3>
+    <p>
+      <strong>Don't add or remove tools mid-turn</strong> — it busts the prompt cache.<br>
+      <strong>Trim tool descriptions and schemas.</strong> Verbose schemas burn the window and the budget.<br>
+      <strong>“Just one tool: shell” is elegant but not always right.</strong> If the model spends 90% of its shell calls on one kind of task, build a dedicated tool — it's cheaper and more legible for humans reviewing behavior.<br>
+      <strong>Write error messages for agents, not just humans.</strong> “This failed — click here, do X next” helps a model as much as a person. Agent-facing DX is real DX.
+    </p>
+  </section>
+
+  <!-- ============ 08 CONTEXT ============ -->
+  <section id="context">
+    <p class="partlabel">08 · Context engineering</p>
+    <h2>Context engineering <em class="quiet">=</em> harness engineering</h2>
+    <p>Every turn resends the whole conversation plus one new message. Most tokens in an agent workload should therefore be <strong>cached tokens</strong> — providers discount them heavily. The entire discipline of context engineering is, to a first approximation, <em>don't break the cache</em>. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1646">▶ 27:26</a></p>
+
+    <figure class="widefig">
+      <div class="figbody">
+        <div class="fig fig-scroll">
+          <svg viewBox="0 0 1080 300" role="img" aria-label="Prompt bar: static cached prefix of system prompt and tool names, cached conversation history, and a small uncached delta of the newest message; below, a cache-lifetime window showing compaction happening while the cache is warm">
+            <text x="20" y="36" class="zt">ANATOMY OF ONE API CALL</text>
+            <rect x="20" y="52" width="520" height="64" rx="8" class="bB"/>
+            <text x="280" y="78" text-anchor="middle" class="tB" style="font-size:12.5px">system prompt · tool names — byte-identical</text>
+            <text x="280" y="97" text-anchor="middle" class="s">fixed order · hashed sections · cached</text>
+            <rect x="544" y="52" width="360" height="64" rx="8" class="b"/>
+            <text x="724" y="78" text-anchor="middle" class="t" style="font-size:12.5px">conversation history</text>
+            <text x="724" y="97" text-anchor="middle" class="s">cached (resent every turn)</text>
+            <rect x="908" y="52" width="152" height="64" rx="8" class="bA"/>
+            <text x="984" y="78" text-anchor="middle" class="tA" style="font-size:12.5px">new message</text>
+            <text x="984" y="97" text-anchor="middle" class="s">full-price tokens</text>
+            <path d="M20,132 L1060,132" style="stroke:#1C2A44;stroke-width:1" fill="none"/>
+            <text x="20" y="180" class="zt">THE CACHE WINDOW (LIFETIME ≈ 10–60 MIN)</text>
+            <rect x="20" y="196" width="1040" height="34" rx="6" fill="rgba(111,168,255,.10)"/>
+            <text x="540" y="218" text-anchor="middle" class="s">cache warm — everything above is cheap to resend</text>
+            <circle cx="200" cy="196" r="5" fill="#FFB454"/>
+            <text x="200" y="252" text-anchor="middle" class="l">user goes idle</text>
+            <circle cx="540" cy="196" r="5" fill="#FFB454"/>
+            <text x="540" y="252" text-anchor="middle" class="l">server compacts NOW — summary replaces history</text>
+            <circle cx="880" cy="196" r="5" fill="#FFB454"/>
+            <text x="880" y="252" text-anchor="middle" class="l">user returns → resumes from a short, cheap summary</text>
+          </svg>
+        </div>
+      </div>
+      <figcaption><b>FIG.08</b><span class="swipehint">swipe →</span> — Keep the head of the prompt byte-identical, and run compaction <em>inside</em> the warm window — the user's next message should land on a cheap summary, not an expensive 100k-token history.</figcaption>
+    </figure>
+
+    <p>Two rules keep that head stable in practice: prompt sections are <strong>hashed and kept in a fixed order</strong> — even an A/B-tested prompt change gets its own slot, or you'd bust the cache for every user — and a <strong>cache miss is treated as a bug</strong>, not bad luck. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1837">▶ 30:37</a></p>
+    <p><strong>Compaction is lossy — treat it as an algorithm problem.</strong> A 200k-token window eventually fills; the harness must summarize without losing the details that matter. Two rules of thumb from the talk: push long outputs to <strong>files</strong> (the model reads them on demand), and delegate expensive work (screenshots, big research) to <strong>helpers</strong> so they never enter the main context at all. And garden constantly — trim dead weight as you go, for cost as much as for recall. The talk's cautionary tale: when the viral personal-agent <strong>OpenClaw</strong> exploded in January 2026, its unoptimized harness produced constant cache misses — every turn re-read the whole conversation at full price, on flat-rate subscription plans — and taming it took a pile of fixes. This layer is load-bearing. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1893">▶ 31:33</a></p>
+    <p>One more trick: when you open the chat and start typing, the server <strong>prepares the prompt early to warm the cache</strong> — the same way a website prefetches a page on link-hover. Small optimizations like this compound into how long and how smart a bot can be. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1866">▶ 31:06</a></p>
+
+    <h3>Memory in layers <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1971">▶ 32:51</a></h3>
+    <p>What survives compaction, and for how long? The talk models it on a brain — important facts held now, older experience filed away, noise forgotten:</p>
+
+    <figure>
+      <div class="figbody">
+        <div class="fig" style="min-width:0">
+          <div class="layers">
+            <div class="layer l1"><div><span class="name">CORE FACTS</span><span class="ttl">injected into every prompt</span></div><div class="desc">Identity-level facts: “user texts in lowercase”, current projects, standing preferences. Gets an ongoing <strong>garbage collection</strong> pass — facts expire when they stop being relevant.</div></div>
+            <div class="layer l2"><div><span class="name">SCRATCHPAD</span><span class="ttl">minutes → an hour</span></div><div class="desc">Ephemeral working notes for the current task. Designed to disappear.</div></div>
+            <div class="layer l3"><div><span class="name">DATED LOGS</span><span class="ttl">long-lived, chronological</span></div><div class="desc">The colleague's notebook: dated entries of what was actually done. “What did I do last week?” is a lookup, not a guess.</div></div>
+            <div class="layer l4"><div><span class="name">FILES ON THE VM</span><span class="ttl">working copies · searched on demand</span></div><div class="desc">Everything else. The model is genuinely good at grep — anything can be re-found, so nothing needs to be always-resident. Files live on the bot's machine, but durable state is persisted to the server: the VM holds a working copy, not the archive.</div></div>
+          </div>
+        </div>
+      </div>
+      <figcaption><b>FIG.09</b> — The memory hierarchy: hottest and smallest at the top, coldest and biggest at the bottom — modeled on a brain. Note the last layer: the VM holds working files, the server holds the archive. That's what makes the machine safe to destroy.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 09 SECURITY ============ -->
+  <section id="security">
+    <p class="partlabel">09 · Trusting a bot with your work</p>
+    <h2>Security: the reviewer is a model</h2>
+    <p>You're handing an autonomous machine your accounts, your browser sessions, and your words. Four guardrails from the talk: <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1590">▶ 26:30</a></p>
+    <p>
+      <strong>Autoreview every command.</strong> A separate AI model reviews each shell command before it runs. Paradoxically safer than a human approving hundreds of commands with fatigue-numbed eyes — in blind tests the model now catches more.<br>
+      <strong>Untrusted input is never an instruction.</strong> An email in your inbox could be a phishing lure; a webhook could be hostile. Those texts must be treated as <em>data</em>, never folded into the prompt as user intent — the industry is still working hard on prompt-injection defense.<br>
+      <strong>Confirm irreversible actions.</strong> Sending email or posting to Slack can't be undone — the client renders an editable draft and waits for approval (FIG.04).<br>
+      <strong>Keep secrets out of the conversation.</strong> Passwords and credentials flow through product workflows (like the 1Password-wired sign-in form), never through model context.
+    </p>
+  </section>
+
+  <!-- ============ 10 FLYWHEEL ============ -->
+  <section id="flywheel">
+    <p class="partlabel">10 · Getting better while you sleep</p>
+    <h2>The training flywheel</h2>
+    <p>The product improves on two coupled loops — one daily, one monthly — riding the standard LLM training pipeline: <strong>pretraining</strong> (world knowledge from internet-scale text) → <strong>SFT, supervised fine-tuning</strong> (behavior — including <em>examples of working inside this harness</em>, so the model knows its tools) → <strong>reinforcement learning</strong> (instruction following, picking the right skill out of hundreds, clicking the right pixel). Inference is tuned per role, too: the main agent you chat with needs low latency, while helpers can be slower — the difference between ten minutes and twelve is negligible when a job runs for hours. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2067">▶ 34:27</a></p>
+    <p>And when a new model lands, it unlocks behaviors nobody trained for. Bots in group chats are emergent — and early public failures (like the Hugging Face incident) show how poorly untrained agents behave in the wild, which is exactly why multi-agent behavior needs to make it into the next training run.</p>
+
+    <figure class="widefig">
+      <div class="figbody">
+        <div class="fig fig-scroll">
+          <svg viewBox="0 0 1080 330" role="img" aria-label="Inner loop daily: bug to eval to fix to ship. Outer loop monthly: failures and data train a new model that climbs evals and drops into the product">
+            <text x="20" y="36" class="zt">INNER LOOP — THE TEAM, DAILY</text>
+            <rect x="20" y="56" width="235" height="64" rx="10" class="bA"/><text x="137" y="82" text-anchor="middle" class="tA" style="font-size:13px">Bug in the wild</text><text x="137" y="100" text-anchor="middle" class="s">wrong tool call · bad skill pick</text>
+            <rect x="300" y="56" width="200" height="64" rx="10" class="b"/><text x="400" y="82" text-anchor="middle" class="t" style="font-size:13px">Write an eval</text><text x="400" y="100" text-anchor="middle" class="s">pin the failure as a test</text>
+            <rect x="545" y="56" width="250" height="64" rx="10" class="b"/><text x="670" y="82" text-anchor="middle" class="t" style="font-size:13px">Fix harness · prompt · model</text><text x="670" y="100" text-anchor="middle" class="s">whatever layer is actually broken</text>
+            <rect x="840" y="56" width="220" height="64" rx="10" class="bG"/><text x="950" y="82" text-anchor="middle" class="tG" style="font-size:13px">Verify in eval → ship</text><text x="950" y="100" text-anchor="middle" class="s">same day, every day</text>
+            <path d="M255,88 L296,88" class="arrow"/><path d="M500,88 L541,88" class="arrow"/><path d="M795,88 L836,88" class="arrow"/>
+            <path d="M950,120 C950,158 137,158 137,124" class="arrow dash"/>
+            <text x="543" y="141" text-anchor="middle" class="s">each fixed bug hardens the harness — and becomes training signal</text>
+
+            <text x="20" y="212" class="zt">OUTER LOOP — THE MODELS, MONTHLY</text>
+            <rect x="20" y="232" width="310" height="64" rx="10" class="bP"/><text x="175" y="258" text-anchor="middle" class="tP" style="font-size:13px">Train on the failures</text><text x="175" y="276" text-anchor="middle" class="s">bugs · evals · harness usage as SFT/RL data</text>
+            <rect x="375" y="232" width="290" height="64" rx="10" class="b"/><text x="520" y="258" text-anchor="middle" class="t" style="font-size:13px">New model climbs the evals</text><text x="520" y="276" text-anchor="middle" class="s">measurably better at what users care about</text>
+            <rect x="710" y="232" width="350" height="64" rx="10" class="bG"/><text x="885" y="258" text-anchor="middle" class="tG" style="font-size:13px">Drop into the product</text><text x="885" y="276" text-anchor="middle" class="s">new capabilities → new usage patterns</text>
+            <path d="M330,264 L371,264" class="arrow"/><path d="M665,264 L706,264" class="arrow"/>
+            <path d="M885,296 C885,326 175,326 175,300" class="arrow dash"/>
+            <text x="543" y="311" text-anchor="middle" class="s">real usage → new failures &amp; data</text>
+          </svg>
+        </div>
+      </div>
+      <figcaption><b>FIG.10</b><span class="swipehint">swipe →</span> — The flywheel. Daily harness fixes feed monthly model training; each new model drops back into the product with capabilities nobody trained for yet.</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 11 OUTLOOK ============ -->
+  <section id="next">
+    <p class="partlabel">11 · Build for the next model</p>
+    <h2>“Delete the product”</h2>
+    <div class="quote">“Assume the models today are the worst they'll ever be. In six months you might need to completely rebuild the UI. Build for the next generation of the model — build as little as possible, and keep the interface really simple.”<span class="who">— the principle, from Cursor and now SpaceX</span></div>
+    <p>Most of what this document describes didn't exist a year ago. That's the planning assumption behind “delete the product”: don't over-build around today's limits — sometimes that means deleting what you built. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2262">▶ 37:42</a></p>
+
+    <h3>Safe bets for the next 6–12 months <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2316">▶ 38:36</a></h3>
+    <p>
+      Agents that work for <strong>weeks or months</strong>, not hours · much better <strong>recall</strong> (graphs? files? new representations?) · bots granted <strong>all the tools a human hire would get</strong> · interfaces fading toward <strong>speech</strong> (talk to your bot all day from a Jony-Ive-style device) · <strong>skills learned on the job</strong>, encoded into files automatically · companies writing down their bespoke processes so they're <strong>legible to agents</strong>.
+    </p>
+
+    <h3>Open problems worth a career <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2422">▶ 40:22</a></h3>
+    <p>
+      How do you <strong>evaluate an agent that runs for a month when models ship every month</strong>? · What's the right <strong>memory representation</strong>? · How do you make a harness and its infrastructure <strong>secure against takeover</strong>? · Where exactly is the line between <strong>helpfully proactive and annoying</strong>? · And as token volume explodes, <strong>token efficiency</strong> becomes an engineering discipline of its own.
+    </p>
+
+    <p>And the macro picture, as Alex from OpenRouter put it on X: the sidebar-plus-chatbox app everyone mocks as “all the same” is this era's “server + database + CRUD” — the new normal. Every product will have an agentic side or become headless data that some agent consumes. The new primitives on the board: <strong>durable workflows, sandboxes, cloud computers, memory, skills, connectors, voice, payments, identity, evals, observability</strong>. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2525">▶ 42:05</a></p>
+  </section>
+
+  <!-- ============ 12 BLUEPRINT ============ -->
+  <section id="blueprint">
+    <p class="partlabel">12 · The napkin test</p>
+    <h2>Design Grokbot from memory</h2>
+    <p>If this teardown worked, you can now rebuild the machine from these eleven moves. Close the tab and try.</p>
+
+    <ol class="steps">
+      <li><b>Start from the seed: a model calling tools in a loop.</b><p>That's the whole agent. Everything below is what it takes to run that loop reliably, forever, for millions of people.</p></li>
+      <li><b>Move the loop onto a server.</b><p>Thick server, thin clients. Agent updates deploy server-side; heavy work runs on server hardware; the loop must be independent of anything you might want to reboot.</p></li>
+      <li><b>Give it a disposable computer.</b><p>A Firecracker microVM from a shared pool: files, shell, Chrome, a virtual desktop per active bot. Snapshot it, sleep it, rebuild it for zero-days — and never run the agent loop on it.</p></li>
+      <li><b>Persist all state in a database; sleep when idle.</b><p>Conversations, memories, skills, routines. “Always-on” means wake-instantly-with-full-memory, not machines idling 24/7.</p></li>
+      <li><b>Wake it from everywhere; let it stay silent.</b><p>Chat, Slack, calls, meetings, cron. A router dedupes, batches, prioritizes your direct messages — and applies the “is this worth bugging the user?” heuristic.</p></li>
+      <li><b>Give the agent exactly one client-facing tool: send_user.</b><p>One integration point, rich client-side rendering: sign-in forms, payments, draft approvals, emoji reactions.</p></li>
+      <li><b>Keep the context window for thinking.</b><p>Tool names only — schemas live in files. Climb the cheap ladders first (conversation → connectors → search → browser → desktop → you). Delegate expensive work to helper subagents; only results return.</p></li>
+      <li><b>Engineer the cache like a feature.</b><p>Static, ordered prompt head; hashed sections; cache miss = bug; warm the cache while the user types; compact <em>while the cache is warm</em>.</p></li>
+      <li><b>Layer the memory.</b><p>Core facts in every prompt → ephemeral scratchpad → dated logs → everything else greppable in files, with garbage collection on top.</p></li>
+      <li><b>Guard it: autoreview, distrust, confirm, isolate.</b><p>A model reviews every command; untrusted input is data, never instructions; irreversible actions need draft approval; secrets stay out of the conversation.</p></li>
+      <li><b>Run the two loops.</b><p>Daily: bug → eval → fix → ship. Monthly: train on failures → climb evals → deploy. And build as little as possible, because the next model changes the calculus.</p></li>
+    </ol>
+
+    <div class="callout" style="margin-top:26px">
+      <p><b>One-sentence version:</b> Grokbot is the simple harness — a model calling tools in a loop — wrapped in a durable workflow on a server, wielding a disposable cloud computer, fed by event triggers through a polite router, talking to thin clients through a single <code style="font-family:var(--mono);font-size:.9em">send_user</code> tool, and disciplined by context engineering so the loop can run for weeks.</p>
+    </div>
+
+    <h3 style="margin-top:34px">And four habits from the close of the talk <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2603">▶ 43:23</a></h3>
+    <p>
+      <strong>Architecture decisions compound</strong> — system design matters more than ever when you're building with models. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2610">▶ 43:30</a><br>
+      <strong>Still read the code you ship</strong> — especially to understand the architecture. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2620">▶ 43:40</a><br>
+      <strong>Build your own version</strong> — the speaker points to an “open grokbot” fork on GitHub; pair a sandbox with a VM and learn the pieces hands-on. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2642">▶ 44:02</a><br>
+      <strong>Learn how LLMs work</strong> — like knowing how databases work when you build web apps: harness decisions increasingly <em>are</em> model decisions. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2676">▶ 44:36</a>
+    </p>
+  </section>
+</main>
+
+<footer>
+  <p><b>Sources &amp; credits.</b> This teardown is a rewritten companion to <a href="https://www.youtube.com/watch?v=L1OBRtfPS34">“Stanford CS146S: How always-on agents work”</a> by Lee Robinson (45:17, Oct 2026). All architecture, numbers, anecdotes and quotes are condensed from the talk; phrasing is paraphrased for clarity and the diagrams are redrawn. Timestamp chips (▶ mm:ss) follow this tutorial's reading order, not the video's, and link to the exact moment. The speaker points to a community “open grokbot” fork on GitHub and encourages building your own.</p>
+  <p class="small">Figures FIG.01–FIG.10 are original SVG/HTML redrawings of the talk's slides. Built Oct 2026.</p>
+</footer>
+
+<script>
+  (function () {
+    var bar = document.getElementById('progress');
+    var ticking = false;
+    function update() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+      ticking = false;
+    }
+    window.addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
+    update();
+  })();
+</script>
+</body>
+</html>
