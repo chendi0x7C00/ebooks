@@ -329,6 +329,24 @@
   }
   .quote .who { display: block; margin-top: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: .1em; }
 
+  .flowlist { margin: 20px 0 0; }
+  .fstep {
+    display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start;
+    padding: 9px 0 8px; border-top: 1px dashed var(--line-soft);
+  }
+  .fstep:first-child { border-top: none; }
+  .fstep .n {
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    width: 38px; height: 26px; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; border: 1px solid var(--line); color: var(--blue);
+    background: var(--blue-soft);
+  }
+  .fstep .n.c { color: var(--amber); border-color: rgba(255,180,84,.4); background: var(--amber-soft); }
+  .fstep .n.v { color: var(--green); border-color: rgba(95,214,164,.4); background: var(--green-soft); }
+  .fstep .t { font-size: 13.8px; color: var(--ink-2); line-height: 1.55; }
+  .fstep .t b { color: var(--ink); }
+  @media (max-width: 560px) { .fstep { grid-template-columns: 38px 1fr; gap: 9px; } .fstep .n { width: 34px; } }
+
   footer {
     border-top: 1px solid var(--line-soft); margin-top: 70px; padding: 26px 20px 60px;
     max-width: 840px; margin-left: auto; margin-right: auto;
@@ -365,7 +383,8 @@
     <a href="#security">09 Security</a>
     <a href="#flywheel">10 Flywheel</a>
     <a href="#next">11 Outlook</a>
-    <a href="#blueprint">12 Blueprint</a>
+    <a href="#dataflow">12 Dataflow</a>
+    <a href="#blueprint">13 Blueprint</a>
   </div>
 </nav>
 
@@ -374,7 +393,7 @@
   <header class="hero">
     <div class="specgrid">
       <div>
-        <p class="partlabel">Engineering teardown · FIG.01–10</p>
+        <p class="partlabel">Engineering teardown · FIG.01–11</p>
         <h1>Anatomy of a<br>Grokbot<span class="thin">.</span></h1>
         <p class="lede">How an <strong>always-on, proactive, persistent agent</strong> is actually built — taken apart, layer by layer, from Lee Robinson's Stanford <span style="font-family:var(--mono);font-size:.85em">CS146S</span> lecture, until you could sketch the whole machine on a napkin.</p>
       </div>
@@ -952,9 +971,178 @@
     <p>And the macro picture, as Alex from OpenRouter put it on X: the sidebar-plus-chatbox app everyone mocks as “all the same” is this era's “server + database + CRUD” — the new normal. Every product will have an agentic side or become headless data that some agent consumes. The new primitives on the board: <strong>durable workflows, sandboxes, cloud computers, memory, skills, connectors, voice, payments, identity, evals, observability</strong>. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=2525">▶ 42:05</a></p>
   </section>
 
-  <!-- ============ 12 BLUEPRINT ============ -->
+  <!-- ============ 12 DATAFLOW ============ -->
+  <section id="dataflow">
+    <p class="partlabel">12 · One message, end to end</p>
+    <h2>Follow a message through the machine</h2>
+    <p>You've now met every component individually. Here they are in one run: you type a message and hit send — and the whole system moves. Even step zero happens <em>before</em> send: while you're typing, the server may pre-build the prompt to warm the prompt cache, the same way a website prefetches a page on link-hover. <a class="ts" href="https://youtu.be/L1OBRtfPS34?t=1866">▶ 31:06</a></p>
+
+    <figure class="widefig">
+      <div class="figbody">
+        <div class="fig fig-scroll">
+          <svg viewBox="0 0 1080 812" role="img" aria-label="Full dataflow of one user message across three swimlanes: client (type and send, instant ack, reply rendered), server (router, queue, turn workflow start with state restore, agent loop, helper and draft-card branches, autoreview gate, loop until reply, send_user, persist and compact, idle and sleep), and the computer (boot microVM, execute shell files Chrome desktop, snapshot back to pool)" style="min-width:860px">
+            <!-- lanes -->
+            <rect x="16" y="50" width="1048" height="100" rx="14" class="zone"/>
+            <text x="36" y="68" class="zt">CLIENT — THIN</text>
+            <rect x="16" y="164" width="1048" height="450" rx="14" class="zone"/>
+            <text x="36" y="182" class="zt">SERVER — THICK · WAKES ON DEMAND</text>
+            <rect x="16" y="628" width="1048" height="160" rx="14" class="zone" style="stroke:rgba(95,214,164,.45)"/>
+            <text x="36" y="646" class="zt" fill="#5FD6A4">A COMPUTER — FIRECRACKER MICROVM FROM THE POOL</text>
+
+            <!-- client lane -->
+            <rect x="36" y="78" width="170" height="58" rx="9" class="bA"/>
+            <text x="121" y="98" text-anchor="middle" class="tA" style="font-size:12.5px">1 · TYPE &amp; SEND</text>
+            <text x="121" y="115" text-anchor="middle" class="s">your text is a trigger,</text>
+            <text x="121" y="129" text-anchor="middle" class="s">not a tool</text>
+            <rect x="246" y="78" width="190" height="58" rx="9" class="bA"/>
+            <text x="341" y="98" text-anchor="middle" class="tA" style="font-size:12.5px">2 · INSTANT ACK</text>
+            <text x="341" y="115" text-anchor="middle" class="s">message shows sent</text>
+            <text x="341" y="129" text-anchor="middle" class="s">locally — no spinner</text>
+            <rect x="856" y="78" width="188" height="58" rx="9" class="bA"/>
+            <text x="950" y="98" text-anchor="middle" class="tA" style="font-size:12.5px">12 · REPLY RENDERED</text>
+            <text x="950" y="115" text-anchor="middle" class="s">signal → fetch → dedupe</text>
+            <text x="950" y="129" text-anchor="middle" class="s">rich UI: text · draft · 👍</text>
+
+            <!-- server row A -->
+            <rect x="36" y="196" width="250" height="70" rx="9" class="bB"/>
+            <text x="161" y="215" text-anchor="middle" class="tB" style="font-size:12.5px">3 · ROUTER</text>
+            <text x="161" y="233" text-anchor="middle" class="s">dedupe · batch rapid sends</text>
+            <text x="161" y="249" text-anchor="middle" class="s">your DM can interrupt a turn</text>
+            <rect x="316" y="196" width="190" height="70" rx="9" class="b"/>
+            <text x="411" y="215" text-anchor="middle" class="t" style="font-size:12.5px">4 · QUEUE</text>
+            <text x="411" y="233" text-anchor="middle" class="s">one turn at a time;</text>
+            <text x="411" y="249" text-anchor="middle" class="s">rapid messages merge</text>
+            <rect x="586" y="196" width="240" height="70" rx="9" class="bP"/>
+            <text x="706" y="215" text-anchor="middle" class="tP" style="font-size:12.5px">5 · TURN WORKFLOW STARTS</text>
+            <text x="706" y="232" text-anchor="middle" class="s">durable workflow (Temporal)</text>
+            <text x="706" y="247" text-anchor="middle" class="s">restore: profile · memories ·</text>
+            <text x="706" y="262" text-anchor="middle" class="s">skills · conversation history</text>
+            <rect x="856" y="196" width="188" height="70" rx="9" class="b"/>
+            <text x="950" y="215" text-anchor="middle" class="t" style="font-size:12.5px">STATE DB</text>
+            <text x="950" y="233" text-anchor="middle" class="s">conversations · memories</text>
+            <text x="950" y="249" text-anchor="middle" class="s">skills · routines · queue</text>
+
+            <!-- server row B -->
+            <rect x="36" y="306" width="230" height="80" rx="9" class="bP"/>
+            <text x="151" y="326" text-anchor="middle" class="tP" style="font-size:12.5px">6 · AGENT LOOP</text>
+            <text x="151" y="344" text-anchor="middle" class="s">call the model: cached head</text>
+            <text x="151" y="360" text-anchor="middle" class="s">+ the new message only;</text>
+            <text x="151" y="376" text-anchor="middle" class="s">tool names only in context</text>
+            <rect x="326" y="318" width="210" height="64" rx="9" class="bP"/>
+            <text x="431" y="336" text-anchor="middle" class="tP" style="font-size:12.5px">6a · HELPER (child flow)</text>
+            <text x="431" y="354" text-anchor="middle" class="s">expensive work · own skills</text>
+            <text x="431" y="370" text-anchor="middle" class="s">result only returns</text>
+
+            <!-- server row C -->
+            <rect x="36" y="446" width="250" height="70" rx="9" class="b"/>
+            <text x="161" y="465" text-anchor="middle" class="t" style="font-size:12.5px">7 · TOOL CALL → AUTOREVIEW</text>
+            <text x="161" y="483" text-anchor="middle" class="s">a separate model checks</text>
+            <text x="161" y="499" text-anchor="middle" class="s">every command before it runs</text>
+            <rect x="316" y="446" width="220" height="70" rx="9" class="bA"/>
+            <text x="426" y="465" text-anchor="middle" class="tA" style="font-size:12.5px">6b · DRAFT CARD</text>
+            <text x="426" y="483" text-anchor="middle" class="s">irreversible? send a draft,</text>
+            <text x="426" y="499" text-anchor="middle" class="s">wait for approval signal</text>
+            <rect x="586" y="446" width="240" height="70" rx="9" class="bP"/>
+            <text x="706" y="465" text-anchor="middle" class="tP" style="font-size:12.5px">10 · LOOP UNTIL THE REPLY</text>
+            <text x="706" y="483" text-anchor="middle" class="s">results feed the next call;</text>
+            <text x="706" y="499" text-anchor="middle" class="s">every step hits the history</text>
+            <rect x="856" y="446" width="188" height="70" rx="9" class="bB"/>
+            <text x="950" y="465" text-anchor="middle" class="tB" style="font-size:12.5px">11 · send_user</text>
+            <text x="950" y="483" text-anchor="middle" class="s">the one outbound tool —</text>
+            <text x="950" y="499" text-anchor="middle" class="s">the reply leaves the server</text>
+
+            <!-- server row D -->
+            <rect x="316" y="544" width="220" height="60" rx="9" class="bG"/>
+            <text x="426" y="563" text-anchor="middle" class="tG" style="font-size:12.5px">13 · PERSIST + COMPACT</text>
+            <text x="426" y="581" text-anchor="middle" class="s">turn → State DB;</text>
+            <text x="426" y="597" text-anchor="middle" class="s">compact while cache is warm</text>
+            <rect x="586" y="544" width="240" height="60" rx="9" class="b"/>
+            <text x="706" y="563" text-anchor="middle" class="t" style="font-size:12.5px">14 · IDLE → SLEEP</text>
+            <text x="706" y="581" text-anchor="middle" class="s">VM snapshot → back to pool;</text>
+            <text x="706" y="597" text-anchor="middle" class="s">next trigger wakes it all</text>
+            <rect x="856" y="544" width="188" height="60" rx="9" class="bG"/>
+            <text x="950" y="563" text-anchor="middle" class="tG" style="font-size:12.5px">STATE DB</text>
+            <text x="950" y="581" text-anchor="middle" class="s">every step appended,</text>
+            <text x="950" y="597" text-anchor="middle" class="s">resumable after any crash</text>
+
+            <!-- computer lane -->
+            <rect x="36" y="672" width="250" height="70" rx="9" class="bG"/>
+            <text x="161" y="691" text-anchor="middle" class="tG" style="font-size:12.5px">8 · BOOT IF ASLEEP</text>
+            <text x="161" y="709" text-anchor="middle" class="s">restore snapshot or fresh boot;</text>
+            <text x="161" y="725" text-anchor="middle" class="s">one microVM per active bot</text>
+            <rect x="316" y="672" width="240" height="70" rx="9" class="bG"/>
+            <text x="436" y="691" text-anchor="middle" class="tG" style="font-size:12.5px">9 · EXECUTE</text>
+            <text x="436" y="709" text-anchor="middle" class="s">shell · files · Chrome · desktop</text>
+            <text x="436" y="725" text-anchor="middle" class="s">you can live-view &amp; drive</text>
+            <rect x="586" y="672" width="240" height="70" rx="9" class="bG"/>
+            <text x="706" y="691" text-anchor="middle" class="tG" style="font-size:12.5px">SNAPSHOT</text>
+            <text x="706" y="709" text-anchor="middle" class="s">state → server,</text>
+            <text x="706" y="725" text-anchor="middle" class="s">VM → back to the pool</text>
+
+            <!-- arrows: message path -->
+            <path d="M206,107 H240" class="arrow"/>
+            <path d="M341,136 V160 H161 V196" class="arrowA"/>
+            <path d="M286,231 H316" class="arrow"/>
+            <path d="M506,231 H586" class="arrow"/>
+            <path d="M706,266 V292 H151 V306" class="arrow"/>
+            <path d="M266,342 H326" class="arrow"/>
+            <text x="296" y="332" text-anchor="middle" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">costly?</text>
+            <path d="M326,362 H266" class="arrow dash"/>
+            <text x="296" y="380" text-anchor="middle" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">result</text>
+            <path d="M151,386 V446" class="arrow"/>
+            <path d="M210,386 V426 H426 V446" class="arrow"/>
+            <text x="318" y="420" text-anchor="middle" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">irreversible?</text>
+            <path d="M536,481 H586" class="arrow dash"/>
+            <text x="561" y="473" text-anchor="middle" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">approved</text>
+            <path d="M161,516 V672" class="arrow"/>
+            <path d="M286,707 H316" class="arrow"/>
+            <path d="M556,706 H580 V536 H706 V516" class="arrow dash"/>
+            <text x="576" y="650" text-anchor="end" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">results</text>
+            <path d="M826,481 H856" class="arrow"/>
+            <path d="M950,446 V136" class="arrow" style="stroke:#6FA8FF;marker-end:url(#ahB)"/>
+            <text x="958" y="300" style="fill:#6FA8FF;font-size:8.5px;font-family:var(--mono)">the reply</text>
+
+            <!-- arrows: data -->
+            <path d="M856,574 H841 V231 H826" class="arrow dash"/>
+            <text x="833" y="340" text-anchor="end" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">restore</text>
+            <text x="833" y="355" text-anchor="end" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">on boot</text>
+            <path d="M536,590 H566 V620 H950 V604" class="arrow dash"/>
+            <text x="760" y="616" text-anchor="middle" style="fill:var(--muted);font-size:8.5px;font-family:var(--mono)">turn → DB</text>
+            <path d="M536,574 H586" class="arrow"/>
+            <path d="M706,672 V604" class="arrow dash"/>
+          </svg>
+        </div>
+      </div>
+      <figcaption><b>FIG.11</b><span class="swipehint">swipe →</span> — One message, end to end, across the three lanes. <span style="color:var(--amber)">Amber</span>: your side. <span style="color:var(--blue)">Blue</span>: routing and the outbound tool. <span style="color:var(--purple)">Purple</span>: durable-workflow territory. <span style="color:var(--green)">Green</span>: state and the computer. Solid arrows carry the message and the turn; dashed arrows carry data (reads, results, snapshots). 6a/6b are conditional branches, not stops on the main path.</figcaption>
+    </figure>
+
+    <h3>The same run, in words</h3>
+    <div class="flowlist">
+      <div class="fstep"><span class="n c">00</span><span class="t"><b>While you type</b> — the server may already pre-build the prompt from the conversation so the cache is warm the instant you send (§08).</span></div>
+      <div class="fstep"><span class="n c">01</span><span class="t"><b>You type and hit send.</b> Your text is a <b>trigger</b> — an event for the router — not a tool call. The only tool that crosses the client/server boundary points outward (§07).</span></div>
+      <div class="fstep"><span class="n c">02</span><span class="t"><b>The client acknowledges instantly.</b> Your bubble shows “sent” before the server has done anything (§05).</span></div>
+      <div class="fstep"><span class="n">03</span><span class="t"><b>The router</b> dedupes (client retries, multi-device), folds the text into the conversation, batches if you fired 3–4 messages in a burst, and applies priority — a direct message from you can <b>interrupt the turn that is currently running</b> (§04).</span></div>
+      <div class="fstep"><span class="n">04</span><span class="t"><b>The turn enters the queue.</b> One turn runs at a time; everything else waits for its priority slot.</span></div>
+      <div class="fstep"><span class="n">05</span><span class="t"><b>The turn starts as a durable workflow</b> (Temporal). If the server was asleep, this trigger woke it; the loop restores its world from the State DB — profile, core facts, memories, skills, conversation history — and rebuilds the prompt head byte-identically (§03, §04).</span></div>
+      <div class="fstep"><span class="n">06</span><span class="t"><b>The agent loop calls the model:</b> cached head + your new message as the only full-price delta. Tool names only are in context; each schema is read from a file the moment it's needed (§07, §08).</span></div>
+      <div class="fstep"><span class="n">6a</span><span class="t"><b>Expensive work?</b> Big research, screenshot analysis, rendering — delegated to a <b>helper</b>: its own durable workflow, own skills, fresh context. Only the result returns to the loop (§07).</span></div>
+      <div class="fstep"><span class="n">6b</span><span class="t"><b>Irreversible action?</b> Sending email or Slack goes out as a <b>draft card</b> via send_user, and the workflow waits on an approval signal before anything leaves (§07, §09).</span></div>
+      <div class="fstep"><span class="n">07</span><span class="t"><b>The model requests a tool call.</b> Before it runs, the <b>autoreview</b> model checks the command — approval at machine speed, not human fatigue (§09).</span></div>
+      <div class="fstep"><span class="n v">08</span><span class="t"><b>The computer, if needed.</b> A microVM comes from the shared pool — snapshot restore or fresh boot, one machine per active bot, handed back on sleep (§06).</span></div>
+      <div class="fstep"><span class="n v">09</span><span class="t"><b>Execute:</b> shell, files, Chrome (accessibility tree first, pixels as fallback), full desktop for long jobs — and you can live-view or take the wheel yourself. Results return to the loop (§06).</span></div>
+      <div class="fstep"><span class="n">10</span><span class="t"><b>Loop until the model replies.</b> Each round: results feed the next model call, every step is appended to the workflow's event history, and the conversation keeps persisting — so any crash resumes exactly where it stopped (§05).</span></div>
+      <div class="fstep"><span class="n">11</span><span class="t"><b>The answer leaves via send_user</b> — the one outbound tool, the same whatever the client is (§07).</span></div>
+      <div class="fstep"><span class="n c">12</span><span class="t"><b>Your devices render it.</b> Every subscribed client gets the signal, fetches the latest state, dedupes retries, and renders richly: plain text, an editable draft, a sign-in form — or you just tap 👍 (§05).</span></div>
+      <div class="fstep"><span class="n">13</span><span class="t"><b>Persist + compact.</b> The finished turn is written to the State DB; if you've gone idle, compaction runs now, while the cache is still warm, so your next message lands on a cheap summary (§08).</span></div>
+      <div class="fstep"><span class="n v">14</span><span class="t"><b>Wind down.</b> The VM snapshots and returns to the pool; the server sleeps. The next trigger — a Slack ping, a phone call, a cron routine, a finished background job — wakes the whole machine again (§04).</span></div>
+    </div>
+
+    <p style="margin-top:18px">Elapsed time, end to end: the ack is milliseconds; a plain answer takes seconds; anything touching the computer takes minutes — and when it's done, every machine involved is asleep again, with all of it written down. That single cycle <em>is</em> the product; everything else in this document is why each arrow is safe, cheap, and resumable.</p>
+  </section>
+
+  <!-- ============ 13 BLUEPRINT ============ -->
   <section id="blueprint">
-    <p class="partlabel">12 · The napkin test</p>
+    <p class="partlabel">13 · The napkin test</p>
     <h2>Design Grokbot from memory</h2>
     <p>If this teardown worked, you can now rebuild the machine from these eleven moves. Close the tab and try.</p>
 
@@ -988,7 +1176,7 @@
 
 <footer>
   <p><b>Sources &amp; credits.</b> This teardown is a rewritten companion to <a href="https://www.youtube.com/watch?v=L1OBRtfPS34">“Stanford CS146S: How always-on agents work”</a> by Lee Robinson (45:17, Oct 2026). All architecture, numbers, anecdotes and quotes are condensed from the talk; phrasing is paraphrased for clarity and the diagrams are redrawn. Timestamp chips (▶ mm:ss) follow this tutorial's reading order, not the video's, and link to the exact moment. The speaker points to a community “open grokbot” fork on GitHub and encourages building your own.</p>
-  <p class="small">Figures FIG.01–FIG.10 are original SVG/HTML redrawings of the talk's slides. Built Oct 2026.</p>
+  <p class="small">Figures FIG.01–FIG.11 are original SVG/HTML redrawings of the talk's slides. Built Oct 2026.</p>
 </footer>
 
 <script>
