@@ -5,7 +5,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
-| [Codex 源码之书](books/codex-source-book.html) | 中文 | 3.7 MB |
+| [Codex 源码之书](books/codex-source-book.html) | 中文 | 3.9 MB |
 | [手把手教你构建 C 语言编译器](books/build-a-c-compiler.html) | 中文 | 272 KB |
 | [Down to the Wire — Python Sockets from First Principles](books/python-sockets-from-first-principles.html) | English | 180 KB |
 | [Writing Modern Python](books/writing-modern-python.html) | English | 162 KB |
@@ -23,8 +23,9 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 ## Codex 源码之书
 
-七篇二十章，约 9.25 万汉字，58 幅图。基于 OpenAI Codex 固定提交 `e4568a3538c9cab6627d64ff8cdfc7d98b79b7db`。
+七篇二十章，约 9.25 万汉字，18 组机制交互，58 幅可放大图。基于 OpenAI Codex 固定提交 `e4568a3538c9cab6627d64ff8cdfc7d98b79b7db`。
 
 - [在线阅读](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html)
+- [交互图解目录](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html#interactive-index)
 - [EPUB 下载](books/codex-source-book.epub)
 - [Markdown 原稿](books/codex-source-book.md)
