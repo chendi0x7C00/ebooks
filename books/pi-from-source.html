@@ -3642,6 +3642,172 @@ cytoscape/dist/cytoscape.esm.mjs:
 */
 globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
 </script>
+<style>/* Pi from Source — reader UI extensions (chrome + interactives) */
+
+/* ---------- Theme tokens ---------- */
+:root {
+  --ink: #1a1a1a; --muted: #666; --line: #ddd; --bg: #ffffff; --panel: #f7f7f5;
+  --accent: #8b2f2f; --code-bg: #f6f6f2; --chip: #f0efe9; --shadow: rgba(0,0,0,.08);
+}
+html[data-theme="dark"] {
+  --ink: #d8d5cf; --muted: #98938a; --line: #33363c; --bg: #16181d; --panel: #1d2026;
+  --accent: #d47a5a; --code-bg: #1b1e24; --chip: #23262d; --shadow: rgba(0,0,0,.5);
+}
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+body { background: var(--bg); color: var(--ink); transition: background .2s, color .2s; }
+nav { background: var(--bg); }
+.toc-link { color: var(--ink); opacity: .78; }
+.toc-link:hover { color: var(--accent); opacity: 1; }
+.toc-sub { display: none; }
+.toc-link.active { color: var(--accent); opacity: 1; font-weight: 600; }
+.toc-sub { font-size: 11px; line-height: 1.5; margin: 2px 0 6px 10px; }
+.toc-sub a { display: block; color: var(--muted); text-decoration: none; padding: 1px 0; }
+.toc-sub a:hover { color: var(--accent); }
+.toc-sub a.active { color: var(--accent); }
+.chapter h1, h2, h3 { color: var(--ink); }
+a { color: var(--accent); }
+pre, code { background: var(--code-bg); }
+pre { border-color: var(--line); }
+th { background: var(--panel); }
+blockquote { background: var(--panel); color: var(--ink); opacity: .85; }
+html[data-theme="dark"] pre.mermaid { background: var(--bg); }
+
+/* ---------- Reading progress ---------- */
+#progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: var(--accent); z-index: 60; transition: width .08s linear;
+}
+
+/* ---------- Theme toggle ---------- */
+#theme-toggle {
+  position: fixed; top: 14px; right: 16px; z-index: 60;
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  cursor: pointer; font-size: 17px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+#theme-toggle:hover { border-color: var(--accent); }
+
+/* ---------- Copy buttons ---------- */
+.code-block-wrapper { position: relative; }
+.copy-button {
+  position: absolute; top: 8px; right: 8px; z-index: 5;
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  font: 11px -apple-system, sans-serif; border-radius: 6px; padding: 3px 9px;
+  cursor: pointer; opacity: 0; transition: opacity .15s;
+}
+.code-block-wrapper:hover .copy-button { opacity: 1; }
+.copy-button:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Deep Dive collapse ---------- */
+details.deep-dive {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 8px; margin: 22px 0; background: var(--panel);
+}
+details.deep-dive > summary {
+  cursor: pointer; padding: 10px 16px; font-family: -apple-system, sans-serif;
+  font-weight: 600; font-size: 15px; color: var(--accent); list-style: none;
+}
+details.deep-dive > summary::before { content: "▸ "; display: inline-block; transition: transform .15s; }
+details.deep-dive[open] > summary::before { transform: rotate(90deg); }
+details.deep-dive > .deep-dive-body { padding: 0 16px 6px; }
+details.deep-dive > .deep-dive-body h3 { margin-top: 18px; }
+
+/* ---------- Chapter pager ---------- */
+.chapter-pager {
+  display: flex; justify-content: space-between; gap: 16px; margin: 26px 0 0;
+  font-family: -apple-system, sans-serif;
+}
+.chapter-pager a {
+  flex: 1; text-decoration: none; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; color: var(--ink);
+}
+.chapter-pager a:hover { border-color: var(--accent); }
+.chapter-pager .dir { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.chapter-pager .label { font-size: 13.5px; font-weight: 600; }
+.chapter-pager a.next { text-align: right; }
+
+/* ---------- Back to top ---------- */
+#back-top {
+  position: fixed; bottom: 22px; right: 18px; z-index: 60;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  cursor: pointer; font-size: 16px; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+#back-top.show { opacity: 1; pointer-events: auto; }
+#back-top:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Simulators (shared) ---------- */
+.sim {
+  border: 1px solid var(--line); border-radius: 12px; margin: 30px 0;
+  background: var(--panel); overflow: hidden;
+  font-family: -apple-system, "Helvetica Neue", sans-serif;
+}
+.sim-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 12px 18px 10px; border-bottom: 1px solid var(--line);
+}
+.sim-head .sim-name { font-weight: 700; font-size: 14.5px; }
+.sim-head .sim-hint { font-size: 12px; color: var(--muted); }
+.sim-body { display: flex; gap: 0; flex-wrap: wrap; }
+.sim-stage { flex: 1.35; min-width: 320px; padding: 16px 18px; }
+.sim-side { flex: 1; min-width: 250px; border-left: 1px solid var(--line); padding: 14px 16px; }
+.sim-log {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  font: 11.5px/1.7 "SF Mono", Menlo, Consolas, monospace; padding: 10px 12px;
+  height: 215px; overflow-y: auto; white-space: pre-wrap;
+}
+.sim-log .ev { display: block; }
+.sim-log .ev .t { color: var(--muted); }
+.sim-log .ev.hi { color: var(--accent); font-weight: 600; }
+.sim-state { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.sim-chip {
+  font-size: 11px; border-radius: 99px; padding: 3px 11px;
+  background: var(--chip); border: 1px solid var(--line); color: var(--ink);
+}
+.sim-chip.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.sim-caption { margin-top: 12px; font-size: 13px; line-height: 1.6; color: var(--ink); min-height: 58px; }
+.sim-caption b { color: var(--accent); }
+.sim-controls { display: flex; gap: 8px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line); }
+.sim-controls button {
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  font-size: 12.5px; border-radius: 8px; padding: 6px 14px; cursor: pointer;
+}
+.sim-controls button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.sim-controls button:disabled { opacity: .4; cursor: default; }
+.sim-controls .sim-step { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+
+/* ---------- Session explorer tree ---------- */
+.tree-canvas { position: relative; height: 232px; border: 1px solid var(--line); border-radius: 8px; background: var(--code-bg); overflow: hidden; }
+.tree-canvas svg.tree-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tree-node {
+  position: absolute; transform: translate(-50%, -50%);
+  font: 11px/1.3 "SF Mono", Menlo, Consolas, monospace;
+  border: 1.5px solid var(--line); border-radius: 7px; padding: 3px 9px;
+  background: var(--bg); color: var(--ink); white-space: nowrap;
+}
+.tree-node.leaf { border-color: var(--accent); color: var(--accent); font-weight: 700; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.tree-node.faded { opacity: .35; }
+.tree-node.cut { opacity: .45; text-decoration: line-through; }
+.tree-node .leaf-tag { font-size: 8.5px; display: block; letter-spacing: .08em; }
+.tree-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+.tree-views { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tree-view h4 { margin: 0 0 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.tree-view ul { margin: 0; padding: 8px 10px; list-style: none; font: 11px/1.8 "SF Mono", Menlo, monospace; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; min-height: 84px; }
+.tree-view li.omitted { color: var(--muted); text-decoration: line-through; opacity: .6; }
+.tree-view li.summary { color: var(--accent); }
+
+@media (max-width: 760px) {
+  .sim-side { border-left: none; border-top: 1px solid var(--line); }
+  .tree-views { grid-template-columns: 1fr; }
+}
+@media print {
+  #progress-bar, #theme-toggle, #back-top, .copy-button, .chapter-pager, .sim-controls { display: none !important; }
+  details.deep-dive { border: none; }
+  details.deep-dive > .deep-dive-body { display: block; }
+}
+</style>
 <style>
   :root {
     --ink: #1a1a1a; --muted: #666; --line: #ddd; --bg: #ffffff; --panel: #f7f7f5;
@@ -3689,6 +3855,9 @@ globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
 </style>
 </head>
 <body>
+<div id="progress-bar"></div>
+<button id="theme-toggle" type="button" aria-label="Toggle dark mode">☾</button>
+<button id="back-top" type="button" aria-label="Back to top">↑</button>
 <div class="layout">
 <nav>
   <div class="book-title">Pi from Source</div>
@@ -4771,6 +4940,25 @@ continues anyway, <code>prepareNextTurn</code> runs between turns, may swap the 
 append messages — where the coding agent performs its pre-request compaction. In short: <code>transformContext</code>
 replaces messages; <code>prepareRequest</code> and <code>prepareNextTurn</code> replace the request envelope, and the replacement
 persists.</p>
+
+<div id="loop-sim" class="sim" aria-label="Agent loop simulator">
+  <div class="sim-head"><span class="sim-name">Interactive — the loop, step by step</span>
+    <span class="sim-hint">one run of pi's agent loop, with its real events and drain points</span></div>
+  <div class="sim-body">
+    <div class="sim-stage">
+      <div class="sim-log" aria-live="polite"></div>
+      <div class="sim-state"></div>
+      <div class="sim-caption"></div>
+    </div>
+  </div>
+  <div class="sim-controls">
+    <button type="button" data-prev>← Prev</button>
+    <button type="button" data-next>Next →</button>
+    <button type="button" data-reset>Reset</button>
+    <button type="button" data-auto>▶ Auto</button>
+    <span class="sim-step" data-step></span>
+  </div>
+</div>
 <h2>Steering, Follow-Up, and the Four Drain Points</h2>
 <p>A run can last minutes, and the user will type. Pi splits that input into two queues with two personalities.
 <strong>Steering</strong> is input that should influence the current run; it enters as soon as the current turn&#39;s tools finish.
@@ -5390,6 +5578,26 @@ re-chain <code>label</code> bookmarks so nothing dangles, and stamp the new head
 whose recorded working directory matches the current one — matched against the header&#39;s
 cwd, not the storage directory&#39;s name, so a moved or renamed project still resolves.
 <code>--resume</code> opens a picker; <code>--no-session</code> runs entirely in memory.</p>
+
+<div id="tree-sim" class="sim" aria-label="Session tree explorer">
+  <div class="sim-head"><span class="sim-name">Interactive — the session tree</span>
+    <span class="sim-hint">append, fork, return, compact — and watch transcript differ from context</span></div>
+  <div class="sim-body">
+    <div class="sim-stage">
+      <div class="tree-canvas"></div>
+      <div class="tree-legend"><span>each box = one JSONL entry</span><span><b style="color:var(--accent)">LEAF</b> = active branch tip</span><span>grey = recorded, off the active path</span></div>
+      <div class="sim-caption"></div>
+    </div>
+    <div class="sim-side"><div class="sim-state"></div><div class="tree-views"></div></div>
+  </div>
+  <div class="sim-controls">
+    <button type="button" data-prev>← Prev</button>
+    <button type="button" data-next>Next →</button>
+    <button type="button" data-reset>Reset</button>
+    <button type="button" data-auto>▶ Auto</button>
+    <span class="sim-step" data-step></span>
+  </div>
+</div>
 <h2>Where Sessions Live, and How They Migrate</h2>
 <p>Sessions live under the agent directory, grouped by project:
 <code>~/.pi/agent/sessions/&lt;encoded-cwd&gt;/&lt;timestamp&gt;_&lt;session-id&gt;.jsonl</code>, where the cwd is
@@ -9560,38 +9768,432 @@ you version the wire.</p>
 </section>
 </main>
 </div>
-<script>
-  window.addEventListener("DOMContentLoaded", () => {
+<script>/* Pi from Source — reader behavior: chrome + interactive simulators.
+   Vanilla JS, no dependencies. Mermaid (vendored UMD) is expected as window.mermaid. */
+(function () {
+  "use strict";
+
+  /* ================= Theme ================= */
+  var THEME_KEY = "pifs-theme";
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+    var btn = document.getElementById("theme-toggle");
+    if (btn) btn.textContent = t === "dark" ? "☀" : "☾";
+    if (window.mermaid) rerenderDiagrams(t === "dark" ? "dark" : "neutral");
+  }
+  function initTheme() {
+    var saved = null;
+    try { saved = localStorage.getItem(THEME_KEY); } catch (e) {}
+    var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var t = saved || (prefersDark ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", t);
+    var btn = document.getElementById("theme-toggle");
+    if (btn) {
+      btn.textContent = t === "dark" ? "☀" : "☾";
+      btn.setAttribute("aria-label", "Toggle dark mode");
+      btn.addEventListener("click", function () {
+        applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+      });
+    }
+    return t;
+  }
+
+  /* ================= Mermaid (lazy + theme-aware) ================= */
+  var mermaidCounter = 0;
+  function mermaidTheme() {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "neutral";
+  }
+  function initMermaid() {
     if (!window.mermaid) return;
-    mermaid.initialize({ startOnLoad: false, theme: "neutral", flowchart: { htmlLabels: false } });
-    window.__mermaidReady = true;
-    window.__mermaidErrors = [];
-    let n = 0;
-    window.__renderOne = async (pre) => {
-      if (pre.dataset.rendered) return;
-      const id = "mmd-" + (++n);
-      try {
-        const { svg } = await mermaid.render(id, pre.textContent);
-        const holder = document.createElement("div");
-        holder.className = "mermaid-svg";
-        holder.innerHTML = svg;
-        pre.replaceWith(holder);
-      } catch (e) {
-        pre.dataset.rendered = "error";
-        window.__mermaidErrors.push(String(e && e.message || e).slice(0, 300));
+    window.mermaid.initialize({ startOnLoad: false, theme: mermaidTheme(), flowchart: { htmlLabels: false } });
+    window.renderAllDiagrams = function () {
+      var pres = Array.prototype.slice.call(document.querySelectorAll("pre.mermaid"));
+      var chain = Promise.resolve();
+      pres.forEach(function (p) { chain = chain.then(function () { return renderOne(p); }); });
+      return chain;
+    };
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { io.unobserve(en.target); renderOne(en.target); }
+      });
+    }, { rootMargin: "300px" });
+    document.querySelectorAll("pre.mermaid").forEach(function (p) { io.observe(p); });
+  }
+  function renderOne(pre) {
+    if (pre.dataset.rendered === "ok") return Promise.resolve();
+    var src = pre.dataset.src || pre.textContent;
+    pre.dataset.src = src;
+    var id = "mmd-" + (++mermaidCounter);
+    return window.mermaid.render(id, src).then(function (r) {
+      var holder = document.createElement("div");
+      holder.className = "mermaid-svg";
+      holder.innerHTML = r.svg;
+      pre.replaceWith(holder);
+      pre.dataset.rendered = "ok";
+      holder.dataset.forPre = "1";
+      holder.__pre = pre;
+      pre.__holder = holder;
+    }).catch(function (e) {
+      pre.dataset.rendered = "error";
+      (window.__mermaidErrors = window.__mermaidErrors || []).push(String(e && e.message || e).slice(0, 300));
+    });
+  }
+  function rerenderDiagrams(theme) {
+    if (!window.mermaid) return;
+    window.mermaid.initialize({ startOnLoad: false, theme: theme, flowchart: { htmlLabels: false } });
+    document.querySelectorAll(".mermaid-svg").forEach(function (holder) {
+      var pre = holder.__pre;
+      if (!pre) return;
+      pre.dataset.rendered = "";
+      holder.replaceWith(pre);
+    });
+    document.querySelectorAll("pre.mermaid").forEach(function (p) { renderOne(p); });
+  }
+
+  /* ================= Reading progress + back to top ================= */
+  function initChrome() {
+    var bar = document.getElementById("progress-bar");
+    var top = document.getElementById("back-top");
+    function onScroll() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      if (bar) bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + "%";
+      if (top) top.classList.toggle("show", h.scrollTop > 800);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    if (top) top.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+  }
+
+  /* ================= Copy buttons ================= */
+  function initCopy() {
+    document.querySelectorAll("pre").forEach(function (pre) {
+      if (pre.classList.contains("mermaid")) return;
+      var wrap = document.createElement("div");
+      wrap.className = "code-block-wrapper";
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      var btn = document.createElement("button");
+      btn.className = "copy-button";
+      btn.type = "button";
+      btn.textContent = "Copy";
+      btn.addEventListener("click", function () {
+        var code = pre.querySelector("code");
+        var text = (code ? code.textContent : pre.textContent) || "";
+        function done(ok) {
+          btn.textContent = ok ? "Copied!" : "Failed";
+          setTimeout(function () { btn.textContent = "Copy"; }, 1600);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+        } else { done(false); }
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
+  /* ================= Sidebar: sub-TOC + scrollspy ================= */
+  function slugify(s, used) {
+    var base = s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || "s";
+    var n = base, i = 2;
+    while (used[n]) n = base + "-" + i++;
+    used[n] = true;
+    return n;
+  }
+  function initSpy() {
+    var sections = Array.prototype.slice.call(document.querySelectorAll("section.chapter"));
+    var used = {};
+    var marks = []; // {el, link}
+    sections.forEach(function (sec) {
+      var chapterLink = document.querySelector('.toc-link[href="#' + sec.id + '"]');
+      var h2s = Array.prototype.slice.call(sec.querySelectorAll("h2"));
+      if (!chapterLink || h2s.length < 3) {
+        h2s.forEach(function (h) { h.id = h.id || slugify(sec.id + "-" + h.textContent, used); });
+        if (chapterLink) marks.push({ el: sec, link: chapterLink });
+        return;
       }
+      var box = document.createElement("div");
+      box.className = "toc-sub";
+      h2s.forEach(function (h) {
+        h.id = h.id || slugify(sec.id + "-" + h.textContent, used);
+        var a = document.createElement("a");
+        a.href = "#" + h.id;
+        a.textContent = h.textContent;
+        box.appendChild(a);
+        marks.push({ el: h, link: a, chapter: chapterLink });
+      });
+      chapterLink.parentNode.insertBefore(box, chapterLink.nextSibling);
+      marks.push({ el: h2s[0], link: chapterLink });
+    });
+    function setActive(link) {
+      document.querySelectorAll(".toc-link.active, .toc-sub a.active").forEach(function (x) {
+        x.classList.remove("active");
+      });
+      if (!link) return;
+      if (link.classList.contains("toc-sub")) { /* not used */ }
+      link.classList.add("active");
+      var sub = link.classList && link.classList.contains("toc-link") ? link.nextSibling : null;
+      if (sub && sub.classList && sub.classList.contains("toc-sub")) sub.style.display = "block";
+      var sec = link.closest ? link.closest("section") : null;
+      if (sec) {
+        var cl = document.querySelector('.toc-link[href="#' + sec.id + '"]');
+        if (cl) { cl.classList.add("active"); if (cl.nextSibling && cl.nextSibling.classList && cl.nextSibling.classList.contains("toc-sub")) cl.nextSibling.style.display = "block"; }
+      }
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          var m = marks.find(function (x) { return x.el === en.target; });
+          if (m) setActive(m.link.classList && m.link.classList.contains("toc-link") ? m.link : (m.chapter || m.link));
+          if (m && !(m.link.classList && m.link.classList.contains("toc-link"))) { m.link.classList.add("active"); }
+        }
+      });
+    }, { rootMargin: "-70px 0px -62% 0px", threshold: 0 });
+    marks.forEach(function (m) { io.observe(m.el); });
+  }
+
+  /* ================= Deep Dive collapse ================= */
+  function initDeepDives() {
+    var h3s = Array.prototype.slice.call(document.querySelectorAll("h3"));
+    h3s.forEach(function (h) {
+      if (!/^Deep Dive:/i.test(h.textContent.trim())) return;
+      var details = document.createElement("details");
+      details.className = "deep-dive";
+      var summary = document.createElement("summary");
+      summary.textContent = h.textContent;
+      var body = document.createElement("div");
+      body.className = "deep-dive-body";
+      var node = h.nextSibling;
+      while (node && !/^(H2|H3)$/.test(node.nodeName)) {
+        var next = node.nextSibling;
+        body.appendChild(node);
+        node = next;
+      }
+      h.replaceWith(details);
+      details.appendChild(summary);
+      details.appendChild(body);
+    });
+  }
+
+  /* ================= Chapter pager ================= */
+  function initPager() {
+    var sections = Array.prototype.slice.call(document.querySelectorAll("section.chapter"));
+    sections.forEach(function (sec, i) {
+      var pager = document.createElement("div");
+      pager.className = "chapter-pager";
+      var prev = sections[i - 1], next = sections[i + 1];
+      pager.innerHTML =
+        (prev ? '<a class="prev" href="#' + prev.id + '"><span class="dir">← Previous</span><span class="label">' +
+          prev.querySelector("h1").textContent.replace(/^Chapter \d+ — /, "") + "</span></a>" : "<span></span>") +
+        (next ? '<a class="next" href="#' + next.id + '"><span class="dir">Next →</span><span class="label">' +
+          next.querySelector("h1").textContent.replace(/^Chapter \d+ — /, "") + "</span></a>" : "<span></span>");
+      sec.appendChild(pager);
+    });
+  }
+
+  /* ================= Simulator helpers ================= */
+  function makeSim(rootId, totalSteps, render) {
+    var root = document.getElementById(rootId);
+    if (!root) return;
+    var step = 0, timer = null;
+    var prevB = root.querySelector("[data-prev]"),
+        nextB = root.querySelector("[data-next]"),
+        resetB = root.querySelector("[data-reset]"),
+        autoB = root.querySelector("[data-auto]"),
+        stepLabel = root.querySelector("[data-step]");
+    function paint() {
+      render(root, step);
+      if (prevB) prevB.disabled = step === 0;
+      if (nextB) nextB.disabled = step >= totalSteps;
+      if (stepLabel) stepLabel.textContent = step + " / " + totalSteps;
+      if (autoB) autoB.textContent = timer ? "❚❚ Pause" : "▶ Auto";
+    }
+    function stopAuto() { if (timer) { clearInterval(timer); timer = null; } paint(); }
+    if (prevB) prevB.addEventListener("click", function () { stopAuto(); if (step > 0) { step--; paint(); } });
+    if (nextB) nextB.addEventListener("click", function () { stopAuto(); if (step < totalSteps) { step++; paint(); } });
+    if (resetB) resetB.addEventListener("click", function () { stopAuto(); step = 0; paint(); });
+    if (autoB) autoB.addEventListener("click", function () {
+      if (timer) { stopAuto(); return; }
+      if (step >= totalSteps) step = 0;
+      timer = setInterval(function () {
+        if (step >= totalSteps) { stopAuto(); return; }
+        step++; paint();
+      }, 1700);
+      paint();
+    });
+    paint();
+  }
+  function setLog(root, lines) {
+    var log = root.querySelector(".sim-log");
+    if (!log) return;
+    log.innerHTML = lines.map(function (l) {
+      return '<span class="ev' + (l.hi ? " hi" : "") + '"><span class="t">' + l.t + "</span> " + l.e + "</span>";
+    }).join("");
+    log.scrollTop = log.scrollHeight;
+  }
+  function setChips(root, chips) {
+    var box = root.querySelector(".sim-state");
+    if (!box) return;
+    box.innerHTML = chips.map(function (c) {
+      return '<span class="sim-chip' + (c.on ? " on" : "") + '">' + c.k + (c.v !== undefined ? ": " + c.v : "") + "</span>";
+    }).join("");
+  }
+  function setCaption(root, html) {
+    var cap = root.querySelector(".sim-caption");
+    if (cap) cap.innerHTML = html;
+  }
+
+  /* ================= Loop simulator (ch04) ================= */
+  function initLoopSim() {
+    var T = "·";
+    var steps = [
+      { caption: "<b>Idle.</b> The consumer calls <code>prompt(text)</code>. Text and any images are wrapped into a single user message; nothing has hit the wire yet.",
+        chips: [{ k: "run", v: "idle" }], log: [] },
+      { caption: "<b>Entry.</b> The loop diffs the tool loadout against the transcript (a system-patch message is appended or rewritten), then polls steering once — you may have typed while waiting. <code>agent_start</code> opens the run; its handlers are the last chance to abort before any work.",
+        chips: [{ k: "run", v: "running", on: 1 }, { k: "steering", v: "polled" }], log: [{ t: T, e: "declareToolChanges()" }, { t: T, e: "steering.poll → []" }, { t: T, e: "agent_start", hi: 1 }] },
+      { caption: "<b>Turn opens.</b> <code>turn_start</code> fires and the initial user message is declared: <code>message_start</code> → <code>message_end</code>. Every appended message passes through this pair — persistence and UI key on it.",
+        chips: [{ k: "turn", v: "1" }, { k: "messages", v: "1" }], log: [{ t: T, e: "turn_start" }, { t: T, e: "message_start (user)" }, { t: T, e: "message_end (user)" }] },
+      { caption: "<b>Request prep.</b> The hook chain runs before the wire: <code>transformContext</code> shapes the message list, <code>convertToLlm</code> maps harness roles to provider roles, and the prepared context crosses the <b>StreamFn seam</b> to the model layer. <code>prepareRequest</code> may still swap model or context.",
+        chips: [{ k: "seam", v: "StreamFn", on: 1 }], log: [{ t: T, e: "transformContext()" }, { t: T, e: "convertToLlm()" }, { t: T, e: "streamFn(model, context)" }] },
+      { caption: "<b>Streaming.</b> The assistant message is pushed into the context at <code>message_start</code> and replaced <i>in place</i> on every delta; each event carries a shallow copy, so UIs snapshot while the loop keeps ownership. <code>message_end</code> finalizes with usage and cost.",
+        chips: [{ k: "assistant", v: "streaming", on: 1 }], log: [{ t: T, e: "message_start (assistant)" }, { t: T, e: "message_update × N (deltas)" }, { t: T, e: "message_end (assistant)", hi: 1 }] },
+      { caption: "<b>Tool batch.</b> The response ended with tool calls, so the loop schedules a batch: <b>preflight runs serially</b> (resolve → argument shim → schema validation → <code>beforeToolCall</code> gate), then execution runs <b>in parallel</b>. <code>tool_execution_end</code> fires in completion order.",
+        chips: [{ k: "tools", v: "2 parallel", on: 1 }, { k: "gate", v: "beforeToolCall" }], log: [{ t: T, e: "tool_execution_start (read)" }, { t: T, e: "tool_execution_start (bash)" }, { t: T, e: "tool_execution_update (bash)" }, { t: T, e: "tool_execution_end (read)" }, { t: T, e: "tool_execution_end (bash)" }] },
+      { caption: "<b>Results settle.</b> Tool results become <code>toolResult</code> messages — persisted in <b>source order</b>, though the end events arrived in completion order — then <code>turn_end</code> closes the turn. Because the listener barrier awaited the UI, state was already consistent before preflight ever ran.",
+        chips: [{ k: "messages", v: "4" }, { k: "pendingTools", v: "0" }], log: [{ t: T, e: "message_start (toolResult × 2)" }, { t: T, e: "message_end (toolResult × 2)" }, { t: T, e: "turn_end", hi: 1 }] },
+      { caption: "<b>Drain point.</b> A steering message was queued mid-turn. The loop delivers it now — after the turn's tools finished, never during them — and a new turn opens for it. <code>prepareNextTurn</code> also re-checks compaction and re-diffs the prompt here.",
+        chips: [{ k: "steering", v: "1 → delivered", on: 1 }, { k: "turn", v: "2" }], log: [{ t: T, e: "steering.poll → [msg]" }, { t: T, e: "prepareNextTurn()" }, { t: T, e: "turn_start" }, { t: T, e: "message_start/end (steering)" }] },
+      { caption: "<b>Second turn.</b> The model answers with plain text — no tool calls. No new turn is scheduled: the inner loop's fuel (tool calls, pending messages) is gone.",
+        chips: [{ k: "assistant", v: "final", on: 1 }], log: [{ t: T, e: "message_start (assistant)" }, { t: T, e: "message_update × N" }, { t: T, e: "message_end (assistant)" }, { t: T, e: "turn_end" }] },
+      { caption: "<b>Would-stop.</b> The outer loop polls follow-up (empty), honors no forced continuation, and emits <code>agent_end</code> with every message this run added. Listeners settle before <code>waitForIdle()</code> resolves — liveness <i>is</i> settlement.",
+        chips: [{ k: "run", v: "settled", on: 1 }], log: [{ t: T, e: "followUp.poll → []" }, { t: T, e: "agent_end { messages }", hi: 1 }, { t: T, e: "listeners settled → waitForIdle()" }] }
+    ];
+    makeSim("loop-sim", steps.length - 1, function (root, s) {
+      var st = steps[s];
+      setLog(root, st.log);
+      setChips(root, st.chips);
+      setCaption(root, st.caption);
+    });
+  }
+
+  /* ================= Session tree explorer (ch06) ================= */
+  function initTreeSim() {
+    var NODES = {
+      h:  { label: "header",   type: "header",   parent: null },
+      u1: { label: "u1 user",  type: "user",     parent: "h" },
+      a2: { label: "a2 asst",  type: "assistant",parent: "u1" },
+      t3: { label: "t3 tool",  type: "tool",     parent: "a2" },
+      u4: { label: "u4 user",  type: "user",     parent: "t3" },
+      a5: { label: "a5 asst",  type: "assistant",parent: "u4" },
+      u6: { label: "u6 user",  type: "user",     parent: "u4" },
+      s7: { label: "s7 branch-summary", type: "summary", parent: "a5" },
+      c8: { label: "c8 compaction", type: "compaction", parent: "s7" }
     };
-    window.renderAllDiagrams = async () => {
-      const pres = [...document.querySelectorAll("pre.mermaid")];
-      for (const p of pres) await window.__renderOne(p);
-      return window.__mermaidErrors;
-    };
-    // Lazy-render as diagrams scroll into view.
-    const io = new IntersectionObserver((entries) => {
-      for (const en of entries) if (en.isIntersecting) { io.unobserve(en.target); window.__renderOne(en.target); }
-    }, { rootMargin: "200px" });
-    document.querySelectorAll("pre.mermaid").forEach(p => io.observe(p));
+    var ORDER = ["h", "u1", "a2", "t3", "u4", "a5", "u6", "s7", "c8"];
+    var steps = [
+      { leaf: null, shown: [], transcript: [], context: [],
+        caption: "<b>Nothing on disk yet.</b> A pi session file is created lazily — until the first entry is appended, no file exists. The header will carry the session's identity." },
+      { leaf: "t3", shown: ["h", "u1", "a2", "t3"],
+        transcript: ["h", "u1", "a2", "t3"], context: ["h", "u1", "a2", "t3"],
+        caption: "<b>First exchange.</b> Each append is one JSONL line naming its parent, so the file is a <i>tree</i>, not a log: user → assistant (with tool call) → tool result. The <b>leaf pointer</b> marks the live end of the active branch." },
+      { leaf: "a5", shown: ["h", "u1", "a2", "t3", "u4", "a5"],
+        transcript: ["h", "u1", "a2", "t3", "u4", "a5"], context: ["h", "u1", "a2", "t3", "u4", "a5"],
+        caption: "<b>The conversation continues.</b> Appends always extend the leaf; replaying the path from the header to the leaf reconstructs the transcript — including system-patch messages that change prompt or tools." },
+      { leaf: "u6", shown: ["h", "u1", "a2", "t3", "u4", "a5", "u6"], faded: ["a5"],
+        transcript: ["h", "u1", "a2", "t3", "u4", "u6"], context: ["h", "u1", "a2", "t3", "u4", "u6"],
+        caption: "<b>Fork from the past.</b> Branching just sets the leaf to a new child of an older entry. Nothing is deleted: the abandoned reply <b>a5</b> stays in the file, merely off the active path. History is immutable — the pointer moves." },
+      { leaf: "s7", shown: ["h", "u1", "a2", "t3", "u4", "a5", "u6", "s7"], faded: ["u6"],
+        transcript: ["h", "u1", "a2", "t3", "u4", "a5", "s7"], context: ["h", "u1", "a2", "t3", "u4", "a5", "s7"],
+        caption: "<b>Return with a summary.</b> Coming back to the main branch appends a <b>branch-summary</b> entry — the model is told, in-band, what happened on the road not taken. The abandoned fork remains in the file." },
+      { leaf: "c8", shown: ORDER.slice(0, 9), faded: ["u6"],
+        transcript: ["h", "u1", "a2", "t3", "u4", "a5", "s7", "c8"],
+        context: ["c8 summary: u1–t3", "u4", "a5", "s7"], omitted: ["u1", "a2", "t3"],
+        caption: "<b>Compaction, without rewriting history.</b> A compaction entry summarizes the early span; the <i>projection</i> omits those originals and splices the summary in. The transcript (and the file) still holds every byte — the cut lives in what the model is sent." },
+      { leaf: "c8", shown: ORDER.slice(0, 9), faded: ["u6"],
+        transcript: ["h", "u1", "a2", "t3", "u4", "a5", "s7", "c8"],
+        context: ["c8 summary: u1–t3", "u4", "a5", "s7"], omitted: ["u1", "a2", "t3"],
+        caption: "<b>Transcript ≠ context — the whole trick.</b> Left: what was recorded (append-only truth). Right: what this request sends (a projection). Because history is never rewritten, compaction, retries, and branch switches are all reversible edits to the projection." }
+    ];
+    function pathTo(leaf) {
+      var out = [], cur = leaf;
+      while (cur) { out.unshift(cur); cur = NODES[cur].parent; }
+      return out;
+    }
+    function renderTree(root, st) {
+      var canvas = root.querySelector(".tree-canvas");
+      var W = canvas.clientWidth || 640, H = canvas.clientHeight || 232;
+      var rowGap = Math.min(26, (H - 52) / Math.max(1, st.shown.length - 1));
+      var yMap = {};
+      st.shown.forEach(function (id, i) { yMap[id] = 26 + i * rowGap; });
+      function xOf(id) { return ((pathTo(id).length - 1) + 0.6) / 9.4 * W; }
+      var edges = "";
+      st.shown.forEach(function (id) {
+        var p = NODES[id].parent;
+        if (!p || yMap[p] === undefined) return;
+        edges += '<line x1="' + (xOf(p) + 42).toFixed(1) + '" y1="' + yMap[p].toFixed(1) +
+          '" x2="' + (xOf(id) - 42).toFixed(1) + '" y2="' + yMap[id].toFixed(1) +
+          '" stroke="var(--line)" stroke-width="1.5"></line>';
+      });
+      var html = "";
+      st.shown.forEach(function (id) {
+        var cls = "tree-node" + (id === st.leaf ? " leaf" : "") +
+          (st.faded && st.faded.indexOf(id) !== -1 ? " faded" : "");
+        html += '<div class="' + cls + '" style="left:' + xOf(id).toFixed(1) + "px;top:" + yMap[id].toFixed(1) + 'px">' +
+          NODES[id].label + (id === st.leaf ? '<span class="leaf-tag">LEAF</span>' : "") + "</div>";
+      });
+      canvas.innerHTML = '<svg class="tree-edges" viewBox="0 0 ' + W + " " + H + '">' + edges + "</svg>" + html;
+    }
+    function renderViews(root, st) {
+      function list(items) {
+        return "<ul>" + (items.length ? items.map(function (it) {
+          if (typeof it === "string") return "<li>" + it + "</li>";
+          return '<li class="' + it.cls + '">' + it.id + "</li>";
+        }).join("") : "<li>—</li>") + "</ul>";
+      }
+      var box = root.querySelector(".tree-views");
+      if (!box) return;
+      box.innerHTML =
+        '<div class="tree-view" data-view="transcript"><h4>Transcript — recorded</h4>' + list(
+          st.transcript.map(function (id) {
+            if (st.omitted && st.omitted.indexOf(id) !== -1) return { id: id, cls: "omitted" };
+            return id;
+          })
+        ) + "</div>" +
+        '<div class="tree-view" data-view="context"><h4>Context — sent to the model</h4>' + list(
+          (st.context || []).map(function (id) {
+            if (st.omitted && st.omitted.indexOf(id) !== -1) return { id: id, cls: "omitted" };
+            if (id.indexOf(" ") !== -1) return { id: id, cls: "summary" };
+            return id;
+          })
+        ) + "</div>";
+    }
+    makeSim("tree-sim", steps.length - 1, function (root, s) {
+      var st = steps[s];
+      renderTree(root, st);
+      renderViews(root, st);
+      setCaption(root, st.caption);
+      setChips(root, [
+        { k: "entries in file", v: st.shown.length },
+        { k: "leaf", v: st.leaf || "—", on: !!st.leaf },
+        { k: "on active path", v: st.transcript.length }
+      ]);
+    });
+  }
+
+  /* ================= Boot ================= */
+  document.addEventListener("DOMContentLoaded", function () {
+    initTheme();
+    initChrome();
+    initCopy();
+    initDeepDives();
+    initPager();
+    initSpy();
+    initLoopSim();
+    initTreeSim();
+    initMermaid();
   });
+})();
 </script>
 </body>
 </html>
