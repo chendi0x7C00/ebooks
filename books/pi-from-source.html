@@ -3679,7 +3679,7 @@ html[data-theme="dark"] pre.mermaid { background: var(--bg); }
   background: var(--accent); z-index: 60; transition: width .08s linear;
 }
 
-/* ---------- Theme toggle ---------- */
+/* ---------- Theme toggle + font controls ---------- */
 #theme-toggle {
   position: fixed; top: 14px; right: 16px; z-index: 60;
   width: 38px; height: 38px; border-radius: 50%;
@@ -3688,6 +3688,17 @@ html[data-theme="dark"] pre.mermaid { background: var(--bg); }
   display: flex; align-items: center; justify-content: center;
 }
 #theme-toggle:hover { border-color: var(--accent); }
+.reader-ctrl {
+  position: fixed; top: 14px; z-index: 60;
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  cursor: pointer; font: 12px -apple-system, sans-serif; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.reader-ctrl:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.reader-ctrl:disabled { opacity: .35; cursor: default; }
+#font-plus { right: 60px; }
+#font-minus { right: 104px; }
 
 /* ---------- Copy buttons ---------- */
 .code-block-wrapper { position: relative; }
@@ -3814,48 +3825,53 @@ details.deep-dive > .deep-dive-body h3 { margin-top: 18px; }
     --accent: #8b2f2f; --code-bg: #f6f6f2;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; font-size: 18px; }
   body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 16px/1.75 Georgia, "Times New Roman", "Songti SC", serif; }
+    font: 1rem/1.75 Georgia, "Times New Roman", "Songti SC", serif; }
   .layout { display: flex; max-width: 1280px; margin: 0 auto; }
   nav { width: 280px; flex: none; position: sticky; top: 0; align-self: flex-start;
     max-height: 100vh; overflow-y: auto; padding: 32px 20px 60px 24px; font-family: -apple-system, "Helvetica Neue", sans-serif; }
-  nav .book-title { font-size: 15px; font-weight: 700; letter-spacing: .02em; margin-bottom: 4px; }
-  nav .book-sub { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
-  .toc-part { font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em;
+  nav .book-title { font-size: 0.84rem; font-weight: 700; letter-spacing: .02em; margin-bottom: 4px; }
+  nav .book-sub { font-size: 0.66rem; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
+  .toc-part { font-size: 0.62rem; text-transform: uppercase; letter-spacing: .12em;
     color: var(--muted); margin: 18px 0 6px; }
-  .toc-link { display: block; font-size: 12.5px; line-height: 1.45; color: #333;
+  .toc-link { display: block; font-size: 0.72rem; line-height: 1.45; color: #333;
     text-decoration: none; padding: 2.5px 0; }
   .toc-link:hover { color: var(--accent); }
   main { flex: 1; min-width: 0; padding: 48px 56px 120px; max-width: 760px; }
   .cover { text-align: center; padding: 40px 0 24px; }
-  .cover h1 { font-size: 40px; line-height: 1.2; margin: 0 0 8px; font-family: -apple-system, "Helvetica Neue", sans-serif; }
-  .cover .subtitle { font-size: 17px; color: var(--muted); margin-bottom: 18px; }
-  .cover .meta { font-size: 13px; color: var(--muted); font-family: -apple-system, sans-serif; }
-  .chapter h1 { font-size: 30px; line-height: 1.25; margin: 8px 0 24px;
+  .cover h1 { font-size: 2.2rem; line-height: 1.2; margin: 0 0 8px; font-family: -apple-system, "Helvetica Neue", sans-serif; }
+  .cover .subtitle { font-size: 0.95rem; color: var(--muted); margin-bottom: 18px; }
+  .cover .meta { font-size: 0.72rem; color: var(--muted); font-family: -apple-system, sans-serif; }
+  .chapter h1 { font-size: 1.7rem; line-height: 1.25; margin: 8px 0 24px;
     font-family: -apple-system, "Helvetica Neue", sans-serif; }
-  h2 { font-size: 21px; margin: 40px 0 14px; font-family: -apple-system, sans-serif; }
-  h3 { font-size: 17px; margin: 30px 0 10px; font-family: -apple-system, sans-serif; }
+  h2 { font-size: 1.18rem; margin: 40px 0 14px; font-family: -apple-system, sans-serif; }
+  h3 { font-size: 1rem; margin: 30px 0 10px; font-family: -apple-system, sans-serif; }
   p { margin: 0 0 16px; }
+  ul, ol { margin: 0 0 16px; padding-left: 1.5em; }
+  li { margin: 5px 0; }
+  li > p { margin: 0 0 8px; }
   a { color: var(--accent); }
   hr { border: none; border-top: 1px solid var(--line); margin: 64px 0; }
   blockquote { margin: 16px 0; padding: 4px 20px; border-left: 3px solid var(--accent);
     color: #444; background: var(--panel); }
   pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px;
-    padding: 14px 16px; overflow-x: auto; font: 13px/1.55 "SF Mono", Menlo, Consolas, monospace; }
-  code { font: 13px/1.55 "SF Mono", Menlo, Consolas, monospace;
+    padding: 14px 16px; overflow-x: auto; font: 0.76rem/1.55 "SF Mono", Menlo, Consolas, monospace; }
+  code { font: 0.78em/1.55 "SF Mono", Menlo, Consolas, monospace;
     background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
-  pre code { padding: 0; background: none; }
+  pre code { padding: 0; background: none; font-size: inherit; }
   pre.mermaid { background: var(--bg); border: none; text-align: center; font-family: inherit; }
-  table { border-collapse: collapse; margin: 18px 0; width: 100%; font-size: 14px; }
+  table { border-collapse: collapse; margin: 18px 0; width: 100%; font-size: 0.82rem; }
   th, td { border: 1px solid var(--line); padding: 7px 11px; text-align: left; vertical-align: top; }
-  th { background: var(--panel); font-family: -apple-system, sans-serif; font-size: 13px; }
+  th { background: var(--panel); font-family: -apple-system, sans-serif; font-size: 0.9em; }
   @media (max-width: 960px) { nav { display: none; } main { padding: 24px 20px 80px; } }
   @media print { nav { display: none; } main { max-width: none; } }
 </style>
 </head>
 <body>
 <div id="progress-bar"></div>
+<button id="font-minus" class="reader-ctrl" type="button" aria-label="Smaller text">A−</button>
+<button id="font-plus" class="reader-ctrl" type="button" aria-label="Larger text">A+</button>
 <button id="theme-toggle" type="button" aria-label="Toggle dark mode">☾</button>
 <button id="back-top" type="button" aria-label="Back to top">↑</button>
 <div class="layout">
@@ -10133,7 +10149,7 @@ diverge one enum at a time, so audit cross-consumer naming as rigorously as you 
     try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
     var btn = document.getElementById("theme-toggle");
     if (btn) btn.textContent = t === "dark" ? "☀" : "☾";
-    if (window.mermaid) rerenderDiagrams(t === "dark" ? "dark" : "neutral");
+    if (window.mermaid) rerenderDiagrams();
   }
   function initTheme() {
     var saved = null;
@@ -10152,56 +10168,102 @@ diverge one enum at a time, so audit cross-consumer naming as rigorously as you 
     return t;
   }
 
-  /* ================= Mermaid (lazy + theme-aware) ================= */
+  /* ================= Font size ================= */
+  var FONT_KEY = "pifs-fontsize";
+  var FONT_STEPS = [16, 18, 20, 22, 24];
+  var FONT_DEFAULT = 18;
+  function applyFontSize(px) {
+    document.documentElement.style.fontSize = px + "px";
+    var minus = document.getElementById("font-minus");
+    var plus = document.getElementById("font-plus");
+    if (minus) minus.disabled = px <= FONT_STEPS[0];
+    if (plus) plus.disabled = px >= FONT_STEPS[FONT_STEPS.length - 1];
+  }
+  function initFontSize() {
+    var saved = null;
+    try { saved = parseInt(localStorage.getItem(FONT_KEY), 10); } catch (e) {}
+    var px = FONT_STEPS.indexOf(saved) !== -1 ? saved : FONT_DEFAULT;
+    applyFontSize(px);
+    function step(dir) {
+      var cur = parseInt(document.documentElement.style.fontSize, 10) || FONT_DEFAULT;
+      var i = FONT_STEPS.indexOf(cur);
+      if (i === -1) i = FONT_STEPS.indexOf(FONT_DEFAULT);
+      var next = FONT_STEPS[Math.min(FONT_STEPS.length - 1, Math.max(0, i + dir))];
+      applyFontSize(next);
+      try { localStorage.setItem(FONT_KEY, String(next)); } catch (e) {}
+    }
+    var minus = document.getElementById("font-minus");
+    var plus = document.getElementById("font-plus");
+    if (minus) { minus.setAttribute("aria-label", "Smaller text"); minus.addEventListener("click", function () { step(-1); }); }
+    if (plus) { plus.setAttribute("aria-label", "Larger text"); plus.addEventListener("click", function () { step(1); }); }
+  }
+
+  /* ================= Mermaid (lazy, serialized, theme-aware) ================= */
   var mermaidCounter = 0;
+  var renderChain = Promise.resolve();
+  var diagramObserver = null;
   function mermaidTheme() {
     return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "neutral";
+  }
+  function observeDiagram(pre) {
+    if (diagramObserver) diagramObserver.observe(pre);
   }
   function initMermaid() {
     if (!window.mermaid) return;
     window.mermaid.initialize({ startOnLoad: false, theme: mermaidTheme(), flowchart: { htmlLabels: false } });
+    diagramObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { diagramObserver.unobserve(en.target); renderOne(en.target); }
+      });
+    }, { rootMargin: "300px" });
+    document.querySelectorAll("pre.mermaid").forEach(observeDiagram);
     window.renderAllDiagrams = function () {
       var pres = Array.prototype.slice.call(document.querySelectorAll("pre.mermaid"));
       var chain = Promise.resolve();
       pres.forEach(function (p) { chain = chain.then(function () { return renderOne(p); }); });
       return chain;
     };
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) {
-        if (en.isIntersecting) { io.unobserve(en.target); renderOne(en.target); }
-      });
-    }, { rootMargin: "300px" });
-    document.querySelectorAll("pre.mermaid").forEach(function (p) { io.observe(p); });
   }
   function renderOne(pre) {
-    if (pre.dataset.rendered === "ok") return Promise.resolve();
-    var src = pre.dataset.src || pre.textContent;
-    pre.dataset.src = src;
-    var id = "mmd-" + (++mermaidCounter);
-    return window.mermaid.render(id, src).then(function (r) {
-      var holder = document.createElement("div");
-      holder.className = "mermaid-svg";
-      holder.innerHTML = r.svg;
-      pre.replaceWith(holder);
-      pre.dataset.rendered = "ok";
-      holder.dataset.forPre = "1";
-      holder.__pre = pre;
-      pre.__holder = holder;
-    }).catch(function (e) {
-      pre.dataset.rendered = "error";
-      (window.__mermaidErrors = window.__mermaidErrors || []).push(String(e && e.message || e).slice(0, 300));
+    if (pre.dataset.rendered === "ok" && pre.dataset.theme === mermaidTheme()) return Promise.resolve();
+    var run = renderChain.then(function () {
+      if (pre.dataset.rendered === "ok" && pre.dataset.theme === mermaidTheme()) return;
+      var src = pre.dataset.src || pre.textContent;
+      pre.dataset.src = src;
+      var id = "mmd-" + (++mermaidCounter);
+      return window.mermaid.render(id, src).then(function (r) {
+        var holder = document.createElement("div");
+        holder.className = "mermaid-svg";
+        holder.innerHTML = r.svg;
+        pre.replaceWith(holder);
+        pre.dataset.rendered = "ok";
+        pre.dataset.theme = mermaidTheme();
+        holder.__pre = pre;
+        pre.__holder = holder;
+      }).catch(function (e) {
+        pre.dataset.rendered = "error";
+        (window.__mermaidErrors = window.__mermaidErrors || []).push(String(e && e.message || e).slice(0, 300));
+      });
     });
+    renderChain = run.catch(function () {});
+    return run;
   }
-  function rerenderDiagrams(theme) {
+  function rerenderDiagrams() {
     if (!window.mermaid) return;
-    window.mermaid.initialize({ startOnLoad: false, theme: theme, flowchart: { htmlLabels: false } });
+    window.mermaid.initialize({ startOnLoad: false, theme: mermaidTheme(), flowchart: { htmlLabels: false } });
+    var vh = window.innerHeight || 800;
+    var inView = [];
     document.querySelectorAll(".mermaid-svg").forEach(function (holder) {
       var pre = holder.__pre;
       if (!pre) return;
       pre.dataset.rendered = "";
+      var r = holder.getBoundingClientRect();
+      if (r.top < vh + 300 && r.bottom > -300) inView.push(pre);
       holder.replaceWith(pre);
+      observeDiagram(pre);
     });
-    document.querySelectorAll("pre.mermaid").forEach(function (p) { renderOne(p); });
+    // re-render only what is on screen now; the rest re-render lazily on scroll
+    inView.forEach(function (pre) { renderOne(pre); });
   }
 
   /* ================= Reading progress + back to top ================= */
@@ -10537,6 +10599,7 @@ diverge one enum at a time, so audit cross-consumer naming as rigorously as you 
   /* ================= Boot ================= */
   document.addEventListener("DOMContentLoaded", function () {
     initTheme();
+    initFontSize();
     initChrome();
     initCopy();
     initDeepDives();
