@@ -1,27 +1,86 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenBot 架构剖析 — 企业级 AI 同事平台的设计与实现</title>
 <meta name="description" content="解剖 CopilotKit 开源的 OpenBot:7 部 19 章,看一个企业如何用网关、审计、容器和协议把一群 AI agent 治理成敢用的同事。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e8a33d'/%3E%3Crect x='8' y='11' width='16' height='12' rx='3' fill='%23101318'/%3E%3Ccircle cx='13' cy='17' r='1.8' fill='%23e8a33d'/%3E%3Ccircle cx='19' cy='17' r='1.8' fill='%23e8a33d'/%3E%3Crect x='14.8' y='6' width='2.4' height='5' rx='1.2' fill='%23101318'/%3E%3C/svg%3E">
+<script>(function(){try{var t=localStorage.getItem('ob-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.setAttribute('data-theme',t);if(localStorage.getItem('ob-focus')==='1')document.documentElement.setAttribute('data-focus','1');}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
 <style>
-:root{
+html[data-theme="dark"]{
   --bg:#101318; --panel:#161a22; --panel2:#1a1f2a; --ink:#e9e5dc; --muted:#9aa0aa;
   --line:#23262e; --accent:#e8a33d; --accent-dim:#8a6420; --link:#7ba0ff; --code-bg:#0c0f14;
+  --heading:#f2efe7; --ink2:#c9c4b8; --row-alt:#141821; --icode:#f0d9a8; --code-ink:#dbe2f0;
+  --sel:#3d3a26; --ok:#7fd08a; --ok-line:#2e5a37; --err:#e06c75;
   color-scheme: dark;
 }
+html[data-theme="light"]{
+  --bg:#faf9f7; --panel:#ffffff; --panel2:#f5f2ec; --ink:#232019; --muted:#6b6558;
+  --line:#e3ddd2; --accent:#a06a12; --accent-dim:#cbb489; --link:#2f5fb3; --code-bg:#f5f2ec;
+  --heading:#1d1a13; --ink2:#4a443a; --row-alt:#f7f4ee; --icode:#7a5410; --code-ink:#24292f;
+  --sel:#ece2c8; --ok:#116329; --ok-line:#9ec5a6; --err:#cf222e;
+  color-scheme: light;
+}
+/* hljs token 配色 · 暗色(参考 GitHub Dark) */
+html[data-theme="dark"] .hljs-keyword,html[data-theme="dark"] .hljs-operator,
+html[data-theme="dark"] .hljs-selector-tag,html[data-theme="dark"] .hljs-tag{color:#ff7b72}
+html[data-theme="dark"] .hljs-string,html[data-theme="dark"] .hljs-regexp,
+html[data-theme="dark"] .hljs-addition,html[data-theme="dark"] .hljs-link{color:#a5d6ff}
+html[data-theme="dark"] .hljs-comment,html[data-theme="dark"] .hljs-quote,
+html[data-theme="dark"] .hljs-meta,html[data-theme="dark"] .hljs-doctag{color:#8b949e;font-style:italic}
+html[data-theme="dark"] .hljs-number,html[data-theme="dark"] .hljs-literal{color:#79c0ff}
+html[data-theme="dark"] .hljs-title,html[data-theme="dark"] .hljs-title.function_,
+html[data-theme="dark"] .hljs-section{color:#d2a8ff}
+html[data-theme="dark"] .hljs-title.class_,html[data-theme="dark"] .hljs-type,
+html[data-theme="dark"] .hljs-built_in,html[data-theme="dark"] .hljs-symbol{color:#ffa657}
+html[data-theme="dark"] .hljs-attr,html[data-theme="dark"] .hljs-attribute,
+html[data-theme="dark"] .hljs-variable,html[data-theme="dark"] .hljs-template-variable{color:#7ee787}
+html[data-theme="dark"] .hljs-name,html[data-theme="dark"] .hljs-selector-id,
+html[data-theme="dark"] .hljs-selector-class,html[data-theme="dark"] .hljs-bullet{color:#79c0ff}
+html[data-theme="dark"] .hljs-punctuation{color:#c9d1d9}
+html[data-theme="dark"] .hljs-deletion{color:#ffa198}
+html[data-theme="dark"] .hljs-emphasis{font-style:italic}
+html[data-theme="dark"] .hljs-strong{font-weight:700}
+/* hljs token 配色 · 亮色(参考 GitHub Light) */
+html[data-theme="light"] .hljs-keyword,html[data-theme="light"] .hljs-operator,
+html[data-theme="light"] .hljs-selector-tag,html[data-theme="light"] .hljs-tag{color:#cf222e}
+html[data-theme="light"] .hljs-string,html[data-theme="light"] .hljs-regexp,
+html[data-theme="light"] .hljs-addition,html[data-theme="light"] .hljs-link{color:#0a3069}
+html[data-theme="light"] .hljs-comment,html[data-theme="light"] .hljs-quote,
+html[data-theme="light"] .hljs-meta,html[data-theme="light"] .hljs-doctag{color:#6e7781;font-style:italic}
+html[data-theme="light"] .hljs-number,html[data-theme="light"] .hljs-literal{color:#0550ae}
+html[data-theme="light"] .hljs-title,html[data-theme="light"] .hljs-title.function_,
+html[data-theme="light"] .hljs-section{color:#8250df}
+html[data-theme="light"] .hljs-title.class_,html[data-theme="light"] .hljs-type,
+html[data-theme="light"] .hljs-built_in,html[data-theme="light"] .hljs-symbol{color:#953800}
+html[data-theme="light"] .hljs-attr,html[data-theme="light"] .hljs-attribute,
+html[data-theme="light"] .hljs-variable,html[data-theme="light"] .hljs-template-variable{color:#116329}
+html[data-theme="light"] .hljs-name,html[data-theme="light"] .hljs-selector-id,
+html[data-theme="light"] .hljs-selector-class,html[data-theme="light"] .hljs-bullet{color:#0550ae}
+html[data-theme="light"] .hljs-punctuation{color:#57606a}
+html[data-theme="light"] .hljs-deletion{color:#82071e}
+html[data-theme="light"] .hljs-emphasis{font-style:italic}
+html[data-theme="light"] .hljs-strong{font-weight:700}
+
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif;
   line-height:1.85;font-size:16.5px;-webkit-font-smoothing:antialiased}
-::selection{background:#3d3a26}
+::selection{background:var(--sel)}
 a{color:var(--link);text-decoration:none}
 a:hover{text-decoration:underline}
-h1,h2,h3,h4{font-family:"Songti SC","STSong","Noto Serif SC","SimSun",serif;line-height:1.4;color:#f2efe7}
+h1,h2,h3,h4{font-family:"Songti SC","STSong","Noto Serif SC","SimSun",serif;line-height:1.4;color:var(--heading)}
 .progress{position:fixed;top:0;left:0;height:2px;background:var(--accent);width:0;z-index:60}
+
+/* fixed controls:theme / focus */
+.controls{position:fixed;top:12px;right:14px;z-index:75;display:flex;gap:8px}
+.ctrl-btn{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:10px;
+  padding:6px 12px;font-size:.8rem;cursor:pointer;font-family:inherit;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.ctrl-btn:hover{color:var(--ink);border-color:var(--accent-dim)}
+.ctrl-btn.on{color:var(--accent);border-color:var(--accent)}
+.ctrl-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* cover */
 .cover{max-width:52rem;margin:0 auto;padding:88px 24px 64px;text-align:left}
@@ -30,7 +89,7 @@ h1,h2,h3,h4{font-family:"Songti SC","STSong","Noto Serif SC","SimSun",serif;line
 .cover .subtitle{font-size:1.15rem;color:var(--muted);margin-bottom:26px;font-family:"Songti SC","STSong",serif}
 .cover .thesis{border-left:3px solid var(--accent);padding:10px 18px;background:var(--panel);border-radius:0 10px 10px 0;
   font-size:1.02rem;margin-bottom:26px}
-.cover .blurb{color:#c9c4b8;font-size:.95rem;margin-bottom:22px}
+.cover .blurb{color:var(--ink2);font-size:.95rem;margin-bottom:22px}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:34px}
 .badges span{background:var(--panel2);border:1px solid var(--line);border-radius:99px;padding:3px 13px;font-size:.76rem;color:var(--muted)}
 .cover-toc{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-top:8px}
@@ -42,7 +101,7 @@ h1,h2,h3,h4{font-family:"Songti SC","STSong","Noto Serif SC","SimSun",serif;line
 .cover-part li a{color:var(--ink)}
 .cover-part li a:hover{color:var(--link)}
 .about{margin-top:36px;border-top:1px solid var(--line);padding-top:18px;font-size:.82rem;color:var(--muted)}
-.about b{color:#c9c4b8}
+.about b{color:var(--ink2)}
 
 /* layout */
 .layout{display:flex;max-width:1280px;margin:0 auto;padding:0 24px}
@@ -52,10 +111,16 @@ h1,h2,h3,h4{font-family:"Songti SC","STSong","Noto Serif SC","SimSun",serif;line
 .sidebar .toc-head a{color:var(--accent);font-weight:600;font-family:"Songti SC","STSong",serif}
 .sidebar ul{list-style:none;margin:0;padding:0}
 .sidebar .toc-part>span{display:block;color:var(--muted);font-size:.72rem;letter-spacing:1.5px;text-transform:uppercase;margin:18px 0 6px}
-.sidebar .toc-part ul li a{display:block;color:#c3bfb4;padding:4px 0 4px 12px;border-left:2px solid transparent;line-height:1.45}
+.sidebar .toc-part ul li a{display:block;color:var(--ink2);padding:4px 0 4px 12px;border-left:2px solid transparent;line-height:1.45}
 .sidebar .toc-part ul li a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent-dim)}
 .sidebar .toc-part ul li a.active{color:var(--accent);border-left-color:var(--accent)}
 main{flex:1;min-width:0;padding:10px 0 80px 44px}
+
+/* focus mode:hide sidebar,center main */
+html[data-focus="1"] .sidebar,body.focus .sidebar{display:none}
+html[data-focus="1"] .toc-toggle,body.focus .toc-toggle{display:none}
+html[data-focus="1"] .layout,body.focus .layout{display:block}
+html[data-focus="1"] main,body.focus main{max-width:52rem;margin:0 auto;padding:10px 24px 80px}
 
 /* parts & chapters */
 .part{margin:64px 0 8px}
@@ -70,38 +135,58 @@ main{flex:1;min-width:0;padding:10px 0 80px 44px}
 .chapter p{margin:15px 0}
 .chapter ul,.chapter ol{margin:15px 0;padding-left:26px}
 .chapter li{margin:7px 0}
-.chapter strong{color:#f2efe7}
+.chapter strong{color:var(--heading)}
 .chapter hr{border:none;border-top:1px solid var(--line);margin:44px 0}
-.chapter blockquote{margin:18px 0;padding:10px 18px;border-left:3px solid var(--accent-dim);background:var(--panel);border-radius:0 10px 10px 0;color:#c9c4b8}
+.chapter blockquote{margin:18px 0;padding:10px 18px;border-left:3px solid var(--accent-dim);background:var(--panel);border-radius:0 10px 10px 0;color:var(--ink2)}
 .chapter blockquote p{margin:6px 0}
 .chapter table{border-collapse:collapse;margin:22px 0;font-size:.9rem;display:block;overflow-x:auto;max-width:100%}
 .chapter th,.chapter td{border:1px solid var(--line);padding:7px 13px;text-align:left;vertical-align:top}
 .chapter th{background:var(--panel2);font-weight:600;white-space:nowrap}
-.chapter tr:nth-child(even) td{background:#141821}
+.chapter tr:nth-child(even) td{background:var(--row-alt)}
 code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em;background:var(--panel2);
-  border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:#f0d9a8}
+  border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--icode)}
 .codeblock{position:relative;margin:22px 0}
 .codeblock pre{margin:0;background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:16px 18px;overflow-x:auto}
-.codeblock pre code{background:none;border:none;padding:0;color:#dbe2f0;font-size:.855rem;line-height:1.7}
+.codeblock pre code{background:none;border:none;padding:0;color:var(--code-ink);font-size:.855rem;line-height:1.7}
 .code-lang{position:absolute;top:8px;left:14px;font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 .code-lang+ .copy-btn{top:6px}
 .codeblock:has(.code-lang) pre{padding-top:32px}
 .copy-btn{position:absolute;top:8px;right:8px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);
-  border-radius:8px;font-size:.72rem;padding:3px 10px;cursor:pointer}
+  border-radius:8px;font-size:.72rem;padding:3px 10px;cursor:pointer;font-family:inherit}
 .copy-btn:hover{color:var(--ink);border-color:var(--accent-dim)}
-.copy-btn.done{color:#7fd08a;border-color:#2e5a37}
+.copy-btn.done{color:var(--ok);border-color:var(--ok-line)}
+.copy-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-/* diagrams */
-.diagram{margin:26px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;
+/* diagrams:mermaid SVG 是暗色预渲染的,所以 .diagram 卡片在亮/暗两套主题下都刻意保持深色背景 */
+.diagram{margin:26px 0;background:#161a22;border:1px solid #23262e;border-radius:14px;padding:18px;
   display:flex;justify-content:center;cursor:zoom-in;overflow-x:auto}
 .diagram svg{max-width:100%;height:auto;min-width:280px}
+.diagram:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .diagram-missing{color:#d06a6a;padding:14px;font-size:.85rem;cursor:default}
 .lightbox{position:fixed;inset:0;background:rgba(6,8,12,.9);backdrop-filter:blur(4px);display:none;
   align-items:center;justify-content:center;z-index:100;cursor:zoom-out;padding:3vh 3vw}
 .lightbox.open{display:flex}
-.lightbox .lb-inner{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;
+.lightbox .lb-inner{background:#161a22;border:1px solid #23262e;border-radius:16px;padding:22px;
   max-width:96vw;max-height:94vh;overflow:auto;cursor:default}
 .lightbox svg{width:auto;max-width:none;min-width:min(80vw,900px);height:auto;max-height:86vh}
+
+/* deep dive 折叠 */
+.dd{margin:34px 0 14px}
+.dd-head{cursor:pointer;display:flex;align-items:center;gap:10px;user-select:none;
+  border:1px solid var(--line);border-radius:10px;padding:10px 14px;background:var(--panel);margin:0}
+.dd-head:hover{border-color:var(--accent-dim)}
+.dd-head:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dd-text{flex:1;min-width:0}
+.dd-tri{flex:none;display:inline-block;font-size:.6rem;color:var(--accent);transition:transform .18s ease}
+.dd:not(.dd-collapsed) .dd-tri{transform:rotate(90deg)}
+.dd-badge{flex:none;font-size:.64rem;letter-spacing:1px;font-weight:400;color:var(--accent);
+  border:1px solid var(--accent-dim);border-radius:99px;padding:1px 9px}
+.dd:not(.dd-collapsed) .dd-head{border-radius:10px 10px 0 0}
+.dd-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows .25s ease}
+.dd-collapsed .dd-body{grid-template-rows:0fr}
+.dd-body-inner{overflow:hidden;min-height:0;border:1px solid var(--line);border-top:none;
+  border-radius:0 0 10px 10px;padding:2px 18px 8px;background:var(--panel)}
+.dd-collapsed .dd-body-inner{border-color:transparent}
 
 /* chapter nav */
 .chapter-nav{display:flex;justify-content:space-between;gap:14px;margin:64px 0 10px;border-top:1px solid var(--line);padding-top:22px;font-size:.92rem}
@@ -129,17 +214,196 @@ code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em
 @media print{
   :root{color-scheme:light}
   body{background:#fff;color:#1a1a1a;font-size:11pt}
-  .sidebar,.toc-toggle,.progress,.copy-btn,.lightbox,.chapter-nav{display:none!important}
+  .sidebar,.toc-toggle,.progress,.copy-btn,.lightbox,.chapter-nav,.controls,.w-controls{display:none!important}
   .cover{max-width:100%;padding:0 0 24px}
   main{padding:0}
   .chapter{max-width:100%;page-break-before:always}
   .diagram,.codeblock pre,blockquote{break-inside:avoid;border-color:#ccc}
   a{color:#1a1a1a}
+  .dd-body{grid-template-rows:1fr!important}
+  .dd-body-inner{overflow:visible;border-color:#ccc}
+  .dd-head{cursor:default;border-color:#ccc}
+}
+
+/* ---- widgets 通用 ---- */
+.widget{margin:30px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+.w-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.w-title{font-weight:700;font-family:"Songti SC","STSong",serif;font-size:1.05rem;color:var(--heading)}
+.w-sub{color:var(--muted);font-size:.78rem}
+.w-btn{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;
+  font-size:.78rem;padding:5px 13px;cursor:pointer;font-family:inherit}
+.w-btn:hover{color:var(--ink);border-color:var(--accent-dim)}
+.w-btn.on{color:var(--accent);border-color:var(--accent)}
+.w-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.w-controls{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap}
+.w-dots{display:flex;gap:6px;margin-left:auto}
+.w-dot{width:10px;height:10px;border-radius:99px;border:1px solid var(--accent-dim);background:transparent;padding:0;cursor:pointer}
+.w-dot.on{background:var(--accent)}
+.w-dot:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---- W1 六支柱探索器 ---- */
+.w1-svg{width:100%;height:auto;display:block}
+.w1-node{cursor:pointer}
+.w1-node rect{fill:var(--panel2);stroke:var(--line);stroke-width:1.2;transition:opacity .15s,stroke .15s}
+.w1-node text{fill:var(--ink);transition:opacity .15s}
+.w1-node .w1-name{font-size:13.5px;font-weight:650}
+.w1-node .w1-port{fill:var(--muted);font-size:10.5px}
+.w1-hub rect{stroke:var(--accent-dim)}
+.w1-edge{stroke:var(--line);stroke-width:1.2;transition:opacity .15s,stroke .15s}
+.w1-elabel{fill:var(--muted);font-size:10px;paint-order:stroke;stroke:var(--panel);stroke-width:3px;transition:opacity .15s}
+.w1-svg[data-active] .w1-node{opacity:.32}
+.w1-svg[data-active] .w1-edge,.w1-svg[data-active] .w1-elabel{opacity:.25}
+.w1-svg[data-active] .w1-node.on{opacity:1}
+.w1-svg[data-active] .w1-node.on rect{stroke:var(--accent);stroke-width:2}
+.w1-svg[data-active] .w1-node.on .w1-name{fill:var(--accent)}
+.w1-svg[data-active] .w1-edge.on{opacity:1;stroke:var(--accent);stroke-width:2}
+.w1-svg[data-active] .w1-elabel.on{opacity:1;fill:var(--accent)}
+.w1-node:focus{outline:none}
+.w1-node:focus-visible rect{stroke:var(--accent);stroke-width:2;stroke-dasharray:4 3}
+.w1-detail{margin-top:14px;border:1px solid var(--line);border-radius:10px;padding:12px 16px;background:var(--panel2);min-height:96px}
+.w1-d-name{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.82rem;color:var(--accent);margin-bottom:3px}
+.w1-d-role{margin:2px 0;font-size:.92rem}
+.w1-d-fail{margin:2px 0;font-size:.82rem;color:var(--muted)}
+.w1-d-link{display:inline-block;margin-top:6px;font-size:.84rem}
+
+/* ---- W2 黄金路径步进器 ---- */
+.w2-grid{display:flex;gap:18px}
+.w2-steps{list-style:none;margin:0;padding:0;width:180px;flex:none}
+.w2-step{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;
+  border:1px solid transparent;border-radius:9px;padding:6px 10px;cursor:pointer;color:var(--ink2);font-size:.86rem;font-family:inherit}
+.w2-step .w2-num{flex:none;width:20px;height:20px;border-radius:99px;border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:.68rem;color:var(--muted);
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.w2-step:hover{border-color:var(--line)}
+.w2-step.on{background:var(--panel2);border-color:var(--accent-dim);color:var(--ink)}
+.w2-step.on .w2-num{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.w2-step:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.w2-scene-wrap{flex:1;min-width:0}
+.w2-scene{border:1px solid var(--line);border-radius:12px;background:var(--code-bg);min-height:172px;
+  padding:18px;display:flex;flex-direction:column;gap:10px;justify-content:center;transition:opacity .16s ease}
+.w2-scene.swap{opacity:0}
+.w2-tag{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.68rem;color:var(--muted);letter-spacing:.4px}
+.w2-msg{max-width:80%;background:var(--panel2);border:1px solid var(--line);border-radius:12px 12px 12px 4px;
+  padding:8px 13px;font-size:.9rem;align-self:flex-start}
+.w2-msg.w2-bot{align-self:flex-end;border-radius:12px 12px 4px 12px;border-color:var(--accent-dim)}
+.w2-chip{display:inline-block;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.74rem;
+  background:var(--panel2);border:1px solid var(--accent-dim);color:var(--accent);border-radius:7px;padding:3px 9px;margin:2px 4px 2px 0}
+.w2-mono-card{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.78rem;background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:10px 14px;color:var(--code-ink);white-space:pre-wrap;word-break:break-all}
+.w2-return{font-size:.8rem;color:var(--accent)}
+.w2-pipe{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.w2-pipe span{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.74rem;border:1px solid var(--accent-dim);
+  border-radius:8px;padding:5px 12px;color:var(--accent);background:var(--panel2)}
+.w2-pipe i{color:var(--muted);font-style:normal}
+.w2-browser{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel)}
+.w2-bbar{display:flex;align-items:center;gap:5px;background:var(--panel2);border-bottom:1px solid var(--line);padding:6px 10px}
+.w2-bbar i{width:8px;height:8px;border-radius:99px;background:var(--line)}
+.w2-bbar span{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.66rem;color:var(--muted);margin-left:6px}
+.w2-bbody{padding:22px;display:flex;justify-content:center}
+.w2-click-target{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 18px;font-size:.85rem;
+  box-shadow:0 0 0 3px var(--accent-dim),0 0 20px var(--accent)}
+.w2-caption{margin:10px 2px 0;font-size:.85rem;color:var(--muted);min-height:44px}
+@media (max-width:720px){
+  .w2-grid{flex-direction:column}
+  .w2-steps{width:100%;display:flex;flex-wrap:wrap;gap:4px}
+  .w2-step{width:auto}
+}
+
+/* ---- W3 行动网关模拟器 ---- */
+.w3-grid{display:flex;gap:20px}
+.w3-left{width:292px;flex:none;display:flex;flex-direction:column;gap:14px}
+.w3-right{flex:1;min-width:0}
+.w3-fs{border:1px solid var(--line);border-radius:10px;padding:10px 13px;margin:0}
+.w3-fs legend{font-size:.72rem;color:var(--muted);letter-spacing:1px;padding:0 5px}
+.w3-row{margin:8px 0;display:flex;flex-direction:column;gap:3px}
+.w3-row label{font-size:.74rem;color:var(--muted)}
+.w3-row select,.w3-row input,.w3-row textarea{width:100%;background:var(--code-bg);border:1px solid var(--line);
+  border-radius:8px;color:var(--ink);font-size:.82rem;padding:6px 9px;font-family:inherit}
+.w3-row input,.w3-row textarea{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.w3-row textarea{min-height:52px;resize:vertical}
+.w3-row select:focus-visible,.w3-row input:focus-visible,.w3-row textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.w3-scens{display:flex;flex-wrap:wrap;gap:6px}
+.w3-run{margin-bottom:12px;font-size:.88rem;padding:8px 18px}
+.w3-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.w3-step{border:1px solid var(--line);border-radius:10px;padding:9px 13px;opacity:.42;transition:opacity .2s,border-color .2s}
+.w3-step.on{opacity:1;border-color:var(--accent-dim)}
+.w3-s-name{font-size:.8rem;font-weight:650;color:var(--heading);display:flex;gap:8px;align-items:center}
+.w3-s-ico{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.66rem;color:var(--muted);
+  border:1px solid var(--line);border-radius:99px;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.w3-step.on .w3-s-ico{color:var(--accent);border-color:var(--accent-dim)}
+.w3-s-body{margin-top:7px;font-size:.82rem;display:none}
+.w3-step.on .w3-s-body{display:block}
+.w3-note{color:var(--muted);font-size:.78rem;margin-top:5px}
+.w3-kv{border-collapse:collapse;font-size:.76rem;width:100%}
+.w3-kv td{border:1px solid var(--line);padding:3px 8px;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;word-break:break-all}
+.w3-kv td:first-child{color:var(--muted);white-space:nowrap;width:1%}
+.w3-neutral{color:var(--muted)}
+.w3-rule{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.76rem;display:flex;gap:8px;
+  align-items:baseline;margin:3px 0;flex-wrap:wrap}
+.w3-rule .st{flex:none;font-weight:700}
+.w3-rule code{word-break:break-all}
+.st-miss{color:var(--muted)}
+.st-hit{color:var(--ok)}
+.st-deny-hit{color:var(--err)}
+.st-broken{color:var(--accent)}
+.w3-verdict{display:inline-block;font-weight:700;font-size:.9rem;border-radius:8px;padding:2px 14px;letter-spacing:1px}
+.w3-verdict.allow{color:var(--ok);border:1px solid var(--ok-line)}
+.w3-verdict.deny{color:var(--err);border:1px solid var(--err)}
+.w3-audit{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.72rem;background:var(--code-bg);
+  border:1px solid var(--line);border-radius:8px;padding:9px 12px;white-space:pre-wrap;word-break:break-all;
+  color:var(--code-ink);margin:0;max-height:220px;overflow:auto}
+.w3-err-text{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.78rem;color:var(--err);
+  border:1px solid var(--err);border-radius:8px;padding:7px 11px;word-break:break-all}
+@media (max-width:720px){
+  .w3-grid{flex-direction:column}
+  .w3-left{width:100%}
+}
+
+/* ---- W4 work_items 认领模拟器 ---- */
+.w4-legend{font-size:.78rem;color:var(--muted);margin-bottom:8px}
+.w4-lg{font-size:.9rem}
+.w4-lg.a{color:#5b8def}
+.w4-lg.b{color:#e88c3c}
+.w4-stage{position:relative;padding:56px 4px 4px 34px;overflow-x:auto}
+.w4-table{border-collapse:collapse;font-size:.68rem;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+.w4-table th,.w4-table td{border:1px solid var(--line);padding:4px 5px;text-align:left;white-space:nowrap}
+.w4-table th{background:var(--panel2);color:var(--muted);font-weight:600}
+.w4-table td{background:var(--panel);transition:background .2s,box-shadow .2s,opacity .2s}
+.w4-table tr.fin td{background:rgba(70,140,80,.10)}
+.w4-table tr.lk-a td{background:rgba(84,140,240,.13)}
+.w4-table tr.lk-a td:first-child{box-shadow:inset 3px 0 0 #5b8def}
+.w4-table tr.lk-b td{background:rgba(232,140,60,.12)}
+.w4-table tr.lk-b td:first-child{box-shadow:inset 3px 0 0 #e88c3c}
+.w4-table tr.w4-flash td{animation:w4flash .8s ease}
+@keyframes w4flash{0%{background:rgba(91,141,239,.05)}35%{background:rgba(91,141,239,.45)}100%{background:rgba(84,140,240,.13)}}
+.w4-rep{position:absolute;width:24px;height:24px;border-radius:99px;display:flex;align-items:center;justify-content:center;
+  font-size:.72rem;font-weight:700;color:#fff;transition:top .45s ease;z-index:2;left:8px}
+.w4-a{background:#3b6fd4}
+.w4-b{background:#d4742a}
+.w4-tag{position:absolute;left:150px;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.66rem;
+  color:var(--muted);background:var(--panel2);border:1px solid var(--accent-dim);border-radius:6px;padding:2px 8px;
+  opacity:0;transition:opacity .3s,top .45s ease;z-index:2;white-space:nowrap}
+.w4-tag.show{opacity:1}
+.w4-offer{position:absolute;right:8px;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.66rem;
+  border:1px dashed var(--accent-dim);border-radius:8px;padding:4px 9px;background:var(--panel2);color:var(--ink2);
+  opacity:0;transition:opacity .3s,top .45s ease;z-index:2;max-width:250px;white-space:normal}
+.w4-offer.show{opacity:1;text-decoration:line-through;color:var(--muted)}
+.w4-caption{margin:10px 2px 0;font-size:.85rem;color:var(--muted);min-height:44px}
+
+/* ---- reduced motion:步进与折叠动画全部瞬切 ---- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .dd-tri,.dd-body,.w2-scene,.w3-step,.w4-rep,.w4-tag,.w4-offer,.w4-table td{transition:none!important}
+  .w4-table tr.w4-flash td{animation:none!important}
 }
 </style>
 </head>
 <body>
 <div class="progress"></div>
+<div class="controls">
+  <button class="ctrl-btn" id="theme-toggle" type="button" aria-label="切换到亮色主题">☀</button>
+  <button class="ctrl-btn" id="focus-toggle" type="button" aria-pressed="false" aria-label="焦点模式">焦点</button>
+</div>
 <header class="cover">
   <div class="kicker">OpenBot from Source · 源码架构剖析</div>
   <h1>OpenBot 架构剖析</h1>
@@ -150,6 +414,7 @@ code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em
   <div class="cover-toc"><div class="cover-part"><h3>Part I 地基</h3><p class="epigraph">在治理之前,进程必须先存在;在信任之前,必须先知道谁是谁。</p><ol><li><a href="#ch01">第一章 架构总览:一个「可以被治理」的 agent 平台</a></li><li><a href="#ch02">第二章 启动即边界:配置、租户包与拒绝启动</a></li><li><a href="#ch03">第三章 身份与访问:认证、角色与「移除一个人」</a></li></ol></div><div class="cover-part"><h3>Part II 受治理的回合</h3><p class="epigraph">回合是心跳;网关是良知;审计是记忆。</p><ol><li><a href="#ch04">第四章 回合的生命周期:AG-UI 运行时</a></li><li><a href="#ch05">第五章 行动网关:先决策、记审计、后行动</a></li><li><a href="#ch06">第六章 审计追踪:谁做的,谁引起的</a></li></ol></div><div class="cover-part"><h3>Part III Bot 的电脑</h3><p class="epigraph">每个同事一台电脑。电脑被围起来,人随时可以接管方向盘。</p><ol><li><a href="#ch07">第七章 每个 Bot 一台电脑</a></li><li><a href="#ch08">第八章 电脑的边界:出口、秘密与求助</a></li><li><a href="#ch09">第九章 容器管家与部署拓扑</a></li></ol></div><div class="cover-part"><h3>Part IV 自治与协作</h3><p class="epigraph">没人在看的时候,工作照样发生——但要能回答「谁让它发生的」。</p><ol><li><a href="#ch10">第十章 无人值守的工作:一张队列与例程</a></li><li><a href="#ch11">第十一章 Bot 找 Bot,Bot 找人</a></li></ol></div><div class="cover-part"><h3>Part V 能力供给</h3><p class="epigraph">工具、技能、组件——给能力,但永远不过界。</p><ol><li><a href="#ch12">第十二章 插件与 MCP:能力目录与七道闸</a></li><li><a href="#ch13">第十三章 技能与工具收窄</a></li><li><a href="#ch14">第十四章 组件:回答以界面而非散文</a></li></ol></div><div class="cover-part"><h3>Part VI 记忆与学习</h3><p class="epigraph">没有记忆的 agent 永远犯同样的错;没有审核的记忆是合规噩梦。</p><ol><li><a href="#ch15">第十五章 双轨记忆与自动学习</a></li></ol></div><div class="cover-part"><h3>Part VII 生态与横切</h3><p class="epigraph">框架来来去去,合同不变;终端形态各异,边界同一。</p><ol><li><a href="#ch16">第十六章 框架生态:十五个 harness 一个合同</a></li><li><a href="#ch17">第十七章 安全边界:两套钥匙与教科书级修补</a></li><li><a href="#ch18">第十八章 多终端:桌面、移动与语音</a></li><li><a href="#ch19">第十九章 结语:治理型 agent 平台的二十个模式</a></li></ol></div></div>
   <div class="about"><b>关于本书。</b>对 MIT 开源项目 <a href="https://github.com/CopilotKit/openbot">CopilotKit/openbot</a> 的独立技术剖析,与 CopilotKit 无隶属、未获背书;短小代码引用均注明 file:line 出处。由 AI agent 集群仿《Claude Code from Source》方法成书:13 个探索 agent 通读全部子系统,14 个写作 agent 成稿,3 个评审 agent 回源码抽查 300 余处断言,7 个修订 agent 应用反馈,主 agent 规划、裁决与终审。</div>
 </header>
+<!-- mermaid 图为暗色主题预渲染:.diagram 卡片在亮/暗两套主题下都刻意保持深色背景,见 CSS .diagram 注释 -->
 <div class="layout">
   <nav class="sidebar" aria-label="目录">
     <div class="toc-head"><a href="#top">OpenBot 架构剖析</a></div>
@@ -221,6 +486,69 @@ code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em
 <p>还有两个「为什么不合并」的答案值得记住。<strong>记忆为什么不直接住进 Postgres?</strong> 因为线程与召回是 Intelligence 的产品能力,而来源、审核态、形成者是 OpenBot 的治理字段——第十五章会看到这如何长成双轨:Intelligence 管内容与排序,本地行管来源与可见性。</p>
 <p><strong>电脑为什么是独立服务,而不是 server 的一个工具类?</strong> 因为它持有真实登录态,必须能被单独围起来:单独的网络、单独的权能、单独的出口策略。合进 server 的那一刻,这些边界就全部退化成进程内的 if 语句。</p>
 <hr>
+
+<section class="widget" id="w1">
+  <div class="w-head"><span class="w-title">六支柱架构探索器</span><span class="w-sub">hover / 点击节点,看每个支柱的职责与失败形状</span></div>
+  <svg class="w1-svg" id="w1svg" viewBox="0 0 760 470" role="group" aria-label="六个支柱架构图:server 居中,六个支柱环绕">
+    <g class="w1-edges">
+      <line class="w1-edge" data-e="0 1" x1="380" y1="235" x2="150" y2="80"></line>
+      <line class="w1-edge" data-e="1 2" x1="380" y1="235" x2="610" y2="80"></line>
+      <line class="w1-edge" data-e="1 3" x1="380" y1="235" x2="105" y2="235"></line>
+      <line class="w1-edge" data-e="1 4" x1="380" y1="235" x2="655" y2="235"></line>
+      <line class="w1-edge" data-e="1 5" x1="380" y1="235" x2="150" y2="390"></line>
+      <line class="w1-edge" data-e="1 6" x1="380" y1="235" x2="610" y2="390"></line>
+      <line class="w1-edge" data-e="5 6" x1="240" y1="390" x2="520" y2="390"></line>
+      <text class="w1-elabel" data-e="0 1" x="240" y="146" text-anchor="middle">HTTPS 与 SSE</text>
+      <text class="w1-elabel" data-e="1 2" x="516" y="146" text-anchor="middle">唯一的库</text>
+      <text class="w1-elabel" data-e="1 3" x="240" y="224" text-anchor="middle">线程与记忆</text>
+      <text class="w1-elabel" data-e="1 4" x="520" y="224" text-anchor="middle">回合 · 行动回流</text>
+      <text class="w1-elabel" data-e="1 5" x="243" y="326" text-anchor="middle">网关放行后才调用</text>
+      <text class="w1-elabel" data-e="1 6" x="512" y="326" text-anchor="middle">四个动词</text>
+      <text class="w1-elabel" data-e="5 6" x="380" y="380" text-anchor="middle">创建与管理</text>
+    </g>
+    <g class="w1-node" data-i="0" tabindex="0" role="button" aria-label="app · 3010:观看面,不是边界">
+      <rect x="60" y="51" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="150" y="79" text-anchor="middle">app</text>
+      <text class="w1-port" x="150" y="97" text-anchor="middle">3010 · React/Vite</text>
+    </g>
+    <g class="w1-node" data-i="2" tabindex="0" role="button" aria-label="PostgreSQL · 5432:单一事实源">
+      <rect x="520" y="51" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="610" y="79" text-anchor="middle">PostgreSQL + pgvector</text>
+      <text class="w1-port" x="610" y="97" text-anchor="middle">5432 · 单一事实源</text>
+    </g>
+    <g class="w1-node" data-i="3" tabindex="0" role="button" aria-label="CopilotKit Intelligence:线程与记忆">
+      <rect x="15" y="206" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="105" y="234" text-anchor="middle">Intelligence</text>
+      <text class="w1-port" x="105" y="252" text-anchor="middle">线程与记忆 · 外部服务</text>
+    </g>
+    <g class="w1-node" data-i="4" tabindex="0" role="button" aria-label="AG-UI endpoints · 4200 起:Bot 住在协议后面">
+      <rect x="565" y="206" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="655" y="234" text-anchor="middle">AG-UI endpoints</text>
+      <text class="w1-port" x="655" y="252" text-anchor="middle">4200+ · Bot 住在协议后面</text>
+    </g>
+    <g class="w1-node" data-i="5" tabindex="0" role="button" aria-label="agent-computer · 4100:每 Bot 一台被围起来的电脑">
+      <rect x="60" y="361" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="150" y="389" text-anchor="middle">agent-computer</text>
+      <text class="w1-port" x="150" y="407" text-anchor="middle">4100 · 每 Bot 一台电脑</text>
+    </g>
+    <g class="w1-node" data-i="6" tabindex="0" role="button" aria-label="supervisor · 4500:容器管家">
+      <rect x="520" y="361" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="610" y="389" text-anchor="middle">supervisor</text>
+      <text class="w1-port" x="610" y="407" text-anchor="middle">4500 · 容器管家</text>
+    </g>
+    <g class="w1-node w1-hub" data-i="1" tabindex="0" role="button" aria-label="server · 3001:治理的家">
+      <rect x="290" y="206" width="180" height="58" rx="12"></rect>
+      <text class="w1-name" x="380" y="234" text-anchor="middle">server</text>
+      <text class="w1-port" x="380" y="252" text-anchor="middle">3001 · Hono API · 治理的家</text>
+    </g>
+  </svg>
+  <div class="w1-detail" aria-live="polite">
+    <div class="w1-d-name" id="w1d-name"></div>
+    <div class="w1-d-role" id="w1d-role"></div>
+    <div class="w1-d-fail" id="w1d-fail"></div>
+    <a class="w1-d-link" id="w1d-link" href="#ch05"></a>
+  </div>
+</section>
 <h2 id="h2-3">黄金路径:一条频道消息的一生</h2><p>追踪一条消息走完全程。人在频道里 @ 一个 Bot:「帮我把这张表填进系统」。频道不是聊天室的隐喻,它是一条与 Intelligence 线程一一映射的持久会话——开新频道就是开新线程。</p>
 <figure class="diagram" role="img" tabindex="0" title="点击放大"><svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="max-width: 1365px; background-color: transparent;" viewBox="-50 -10 1365 1042" role="graphics-document document" aria-roledescription="sequence"><g><rect x="1115" y="918" fill="#eaeaea" stroke="#666" width="150" height="73" name="I" rx="6" ry="6" class="actor actor-bottom" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="1190" y="954.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="1190" dy="0">Intelligence</tspan></text></g><g><rect x="915" y="918" fill="#eaeaea" stroke="#666" width="150" height="73" name="C" rx="6" ry="6" class="actor actor-bottom" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="990" y="954.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="990" dy="0">Bot 的电脑</tspan></text></g><g><rect x="715" y="918" fill="#eaeaea" stroke="#666" width="150" height="73" name="B" rx="6" ry="6" class="actor actor-bottom" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="790" y="954.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="790" dy="0">Bot endpoint</tspan></text></g><g><rect x="400" y="918" fill="#eaeaea" stroke="#666" width="150" height="73" name="S" rx="6" ry="6" class="actor actor-bottom" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="475" y="954.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="475" dy="0">server</tspan></text></g><g><rect x="200" y="918" fill="#eaeaea" stroke="#666" width="150" height="73" name="A" rx="6" ry="6" class="actor actor-bottom" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="275" y="954.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="275" dy="0">app</tspan></text></g><g><rect x="0" y="918" fill="#eaeaea" stroke="#666" width="150" height="73" name="P" rx="6" ry="6" class="actor actor-bottom" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="75" y="954.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="75" dy="0">人</tspan></text></g><g><line id="actor5" x1="1190" y1="73" x2="1190" y2="918" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="I" data-et="life-line" data-id="I"/><g id="root-5" data-look="neo" data-et="participant" data-type="participant" data-id="I"><rect x="1115" y="0" fill="#eaeaea" stroke="#666" width="150" height="73" name="I" rx="6" ry="6" class="actor actor-top" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="1190" y="36.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="1190" dy="0">Intelligence</tspan></text></g></g><g><line id="actor4" x1="990" y1="73" x2="990" y2="918" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="C" data-et="life-line" data-id="C"/><g id="root-4" data-look="neo" data-et="participant" data-type="participant" data-id="C"><rect x="915" y="0" fill="#eaeaea" stroke="#666" width="150" height="73" name="C" rx="6" ry="6" class="actor actor-top" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="990" y="36.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="990" dy="0">Bot 的电脑</tspan></text></g></g><g><line id="actor3" x1="790" y1="73" x2="790" y2="918" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="B" data-et="life-line" data-id="B"/><g id="root-3" data-look="neo" data-et="participant" data-type="participant" data-id="B"><rect x="715" y="0" fill="#eaeaea" stroke="#666" width="150" height="73" name="B" rx="6" ry="6" class="actor actor-top" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="790" y="36.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="790" dy="0">Bot endpoint</tspan></text></g></g><g><line id="actor2" x1="475" y1="73" x2="475" y2="918" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="S" data-et="life-line" data-id="S"/><g id="root-2" data-look="neo" data-et="participant" data-type="participant" data-id="S"><rect x="400" y="0" fill="#eaeaea" stroke="#666" width="150" height="73" name="S" rx="6" ry="6" class="actor actor-top" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="475" y="36.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="475" dy="0">server</tspan></text></g></g><g><line id="actor1" x1="275" y1="73" x2="275" y2="918" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="A" data-et="life-line" data-id="A"/><g id="root-1" data-look="neo" data-et="participant" data-type="participant" data-id="A"><rect x="200" y="0" fill="#eaeaea" stroke="#666" width="150" height="73" name="A" rx="6" ry="6" class="actor actor-top" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="275" y="36.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="275" dy="0">app</tspan></text></g></g><g><line id="actor0" x1="75" y1="73" x2="75" y2="918" class="actor-line 200" stroke-width="0.5px" stroke="#999" name="P" data-et="life-line" data-id="P"/><g id="root-0" data-look="neo" data-et="participant" data-type="participant" data-id="P"><rect x="0" y="0" fill="#eaeaea" stroke="#666" width="150" height="73" name="P" rx="6" ry="6" class="actor actor-top" data-look="neo" filter="url(#my-svg-drop-shadow)"/><text x="75" y="36.5" dominant-baseline="central" alignment-baseline="central" class="actor actor-box" style="text-anchor: middle; font-size: 16px; font-weight: 400;"><tspan x="75" dy="0">人</tspan></text></g></g><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#ccc;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#a44141;}#my-svg .error-text{fill:#ddd;stroke:#ddd;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:lightgrey;stroke:lightgrey;}#my-svg .marker.cross{stroke:lightgrey;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .actor{stroke:#ccc;fill:#1f2020;stroke-width:1;}#my-svg rect.actor.outer-path[data-look="neo"]{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg rect.note[data-look="neo"]{stroke:hsl(180, 0%, 18.3529411765%);fill:hsl(180, 1.5873015873%, 28.3529411765%);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg text.actor&gt;tspan{fill:lightgrey;stroke:none;}#my-svg .actor-line{stroke:#ccc;}#my-svg .innerArc{stroke-width:1.5;stroke-dasharray:none;}#my-svg .messageLine0{stroke-width:1.5;stroke-dasharray:none;stroke:lightgrey;}#my-svg .messageLine1{stroke-width:1.5;stroke-dasharray:2,2;stroke:lightgrey;}#my-svg [id$="-arrowhead"] path{fill:lightgrey;stroke:lightgrey;}#my-svg .sequenceNumber{fill:black;}#my-svg [id$="-sequencenumber"]{fill:lightgrey;}#my-svg [id$="-crosshead"] path{fill:lightgrey;stroke:lightgrey;}#my-svg .messageText{fill:lightgrey;stroke:none;}#my-svg .labelBox{stroke:#ccc;fill:#1f2020;filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg .labelText,#my-svg .labelText&gt;tspan{fill:lightgrey;stroke:none;}#my-svg .loopText,#my-svg .loopText&gt;tspan{fill:lightgrey;stroke:none;}#my-svg .sectionTitle,#my-svg .sectionTitle&gt;tspan{fill:lightgrey;stroke:none;}#my-svg .loopLine{stroke-width:2px;stroke-dasharray:2,2;stroke:#ccc;fill:#ccc;}#my-svg .note{stroke:hsl(180, 0%, 18.3529411765%);fill:hsl(180, 1.5873015873%, 28.3529411765%);}#my-svg .noteText,#my-svg .noteText&gt;tspan{fill:rgb(183.8476190475, 181.5523809523, 181.5523809523);stroke:none;}#my-svg .activation0{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:#ccc;}#my-svg .activation1{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:#ccc;}#my-svg .activation2{fill:hsl(180, 1.5873015873%, 28.3529411765%);stroke:#ccc;}#my-svg .actorPopupMenu{position:absolute;}#my-svg .actorPopupMenuPanel{position:absolute;fill:#1f2020;box-shadow:0px 8px 16px 0px rgba(0,0,0,0.2);filter:drop-shadow(3px 5px 2px rgb(0 0 0 / 0.4));}#my-svg .actor-man circle,#my-svg line{fill:#1f2020;stroke-width:2px;}#my-svg g rect.rect{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));stroke:#ccc;}#my-svg .node .neo-node{stroke:#ccc;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#my-svg [data-look="neo"].node path{stroke:url(#my-svg-gradient);stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#ccc;filter:none;}#my-svg [data-look="neo"].node circle{stroke:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g/><defs><symbol id="my-svg-computer" width="24" height="24"><path transform="scale(.5)" d="M2 2v13h20v-13h-20zm18 11h-16v-9h16v9zm-10.228 6l.466-1h3.524l.467 1h-4.457zm14.228 3h-24l2-6h2.104l-1.33 4h18.45l-1.297-4h2.073l2 6zm-5-10h-14v-7h14v7z"/></symbol></defs><defs><symbol id="my-svg-database" fill-rule="evenodd" clip-rule="evenodd"><path transform="scale(.5)" d="M12.258.001l.256.004.255.005.253.008.251.01.249.012.247.015.246.016.242.019.241.02.239.023.236.024.233.027.231.028.229.031.225.032.223.034.22.036.217.038.214.04.211.041.208.043.205.045.201.046.198.048.194.05.191.051.187.053.183.054.18.056.175.057.172.059.168.06.163.061.16.063.155.064.15.066.074.033.073.033.071.034.07.034.069.035.068.035.067.035.066.035.064.036.064.036.062.036.06.036.06.037.058.037.058.037.055.038.055.038.053.038.052.038.051.039.05.039.048.039.047.039.045.04.044.04.043.04.041.04.04.041.039.041.037.041.036.041.034.041.033.042.032.042.03.042.029.042.027.042.026.043.024.043.023.043.021.043.02.043.018.044.017.043.015.044.013.044.012.044.011.045.009.044.007.045.006.045.004.045.002.045.001.045v17l-.001.045-.002.045-.004.045-.006.045-.007.045-.009.044-.011.045-.012.044-.013.044-.015.044-.017.043-.018.044-.02.043-.021.043-.023.043-.024.043-.026.043-.027.042-.029.042-.03.042-.032.042-.033.042-.034.041-.036.041-.037.041-.039.041-.04.041-.041.04-.043.04-.044.04-.045.04-.047.039-.048.039-.05.039-.051.039-.052.038-.053.038-.055.038-.055.038-.058.037-.058.037-.06.037-.06.036-.062.036-.064.036-.064.036-.066.035-.067.035-.068.035-.069.035-.07.034-.071.034-.073.033-.074.033-.15.066-.155.064-.16.063-.163.061-.168.06-.172.059-.175.057-.18.056-.183.054-.187.053-.191.051-.194.05-.198.048-.201.046-.205.045-.208.043-.211.041-.214.04-.217.038-.22.036-.223.034-.225.032-.229.031-.231.028-.233.027-.236.024-.239.023-.241.02-.242.019-.246.016-.247.015-.249.012-.251.01-.253.008-.255.005-.256.004-.258.001-.258-.001-.256-.004-.255-.005-.253-.008-.251-.01-.249-.012-.247-.015-.245-.016-.243-.019-.241-.02-.238-.023-.236-.024-.234-.027-.231-.028-.228-.031-.226-.032-.223-.034-.22-.036-.217-.038-.214-.04-.211-.041-.208-.043-.204-.045-.201-.046-.198-.048-.195-.05-.19-.051-.187-.053-.184-.054-.179-.056-.176-.057-.172-.059-.167-.06-.164-.061-.159-.063-.155-.064-.151-.066-.074-.033-.072-.033-.072-.034-.07-.034-.069-.035-.068-.035-.067-.035-.066-.035-.064-.036-.063-.036-.062-.036-.061-.036-.06-.037-.058-.037-.057-.037-.056-.038-.055-.038-.053-.038-.052-.038-.051-.039-.049-.039-.049-.039-.046-.039-.046-.04-.044-.04-.043-.04-.041-.04-.04-.041-.039-.041-.037-.041-.036-.041-.034-.041-.033-.042-.032-.042-.03-.042-.029-.042-.027-.042-.026-.043-.024-.043-.023-.043-.021-.043-.02-.043-.018-.044-.017-.043-.015-.044-.013-.044-.012-.044-.011-.045-.009-.044-.007-.045-.006-.045-.004-.045-.002-.045-.001-.045v-17l.001-.045.002-.045.004-.045.006-.045.007-.045.009-.044.011-.045.012-.044.013-.044.015-.044.017-.043.018-.044.02-.043.021-.043.023-.043.024-.043.026-.043.027-.042.029-.042.03-.042.032-.042.033-.042.034-.041.036-.041.037-.041.039-.041.04-.041.041-.04.043-.04.044-.04.046-.04.046-.039.049-.039.049-.039.051-.039.052-.038.053-.038.055-.038.056-.038.057-.037.058-.037.06-.037.061-.036.062-.036.063-.036.064-.036.066-.035.067-.035.068-.035.069-.035.07-.034.072-.034.072-.033.074-.033.151-.066.155-.064.159-.063.164-.061.167-.06.172-.059.176-.057.179-.056.184-.054.187-.053.19-.051.195-.05.198-.048.201-.046.204-.045.208-.043.211-.041.214-.04.217-.038.22-.036.223-.034.226-.032.228-.031.231-.028.234-.027.236-.024.238-.023.241-.02.243-.019.245-.016.247-.015.249-.012.251-.01.253-.008.255-.005.256-.004.258-.001.258.001zm-9.258 20.499v.01l.001.021.003.021.004.022.005.021.006.022.007.022.009.023.01.022.011.023.012.023.013.023.015.023.016.024.017.023.018.024.019.024.021.024.022.025.023.024.024.025.052.049.056.05.061.051.066.051.07.051.075.051.079.052.084.052.088.052.092.052.097.052.102.051.105.052.11.052.114.051.119.051.123.051.127.05.131.05.135.05.139.048.144.049.147.047.152.047.155.047.16.045.163.045.167.043.171.043.176.041.178.041.183.039.187.039.19.037.194.035.197.035.202.033.204.031.209.03.212.029.216.027.219.025.222.024.226.021.23.02.233.018.236.016.24.015.243.012.246.01.249.008.253.005.256.004.259.001.26-.001.257-.004.254-.005.25-.008.247-.011.244-.012.241-.014.237-.016.233-.018.231-.021.226-.021.224-.024.22-.026.216-.027.212-.028.21-.031.205-.031.202-.034.198-.034.194-.036.191-.037.187-.039.183-.04.179-.04.175-.042.172-.043.168-.044.163-.045.16-.046.155-.046.152-.047.148-.048.143-.049.139-.049.136-.05.131-.05.126-.05.123-.051.118-.052.114-.051.11-.052.106-.052.101-.052.096-.052.092-.052.088-.053.083-.051.079-.052.074-.052.07-.051.065-.051.06-.051.056-.05.051-.05.023-.024.023-.025.021-.024.02-.024.019-.024.018-.024.017-.024.015-.023.014-.024.013-.023.012-.023.01-.023.01-.022.008-.022.006-.022.006-.022.004-.022.004-.021.001-.021.001-.021v-4.127l-.077.055-.08.053-.083.054-.085.053-.087.052-.09.052-.093.051-.095.05-.097.05-.1.049-.102.049-.105.048-.106.047-.109.047-.111.046-.114.045-.115.045-.118.044-.12.043-.122.042-.124.042-.126.041-.128.04-.13.04-.132.038-.134.038-.135.037-.138.037-.139.035-.142.035-.143.034-.144.033-.147.032-.148.031-.15.03-.151.03-.153.029-.154.027-.156.027-.158.026-.159.025-.161.024-.162.023-.163.022-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.011-.178.01-.179.008-.179.008-.181.006-.182.005-.182.004-.184.003-.184.002h-.37l-.184-.002-.184-.003-.182-.004-.182-.005-.181-.006-.179-.008-.179-.008-.178-.01-.176-.011-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.022-.162-.023-.161-.024-.159-.025-.157-.026-.156-.027-.155-.027-.153-.029-.151-.03-.15-.03-.148-.031-.146-.032-.145-.033-.143-.034-.141-.035-.14-.035-.137-.037-.136-.037-.134-.038-.132-.038-.13-.04-.128-.04-.126-.041-.124-.042-.122-.042-.12-.044-.117-.043-.116-.045-.113-.045-.112-.046-.109-.047-.106-.047-.105-.048-.102-.049-.1-.049-.097-.05-.095-.05-.093-.052-.09-.051-.087-.052-.085-.053-.083-.054-.08-.054-.077-.054v4.127zm0-5.654v.011l.001.021.003.021.004.021.005.022.006.022.007.022.009.022.01.022.011.023.012.023.013.023.015.024.016.023.017.024.018.024.019.024.021.024.022.024.023.025.024.024.052.05.056.05.061.05.066.051.07.051.075.052.079.051.084.052.088.052.092.052.097.052.102.052.105.052.11.051.114.051.119.052.123.05.127.051.131.05.135.049.139.049.144.048.147.048.152.047.155.046.16.045.163.045.167.044.171.042.176.042.178.04.183.04.187.038.19.037.194.036.197.034.202.033.204.032.209.03.212.028.216.027.219.025.222.024.226.022.23.02.233.018.236.016.24.014.243.012.246.01.249.008.253.006.256.003.259.001.26-.001.257-.003.254-.006.25-.008.247-.01.244-.012.241-.015.237-.016.233-.018.231-.02.226-.022.224-.024.22-.025.216-.027.212-.029.21-.03.205-.032.202-.033.198-.035.194-.036.191-.037.187-.039.183-.039.179-.041.175-.042.172-.043.168-.044.163-.045.16-.045.155-.047.152-.047.148-.048.143-.048.139-.05.136-.049.131-.05.126-.051.123-.051.118-.051.114-.052.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.051.07-.052.065-.051.06-.05.056-.051.051-.049.023-.025.023-.024.021-.025.02-.024.019-.024.018-.024.017-.024.015-.023.014-.023.013-.024.012-.022.01-.023.01-.023.008-.022.006-.022.006-.022.004-.021.004-.022.001-.021.001-.021v-4.139l-.077.054-.08.054-.083.054-.085.052-.087.053-.09.051-.093.051-.095.051-.097.05-.1.049-.102.049-.105.048-.106.047-.109.047-.111.046-.114.045-.115.044-.118.044-.12.044-.122.042-.124.042-.126.041-.128.04-.13.039-.132.039-.134.038-.135.037-.138.036-.139.036-.142.035-.143.033-.144.033-.147.033-.148.031-.15.03-.151.03-.153.028-.154.028-.156.027-.158.026-.159.025-.161.024-.162.023-.163.022-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.011-.178.009-.179.009-.179.007-.181.007-.182.005-.182.004-.184.003-.184.002h-.37l-.184-.002-.184-.003-.182-.004-.182-.005-.181-.007-.179-.007-.179-.009-.178-.009-.176-.011-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.022-.162-.023-.161-.024-.159-.025-.157-.026-.156-.027-.155-.028-.153-.028-.151-.03-.15-.03-.148-.031-.146-.033-.145-.033-.143-.033-.141-.035-.14-.036-.137-.036-.136-.037-.134-.038-.132-.039-.13-.039-.128-.04-.126-.041-.124-.042-.122-.043-.12-.043-.117-.044-.116-.044-.113-.046-.112-.046-.109-.046-.106-.047-.105-.048-.102-.049-.1-.049-.097-.05-.095-.051-.093-.051-.09-.051-.087-.053-.085-.052-.083-.054-.08-.054-.077-.054v4.139zm0-5.666v.011l.001.02.003.022.004.021.005.022.006.021.007.022.009.023.01.022.011.023.012.023.013.023.015.023.016.024.017.024.018.023.019.024.021.025.022.024.023.024.024.025.052.05.056.05.061.05.066.051.07.051.075.052.079.051.084.052.088.052.092.052.097.052.102.052.105.051.11.052.114.051.119.051.123.051.127.05.131.05.135.05.139.049.144.048.147.048.152.047.155.046.16.045.163.045.167.043.171.043.176.042.178.04.183.04.187.038.19.037.194.036.197.034.202.033.204.032.209.03.212.028.216.027.219.025.222.024.226.021.23.02.233.018.236.017.24.014.243.012.246.01.249.008.253.006.256.003.259.001.26-.001.257-.003.254-.006.25-.008.247-.01.244-.013.241-.014.237-.016.233-.018.231-.02.226-.022.224-.024.22-.025.216-.027.212-.029.21-.03.205-.032.202-.033.198-.035.194-.036.191-.037.187-.039.183-.039.179-.041.175-.042.172-.043.168-.044.163-.045.16-.045.155-.047.152-.047.148-.048.143-.049.139-.049.136-.049.131-.051.126-.05.123-.051.118-.052.114-.051.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.052.07-.051.065-.051.06-.051.056-.05.051-.049.023-.025.023-.025.021-.024.02-.024.019-.024.018-.024.017-.024.015-.023.014-.024.013-.023.012-.023.01-.022.01-.023.008-.022.006-.022.006-.022.004-.022.004-.021.001-.021.001-.021v-4.153l-.077.054-.08.054-.083.053-.085.053-.087.053-.09.051-.093.051-.095.051-.097.05-.1.049-.102.048-.105.048-.106.048-.109.046-.111.046-.114.046-.115.044-.118.044-.12.043-.122.043-.124.042-.126.041-.128.04-.13.039-.132.039-.134.038-.135.037-.138.036-.139.036-.142.034-.143.034-.144.033-.147.032-.148.032-.15.03-.151.03-.153.028-.154.028-.156.027-.158.026-.159.024-.161.024-.162.023-.163.023-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.01-.178.01-.179.009-.179.007-.181.006-.182.006-.182.004-.184.003-.184.001-.185.001-.185-.001-.184-.001-.184-.003-.182-.004-.182-.006-.181-.006-.179-.007-.179-.009-.178-.01-.176-.01-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.023-.162-.023-.161-.024-.159-.024-.157-.026-.156-.027-.155-.028-.153-.028-.151-.03-.15-.03-.148-.032-.146-.032-.145-.033-.143-.034-.141-.034-.14-.036-.137-.036-.136-.037-.134-.038-.132-.039-.13-.039-.128-.041-.126-.041-.124-.041-.122-.043-.12-.043-.117-.044-.116-.044-.113-.046-.112-.046-.109-.046-.106-.048-.105-.048-.102-.048-.1-.05-.097-.049-.095-.051-.093-.051-.09-.052-.087-.052-.085-.053-.083-.053-.08-.054-.077-.054v4.153zm8.74-8.179l-.257.004-.254.005-.25.008-.247.011-.244.012-.241.014-.237.016-.233.018-.231.021-.226.022-.224.023-.22.026-.216.027-.212.028-.21.031-.205.032-.202.033-.198.034-.194.036-.191.038-.187.038-.183.04-.179.041-.175.042-.172.043-.168.043-.163.045-.16.046-.155.046-.152.048-.148.048-.143.048-.139.049-.136.05-.131.05-.126.051-.123.051-.118.051-.114.052-.11.052-.106.052-.101.052-.096.052-.092.052-.088.052-.083.052-.079.052-.074.051-.07.052-.065.051-.06.05-.056.05-.051.05-.023.025-.023.024-.021.024-.02.025-.019.024-.018.024-.017.023-.015.024-.014.023-.013.023-.012.023-.01.023-.01.022-.008.022-.006.023-.006.021-.004.022-.004.021-.001.021-.001.021.001.021.001.021.004.021.004.022.006.021.006.023.008.022.01.022.01.023.012.023.013.023.014.023.015.024.017.023.018.024.019.024.02.025.021.024.023.024.023.025.051.05.056.05.06.05.065.051.07.052.074.051.079.052.083.052.088.052.092.052.096.052.101.052.106.052.11.052.114.052.118.051.123.051.126.051.131.05.136.05.139.049.143.048.148.048.152.048.155.046.16.046.163.045.168.043.172.043.175.042.179.041.183.04.187.038.191.038.194.036.198.034.202.033.205.032.21.031.212.028.216.027.22.026.224.023.226.022.231.021.233.018.237.016.241.014.244.012.247.011.25.008.254.005.257.004.26.001.26-.001.257-.004.254-.005.25-.008.247-.011.244-.012.241-.014.237-.016.233-.018.231-.021.226-.022.224-.023.22-.026.216-.027.212-.028.21-.031.205-.032.202-.033.198-.034.194-.036.191-.038.187-.038.183-.04.179-.041.175-.042.172-.043.168-.043.163-.045.16-.046.155-.046.152-.048.148-.048.143-.048.139-.049.136-.05.131-.05.126-.051.123-.051.118-.051.114-.052.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.051.07-.052.065-.051.06-.05.056-.05.051-.05.023-.025.023-.024.021-.024.02-.025.019-.024.018-.024.017-.023.015-.024.014-.023.013-.023.012-.023.01-.023.01-.022.008-.022.006-.023.006-.021.004-.022.004-.021.001-.021.001-.021-.001-.021-.001-.021-.004-.021-.004-.022-.006-.021-.006-.023-.008-.022-.01-.022-.01-.023-.012-.023-.013-.023-.014-.023-.015-.024-.017-.023-.018-.024-.019-.024-.02-.025-.021-.024-.023-.024-.023-.025-.051-.05-.056-.05-.06-.05-.065-.051-.07-.052-.074-.051-.079-.052-.083-.052-.088-.052-.092-.052-.096-.052-.101-.052-.106-.052-.11-.052-.114-.052-.118-.051-.123-.051-.126-.051-.131-.05-.136-.05-.139-.049-.143-.048-.148-.048-.152-.048-.155-.046-.16-.046-.163-.045-.168-.043-.172-.043-.175-.042-.179-.041-.183-.04-.187-.038-.191-.038-.194-.036-.198-.034-.202-.033-.205-.032-.21-.031-.212-.028-.216-.027-.22-.026-.224-.023-.226-.022-.231-.021-.233-.018-.237-.016-.241-.014-.244-.012-.247-.011-.25-.008-.254-.005-.257-.004-.26-.001-.26.001z"/></symbol></defs><defs><symbol id="my-svg-clock" width="24" height="24"><path transform="scale(.5)" d="M12 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10zm0-2c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.848 12.459c.202.038.202.333.001.372-1.907.361-6.045 1.111-6.547 1.111-.719 0-1.301-.582-1.301-1.301 0-.512.77-5.447 1.125-7.445.034-.192.312-.181.343.014l.985 6.238 5.394 1.011z"/></symbol></defs><defs><marker id="my-svg-arrowhead" refX="7.9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M -1 0 L 10 5 L 0 10 z"/></marker></defs><defs><marker id="my-svg-crosshead" markerWidth="15" markerHeight="8" orient="auto" refX="4" refY="4.5"><path fill="none" stroke="#000000" stroke-width="1pt" d="M 1,2 L 6,7 M 6,2 L 1,7" style="stroke-dasharray: 0, 0;"/></marker></defs><defs><marker id="my-svg-filled-head" refX="15.5" refY="7" markerWidth="20" markerHeight="28" orient="auto"><path d="M 18,7 L9,13 L14,7 L9,1 Z"/></marker></defs><defs><marker id="my-svg-sequencenumber" refX="15" refY="15" markerWidth="60" markerHeight="40" orient="auto"><circle cx="15" cy="15" r="6"/></marker></defs><defs><marker id="my-svg-solidTopArrowHead" refX="7.9" refY="7.25" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M 0 0 L 10 8 L 0 8 z"/></marker></defs><defs><marker id="my-svg-solidBottomArrowHead" refX="7.9" refY="0.75" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M 0 0 L 10 0 L 0 8 z"/></marker></defs><defs><marker id="my-svg-stickTopArrowHead" refX="7.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M 0 0 L 7 7" stroke="black" stroke-width="1.5" fill="none"/></marker></defs><defs><marker id="my-svg-stickBottomArrowHead" refX="7.5" refY="0" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M 0 7 L 7 0" stroke="black" stroke-width="1.5" fill="none"/></marker></defs><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#FFFFFF"/></filter></defs><g data-et="note" data-id="i4"><rect x="450" y="289" fill="#EDF2AE" stroke="#666" width="365" height="39" class="note" data-look="neo"/><text x="633" y="294" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="noteText" dy="1em" style="font-size: 16px; font-weight: 400;"><tspan x="633">该 Bot 被授权的工具随回合注册</tspan></text></g><g data-et="control-structure" data-id="i14"><line x1="464" y1="544" x2="1001" y2="544" class="loopLine"/><line x1="1001" y1="544" x2="1001" y2="766" class="loopLine"/><line x1="464" y1="766" x2="1001" y2="766" class="loopLine"/><line x1="464" y1="544" x2="464" y2="766" class="loopLine"/><line x1="464" y1="682" x2="1001" y2="682" class="loopLine" style="stroke-dasharray: 3, 3;"/><polygon points="464,544 514,544 514,572 505.6,579 464,579" class="labelBox"/><text x="489" y="564" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="labelText" style="font-size: 16px; font-weight: 400;">alt</text><text x="757.5" y="562" text-anchor="middle" class="loopText" style="font-size: 16px; font-weight: 400;"><tspan x="757.5">[决策放行]</tspan></text><text x="732.5" y="700" text-anchor="middle" class="sectionTitle" style="font-size: 16px; font-weight: 400;">[决策拒绝]</text></g><text x="172" y="88" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">在频道里发消息</text><line x1="76" y1="117" x2="268" y2="117" class="messageLine0" data-et="message" data-id="i0" data-from="P" data-to="A" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="372" y="132" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">打开频道会话</text><line x1="276" y1="161" x2="468" y2="161" class="messageLine0" data-et="message" data-id="i1" data-from="A" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="476" y="176" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">解析登录者与所选同事</text><path d="M 476,205 C 536,195 536,235 476,225" class="messageLine0" data-et="message" data-id="i2" data-from="S" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="630" y="250" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">经 AG-UI 发起回合</text><line x1="476" y1="279" x2="783" y2="279" class="messageLine0" data-et="message" data-id="i3" data-from="S" data-to="B" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="636" y="343" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">流式输出</text><line x1="789" y1="372" x2="482" y2="372" class="messageLine1" data-et="message" data-id="i5" data-from="B" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="378" y="387" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">回合事件流回 app</text><line x1="474" y1="416" x2="282" y2="416" class="messageLine1" data-et="message" data-id="i6" data-from="S" data-to="A" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="636" y="431" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">行动类调用回流(浏览器/文件/MCP)</text><line x1="789" y1="460" x2="482" y2="460" class="messageLine0" data-et="message" data-id="i7" data-from="B" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="476" y="475" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">网关:resolve → decide → audit</text><path d="M 476,504 C 536,494 536,534 476,524" class="messageLine0" data-et="message" data-id="i8" data-from="S" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="730" y="594" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">在该 Bot 自己的电脑上执行</text><line x1="476" y1="623" x2="983" y2="623" class="messageLine0" data-et="message" data-id="i10" data-from="S" data-to="C" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="fill: none;"/><text x="736" y="638" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">结果(失败再补一行审计)</text><line x1="989" y1="667" x2="482" y2="667" class="messageLine1" data-et="message" data-id="i11" data-from="C" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="630" y="727" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">拒绝,并命名拦下它的规则</text><line x1="476" y1="756" x2="783" y2="756" class="messageLine1" data-et="message" data-id="i13" data-from="S" data-to="B" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="630" y="781" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">工具结果</text><line x1="476" y1="810" x2="783" y2="810" class="messageLine1" data-et="message" data-id="i15" data-from="S" data-to="B" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="636" y="825" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">继续生成,直到不再有工具调用</text><line x1="789" y1="854" x2="482" y2="854" class="messageLine1" data-et="message" data-id="i16" data-from="B" data-to="S" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/><text x="830" y="869" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" class="messageText" dy="1em" style="font-size: 16px; font-weight: 400;">线程与记忆持久化</text><line x1="476" y1="898" x2="1183" y2="898" class="messageLine1" data-et="message" data-id="i17" data-from="S" data-to="I" stroke-width="2" stroke="none" marker-end="url(#my-svg-arrowhead)" style="stroke-dasharray: 3, 3; fill: none;"/></svg></figure>
 
@@ -231,6 +559,23 @@ code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em
 <p>六类里最反直觉的是 <code>deployment</code>——它存在的理由是让 <code>person</code> 永不多报。启动行和无法识别调用者的边界拒绝没有任何人引起,若它们借用默认值写成 <code>person</code>,「person 表示一个人引起了这行」的读法就不再成立,这一列从此多报。有了一个专门的 <code>deployment</code>,一个从没跑过例程和交接的部署,每一行都显示 <code>person</code>,和加列之前一模一样,不多一句嘴。它也不进第六章的「Nobody watching」过滤器——启动时守住的边界不是替任何人做的工作,算进去只会让过滤器变成噪音。无人值守在这个平台是一等场景,不是边角料,那个过滤器就是为「以某人的权限运行而当事人不在场」的全部情形存在的。</p>
 <p><strong>流式不是装饰,停止也不是。</strong> 一次回合以分钟计,事件流让人看见 Bot 正在做什么,而不是对着转圈猜测;人的「停止」按钮反向穿透三层——从 app 到 server 到电脑,abort 必须赶在「一次高影响的点击落地之前」到达浏览器(<code>agent-computer/src/index.ts:1557-1559</code>)。治理不只管「能不能做」,也管「能不能让它立刻不做」。扇出也不止 app 一处:realtime 网关、Phoenix channel、OpenTag 的事后翻 SSE,同一份回合事件有三条出路,第四章逐一讲。</p>
 <hr>
+
+<section class="widget" id="w2">
+  <div class="w-head"><span class="w-title">黄金路径步进器</span><span class="w-sub">一条频道消息的一生 · 8 步 · 可播放</span></div>
+  <div class="w2-grid">
+    <ol class="w2-steps" id="w2steps"></ol>
+    <div class="w2-scene-wrap">
+      <div class="w2-scene" id="w2scene" aria-live="polite"></div>
+      <p class="w2-caption" id="w2cap"></p>
+    </div>
+  </div>
+  <div class="w-controls">
+    <button class="w-btn" id="w2play" type="button">▶ 播放</button>
+    <button class="w-btn" id="w2prev" type="button">← 上一步</button>
+    <button class="w-btn" id="w2next" type="button">下一步 →</button>
+    <div class="w-dots" id="w2dots"></div>
+  </div>
+</section>
 <h2 id="h2-4">中心机制:行动网关</h2><p>黄金路径上所有「做点什么」的调用,最终都挤过同一根管子:<code>server/src/computer/gateway.ts</code> 里的 <code>govern()</code>。这个文件头顶的注释把契约写死了——它展示网关对自己职责的排序:</p>
 <div class="codeblock"><span class="code-lang">ts</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button><pre><code class="hljs"> * <span class="hljs-title class_">Reading</span> a page is one thing; clicking a button on an external website is
  * another, and the difference is the whole product. <span class="hljs-title class_">The</span> record is not a report written alongside the
@@ -1431,6 +1776,61 @@ code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em
 </tbody></table>
 <p>命令全文与命令输出的不对称值得停一秒:一条只写「Bot 跑了点什么」的追踪回答不了任何人会问的问题,所以命令全文必须入账;而输出可能装着任何文件的内容,与键入文本同理不收。element 字段还有个细节:带了 ref 但没解析到的行动记字面句 <code>&quot;not in the current snapshot&quot;</code>;本就没带 ref 的(导航、文件读、命令),字段干脆不出现——&quot;Those actions did not fail to identify an element; they never had one&quot;(gateway.ts:1386-1394)。追踪不该诱导读者去找一张从未拍过的快照。</p>
 <p>管道出口处还有最后一个动作:把解析出的元素 <code>{role, name}</code> 贴到结果上再返回(gateway.ts:733-737)。为什么是网关贴而不是电脑贴?注释回答了:&quot;the computer cannot supply this: it knows the ref, and the resolved snapshot lives here&quot;——电脑只认识 ref,ref 与元素的对应关系住在 server。于是模型听到的回答是「点了 Submit order 按钮」而不是「e13 完成」,回合的记录与审计行说的是同一个东西。这也是单一通路的红利:解析只发生一次,决策、审计、回答三方共享同一个答案,不存在「审计记的是一个元素、模型以为是另一个」的裂缝。</p>
+
+<section class="widget" id="w3">
+  <div class="w-head"><span class="w-title">行动网关决策模拟器</span><span class="w-sub">deny 先于 allow · 坏规则视同命中 · fail-closed</span></div>
+  <div class="w3-grid">
+    <div class="w3-left">
+      <fieldset class="w3-fs">
+        <legend>请求</legend>
+        <div class="w3-row"><label for="w3-action">行动类型</label>
+          <select id="w3-action">
+            <option value="computer_click" selected>computer_click</option>
+            <option value="computer_type">computer_type</option>
+            <option value="computer_run_command">computer_run_command</option>
+            <option value="mcp_call">mcp_call</option>
+          </select></div>
+        <div class="w3-row"><label for="w3-host">页面 host</label>
+          <select id="w3-host">
+            <option value="acme-corp.slack.com" selected>acme-corp.slack.com</option>
+            <option value="evil-phish.example">evil-phish.example</option>
+            <option value="internal.notion.so">internal.notion.so</option>
+          </select></div>
+        <div class="w3-row" id="w3-command-row" style="display:none"><label for="w3-command">command</label>
+          <input id="w3-command" type="text" value="ls -la" spellcheck="false"></div>
+        <div class="w3-row" id="w3-mcp-row" style="display:none"><label for="w3-mcp">MCP 调用</label>
+          <select id="w3-mcp">
+            <option value="google-drive|search_files|read" selected>google-drive/search_files(read)</option>
+            <option value="slack|post_message|write">slack/post_message(write)</option>
+          </select></div>
+      </fieldset>
+      <fieldset class="w3-fs">
+        <legend>策略(每行一条)</legend>
+        <div class="w3-row"><label for="w3-deny">deny 规则</label>
+          <textarea id="w3-deny" spellcheck="false">contains(command, "rm -rf")</textarea></div>
+        <div class="w3-row"><label for="w3-allow">allow 规则</label>
+          <textarea id="w3-allow" spellcheck="false">true</textarea></div>
+      </fieldset>
+      <div class="w3-scens">
+        <button class="w-btn w3-scen" type="button" data-s="p1">rm -rf 被拦下</button>
+        <button class="w-btn w3-scen" type="button" data-s="p2">点击没有 command 也放行</button>
+        <button class="w-btn w3-scen" type="button" data-s="p3">坏掉的 deny 拦下一切</button>
+      </div>
+    </div>
+    <div class="w3-right">
+      <button class="w-btn w3-run" id="w3run" type="button">过网关 →</button>
+      <ol class="w3-steps" id="w3steps">
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">1</span>resolve · 解析目标</div><div class="w3-s-body"></div></li>
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">2</span>context · 满字段绑定</div><div class="w3-s-body"></div></li>
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">3</span>deny · 逐条评估</div><div class="w3-s-body"></div></li>
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">4</span>allow · 逐条评估</div><div class="w3-s-body"></div></li>
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">5</span>决策 · deny 先于 allow</div><div class="w3-s-body"></div></li>
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">6</span>audit · 先落行</div><div class="w3-s-body"></div></li>
+        <li class="w3-step"><div class="w3-s-name"><span class="w3-s-ico">7</span>执行 · 后行动</div><div class="w3-s-body"></div></li>
+      </ol>
+    </div>
+  </div>
+</section>
 <h2 id="h2-33">CEL 引擎:deny 先于 allow,坏规则视同命中</h2><p>策略引擎在 <code>server/src/computer/policy.ts</code>,表达式语言是 CEL。先回答为什么不建一张规则表:</p>
 <blockquote>
 <p>&quot;The boundary a company wants is a sentence: &#39;never click anything that says Submit on a page outside our own domain&#39;. A table of columns can express the shapes we thought of; an expression language can express the one they thought of.&quot;(policy.ts:9-12)</p>
@@ -2806,6 +3206,35 @@ limit $<span class="hljs-number">3</span>
 
 <p>注意图里没有「失败」状态:失败不是行的属性,只是 <code>release</code> 的一次推迟和 <code>last_error</code> 的一行字;行只有「还要不要做」和「做完了」两种本体。这是刻意的——终态越少,恢复路径越少。</p>
 <hr>
+
+<section class="widget" id="w4">
+  <div class="w-head"><span class="w-title">work_items 双副本认领模拟器</span><span class="w-sub">SELECT … FOR UPDATE SKIP LOCKED · 恰好一次</span></div>
+  <div class="w4-legend"><span class="w4-lg a">●</span> 副本 A <span class="w4-lg b">●</span> 副本 B</div>
+  <div class="w4-stage" id="w4stage">
+    <table class="w4-table" id="w4table">
+      <thead><tr><th>kind</th><th>key</th><th>run_at</th><th>claimed_by</th><th>lease_until</th><th>attempts</th><th>finished</th></tr></thead>
+      <tbody>
+        <tr><td>routine.fire</td><td>rt:daily#10-20</td><td>09:00:00</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+        <tr><td>bot.message</td><td>msg:fin→ops</td><td>09:00:01</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+        <tr><td>computer.suspend</td><td>cull:bot_42</td><td>09:00:02</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+        <tr><td>responsibility.run</td><td>resp:escrow#88</td><td>09:00:03</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+        <tr><td>proactive.run</td><td>pro:research#12</td><td>09:00:04</td><td>—</td><td>—</td><td>0</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="w4-rep w4-a" id="w4repA" title="副本 A">A</div>
+    <div class="w4-rep w4-b" id="w4repB" title="副本 B">B</div>
+    <div class="w4-tag" id="w4tag">对 B:SKIP LOCKED ↷</div>
+    <div class="w4-offer" id="w4offer">offer (bot.message, msg:fin→ops) · 撞主键 → already</div>
+  </div>
+  <p class="w4-caption" id="w4cap"></p>
+  <div class="w-controls">
+    <button class="w-btn" id="w4play" type="button">▶ 播放</button>
+    <button class="w-btn" id="w4prev" type="button">← 上一帧</button>
+    <button class="w-btn" id="w4next" type="button">下一帧 →</button>
+    <button class="w-btn" id="w4reset" type="button">↺ 重置</button>
+    <div class="w-dots" id="w4dots"></div>
+  </div>
+</section>
 <h2 id="h2-74">租约:数据库的钟,不是副本的钟</h2><p>租约是这张表上最容易做错的东西,而 OpenBot 做错的方式已被刻进文件头(queue.ts:12-16):租约曾经用 <code>Date.now() + leaseMs</code> 在副本上算、再拿到 Postgres 里和 <code>now()</code> 比——这是两个钟假装成一个钟。&quot;a node ninety seconds behind wrote a sixty-second lease that Postgres considered expired on arrival, and the next replica to look took the item straight out from under the first. <strong>Both then ran it.</strong>&quot; 落后九十秒的节点写下六十秒的租约,Postgres 认为它落地即过期,下一个看表的副本把活儿从第一个副本手里直接抽走。然后两边都执行了。</p>
 <p>事故之后的规矩只有一句:&quot;Every time this file names a moment it names it in SQL.&quot; 落实它的函数一共三行(queue.ts:183-185):</p>
 <div class="codeblock"><span class="code-lang">typescript</span><button class="copy-btn" type="button" aria-label="复制代码">复制</button><pre><code class="hljs"><span class="hljs-comment">/** A moment `ms` from now, named in SQL so it is the database&#x27;s clock and not the caller&#x27;s. */</span>
@@ -5059,6 +5488,40 @@ _current: ContextVar[RunTools | <span class="hljs-literal">None</span>] = Contex
     if(bar)bar.style.width=(p*100)+'%';
   }
   document.addEventListener('scroll',onScroll,{passive:true});onScroll();
+  // theme toggle
+  var themeBtn=document.getElementById('theme-toggle');
+  function curTheme(){return document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';}
+  function paintTheme(){
+    if(!themeBtn)return;
+    var t=curTheme();
+    themeBtn.textContent=t==='dark'?'☀':'☾';
+    themeBtn.setAttribute('aria-label',t==='dark'?'切换到亮色主题':'切换到暗色主题');
+    themeBtn.title=t==='dark'?'切换到亮色主题':'切换到暗色主题';
+  }
+  if(themeBtn){themeBtn.addEventListener('click',function(){
+    var t=curTheme()==='dark'?'light':'dark';
+    document.documentElement.setAttribute('data-theme',t);
+    try{localStorage.setItem('ob-theme',t);}catch(_){}
+    paintTheme();
+  });}
+  paintTheme();
+  // focus mode
+  var focusBtn=document.getElementById('focus-toggle');
+  function paintFocus(){
+    if(!focusBtn)return;
+    var on=document.body.classList.contains('focus');
+    focusBtn.setAttribute('aria-pressed',String(on));
+    focusBtn.classList.toggle('on',on);
+  }
+  if(focusBtn){focusBtn.addEventListener('click',function(){
+    var on=document.body.classList.toggle('focus');
+    if(on)document.documentElement.setAttribute('data-focus','1');
+    else document.documentElement.removeAttribute('data-focus');
+    try{localStorage.setItem('ob-focus',on?'1':'0');}catch(_){}
+    paintFocus();
+  });}
+  if(document.documentElement.getAttribute('data-focus')==='1')document.body.classList.add('focus');
+  paintFocus();
   // toc toggle
   var t=document.querySelector('.toc-toggle'),sb=document.querySelector('.sidebar');
   if(t&&sb){t.addEventListener('click',function(){sb.classList.toggle('open');});
@@ -5096,6 +5559,395 @@ _current: ContextVar[RunTools | <span class="hljs-literal">None</span>] = Contex
   });
   lb.addEventListener('click',function(e){if(e.target===lb)closeLb();});
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closeLb();});
+  // deep dive 折叠:文本以「Deep Dive:」开头的 h3,默认收起
+  document.addEventListener('DOMContentLoaded',function(){
+    document.querySelectorAll('.chapter h3').forEach(function(h){
+      var title=h.textContent||'';
+      if(title.indexOf('Deep Dive:')!==0)return;
+      var dd=document.createElement('div');dd.className='dd dd-collapsed';
+      h.parentNode.insertBefore(dd,h);
+      dd.appendChild(h);
+      var body=document.createElement('div');body.className='dd-body';
+      var inner=document.createElement('div');inner.className='dd-body-inner';
+      body.appendChild(inner);dd.appendChild(body);
+      var n=dd.nextSibling;
+      while(n){
+        var nx=n.nextSibling;
+        if(n.nodeType===1&&(n.tagName==='H2'||n.tagName==='H3'||n.tagName==='HR'||n.tagName==='NAV'))break;
+        inner.appendChild(n);
+        n=nx;
+      }
+      h.classList.add('dd-head');
+      h.setAttribute('tabindex','0');
+      h.setAttribute('role','button');
+      h.setAttribute('aria-expanded','false');
+      h.innerHTML='<span class="dd-tri" aria-hidden="true">▶</span><span class="dd-text"></span><span class="dd-badge">实现细节</span>';
+      h.querySelector('.dd-text').textContent=title;
+      function toggle(){
+        var collapsed=dd.classList.toggle('dd-collapsed');
+        h.setAttribute('aria-expanded',String(!collapsed));
+      }
+      h.addEventListener('click',toggle);
+      h.addEventListener('keydown',function(e){
+        if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}
+      });
+    });
+  });
+})();
+
+/* ---- W1 六支柱架构探索器 ---- */
+(function(){
+  var svg=document.getElementById('w1svg');if(!svg)return;
+  var D=[
+    {name:'app · 3010',role:'观看面,不是边界:频道、实时屏幕、管理页。浏览器里的允许列表是文档,不是控制——它刻意不做任何授权决定。',fail:'用户面坏了:人看不见。',ch:'#ch14',ct:'读第十四章 →'},
+    {name:'server · 3001',role:'治理的家:认证、策略、审计、凭证全在这里装配。所有授权决定都在 server 做出——模型可以提议,只有 server 可以放行。',fail:'治理面坏了:平台必须拒绝工作。',ch:'#ch05',ct:'读第五章 →'},
+    {name:'PostgreSQL · 5432',role:'单一事实源:产品数据、审计行、策略、授权、页面快照、work_items 队列,全在这一个库——多副本世界里,「事实」必须住在所有副本都能到达的地方。',fail:'治理面坏了:平台必须拒绝工作。',ch:'#ch06',ct:'读第六章 →'},
+    {name:'CopilotKit Intelligence',role:'线程与记忆:持久线程、记忆与 realtime 网关,无降级路径——没有它的部署会静默忘掉每一场对话,所以缺契约时启动直接被拒。',fail:'记忆面坏了:对话被静默遗忘。',ch:'#ch15',ct:'读第十五章 →'},
+    {name:'AG-UI endpoints · 4200+',role:'Bot 住在协议后面:任何一个会说 AG-UI 协议的 HTTP 服务都是 Bot——LangGraph、Pydantic-AI、CrewAI,或者一个手写的 server。',fail:'执行面坏了:Bot 有意愿没有能力。',ch:'#ch16',ct:'读第十六章 →'},
+    {name:'agent-computer · 4100',role:'每 Bot 一台被围起来的电脑:长驻 Chromium、/workspace、shell、浏览器 profile,登录态跨任务存活。判断在网关,电脑只是手。',fail:'执行面坏了:Bot 有意愿没有能力。',ch:'#ch07',ct:'读第七章 →'},
+    {name:'supervisor · 4500',role:'容器管家:整个部署里唯一持有 Docker socket 的进程,把 root 等价物压缩成四个以 Bot 为主语的动词——ensure、stop、reset、list。',fail:'执行面坏了:Bot 有意愿没有能力。',ch:'#ch07',ct:'读第七章 →'}
+  ];
+  var nodes=svg.querySelectorAll('.w1-node'),edges=svg.querySelectorAll('.w1-edge'),labels=svg.querySelectorAll('.w1-elabel');
+  var dn=document.getElementById('w1d-name'),dr=document.getElementById('w1d-role'),
+      df=document.getElementById('w1d-fail'),dl=document.getElementById('w1d-link');
+  function mark(list,i){
+    list.forEach(function(el){
+      var ids=(el.getAttribute('data-e')||'').split(' ');
+      el.classList.toggle('on',ids.indexOf(String(i))>=0);
+    });
+  }
+  function activate(i){
+    svg.setAttribute('data-active',String(i));
+    nodes.forEach(function(n){n.classList.toggle('on',Number(n.getAttribute('data-i'))===i);});
+    mark(edges,i);mark(labels,i);
+    var d=D[i];
+    dn.textContent=d.name;dr.textContent=d.role;
+    df.textContent='失败形状:'+d.fail;
+    dl.textContent=d.ct;dl.setAttribute('href',d.ch);
+  }
+  nodes.forEach(function(n){
+    var i=Number(n.getAttribute('data-i'));
+    n.addEventListener('mouseenter',function(){activate(i);});
+    n.addEventListener('focus',function(){activate(i);});
+    n.addEventListener('click',function(){activate(i);});
+  });
+  activate(1);
+})();
+
+/* ---- W2 黄金路径步进器 ---- */
+(function(){
+  var root=document.getElementById('w2');if(!root)return;
+  var REDUCED=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var STEPS=[
+    {t:'发起',html:'<div class="w2-msg">帮我把这张表填进系统</div><div class="w2-tag">channel #ops · @值表Bot · app 打开频道会话</div>',
+     cap:'人在频道里 @ 一个 Bot。频道不是聊天室的隐喻,而是一条与 Intelligence 线程一一映射的持久会话——开新频道就是开新线程。'},
+    {t:'解析',html:'<div class="w2-mono-card">{ user: "chen@corp", coworker: "General Assistant" }</div><div class="w2-tag">resolveRequestActor · server</div>',
+     cap:'server 先回答「谁在以谁的权威说话」:解析登录者与所选同事。这套身份解析是第三章的家。'},
+    {t:'发起回合',html:'<div><span class="w2-chip">RUN_STARTED</span><span class="w2-chip">tools: [browser, files, gdrive/*]</span></div><div class="w2-tag">AG-UI · server → Bot endpoint</div>',
+     cap:'回合经 AG-UI 发往 Bot endpoint,该 Bot 被授权的工具随回合注册。回合的完整生命周期见第四章。'},
+    {t:'流式输出',html:'<div class="w2-msg w2-bot">好的,我先打开表格,再逐行核对……</div><div class="w2-tag">TEXT_MESSAGE_CONTENT · 事件流同时回 app 与 Intelligence</div>',
+     cap:'Bot 流式生成,事件流同时回 app 与 Intelligence。流式不是装饰:一次回合以分钟计,人得看得见 Bot 正在做什么。'},
+    {t:'回流',html:'<div><span class="w2-chip">TOOL_CALL_START · computer_click { ref: "e13" }</span></div><div class="w2-return">↩ 行动类调用掉头回 server——治理的入口</div>',
+     cap:'行动类调用不直接碰电脑,而是掉头回到 server 过网关。Bot 与自己的电脑之间没有直连的信任,每一次行动都是一次新的授权。'},
+    {t:'网关',html:'<div class="w2-pipe"><span>resolve</span><i>→</i><span>decide</span><i>→</i><span>audit</span></div><div class="w2-mono-card">{ "event_type": "computer.click", "actor": "chen@corp", "decision": "allow" }</div>',
+     cap:'网关三步:resolve → decide → audit。先落行,后行动;拒绝也落行,并命名拦下它的规则。第五章拆这条管道。'},
+    {t:'执行',html:'<div class="w2-browser"><div class="w2-bbar"><i></i><i></i><i></i><span>agent-computer · Chromium</span></div><div class="w2-bbody"><button class="w2-click-target" type="button" tabindex="-1">提交订单</button></div></div>',
+     cap:'放行才落到该 Bot 自己的电脑上执行;失败再补一行审计——只记成功的追踪是靠省略撒谎。'},
+    {t:'回路',html:'<div><span class="w2-chip">TOOL_RESULT · ok</span></div><div class="w2-msg w2-bot">表格已填好,共 12 行;第 7 行单价缺失,已标黄待你确认。</div>',
+     cap:'工具结果回到 Bot,继续生成,直到不再有工具调用。线程与记忆在 Intelligence 持久化,回合结束。'}
+  ];
+  var stepsEl=document.getElementById('w2steps'),scene=document.getElementById('w2scene'),cap=document.getElementById('w2cap'),
+      playBtn=document.getElementById('w2play'),prevBtn=document.getElementById('w2prev'),nextBtn=document.getElementById('w2next'),
+      dotsEl=document.getElementById('w2dots');
+  var cur=0,timer=null;
+  STEPS.forEach(function(s,i){
+    var li=document.createElement('li');
+    var b=document.createElement('button');b.type='button';b.className='w2-step';
+    b.innerHTML='<span class="w2-num"></span><span></span>';
+    b.querySelector('.w2-num').textContent=String(i+1);
+    b.querySelector('span:last-child').textContent=s.t;
+    b.addEventListener('click',function(){stop();go(i);});
+    li.appendChild(b);stepsEl.appendChild(li);
+    var d=document.createElement('button');d.type='button';d.className='w-dot';
+    d.setAttribute('aria-label','第 '+String(i+1)+' 步');
+    d.addEventListener('click',function(){stop();go(i);});
+    dotsEl.appendChild(d);
+  });
+  function paint(){
+    stepsEl.querySelectorAll('.w2-step').forEach(function(b,i){b.classList.toggle('on',i===cur);});
+    dotsEl.querySelectorAll('.w-dot').forEach(function(d,i){d.classList.toggle('on',i===cur);});
+    cap.textContent=STEPS[cur].cap;
+  }
+  function swap(){
+    scene.innerHTML=STEPS[cur].html;
+    scene.classList.remove('swap');
+  }
+  function go(i){
+    cur=Math.max(0,Math.min(STEPS.length-1,i));
+    if(REDUCED){swap();}
+    else{scene.classList.add('swap');setTimeout(swap,160);}
+    paint();
+  }
+  function stop(){
+    if(timer){clearInterval(timer);timer=null;}
+    playBtn.textContent='▶ 播放';playBtn.classList.remove('on');
+  }
+  playBtn.addEventListener('click',function(){
+    if(timer){stop();return;}
+    if(cur>=STEPS.length-1)go(0);
+    playBtn.textContent='⏸ 暂停';playBtn.classList.add('on');
+    timer=setInterval(function(){
+      if(cur>=STEPS.length-1){stop();return;}
+      go(cur+1);
+    },2000);
+  });
+  prevBtn.addEventListener('click',function(){stop();go(cur-1);});
+  nextBtn.addEventListener('click',function(){stop();go(cur+1);});
+  go(0);
+})();
+
+/* ---- W3 行动网关决策模拟器(无 eval,自写规则求值器) ---- */
+(function(){
+  var root=document.getElementById('w3');if(!root)return;
+  function $(id){return document.getElementById(id);}
+  var actionEl=$('w3-action'),hostEl=$('w3-host'),cmdEl=$('w3-command'),mcpEl=$('w3-mcp'),
+      denyEl=$('w3-deny'),allowEl=$('w3-allow'),runBtn=$('w3run'),
+      cmdRow=$('w3-command-row'),mcpRow=$('w3-mcp-row'),
+      steps=Array.prototype.slice.call(root.querySelectorAll('#w3steps .w3-step'));
+  var timers=[];
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function syncForm(){
+    var a=actionEl.value;
+    cmdRow.style.display=a==='computer_run_command'?'':'none';
+    mcpRow.style.display=a==='mcp_call'?'':'none';
+  }
+  actionEl.addEventListener('change',syncForm);syncForm();
+
+  /* 规则 parser:支持 true / contains(f,"s") / matches(f,"re") / f == "v" / f != "v";其余=坏规则 */
+  function parseRule(src){
+    var s=src.replace(/\s+$/,'').replace(/^\s+/,'');
+    if(!s)return{kind:'skip',src:src};
+    if(s==='true')return{kind:'const',src:s};
+    var m;
+    if(m=/^contains\(\s*([a-z][\w.]*)\s*,\s*"([^"]*)"\s*\)$/.exec(s))return{kind:'contains',src:s,field:m[1],arg:m[2]};
+    if(m=/^matches\(\s*([a-z][\w.]*)\s*,\s*"([^"]*)"\s*\)$/.exec(s))return{kind:'matches',src:s,field:m[1],arg:m[2]};
+    if(m=/^([a-z][\w.]*)\s*(==|!=)\s*"([^"]*)"$/.exec(s))return{kind:m[2]==='=='?'eq':'ne',src:s,field:m[1],arg:m[3]};
+    return{kind:'broken',src:s};
+  }
+  function evalRule(r,ctx){
+    var v=ctx[r.field];if(v===undefined||v===null)v='';v=String(v);
+    switch(r.kind){
+      case 'skip':return'skip';
+      case 'broken':return'broken';
+      case 'const':return'hit';
+      case 'contains':return v.indexOf(r.arg)>=0?'hit':'miss';
+      case 'matches':try{return new RegExp(r.arg).test(v)?'hit':'miss';}catch(_){return'broken';}
+      case 'eq':return v===r.arg?'hit':'miss';
+      case 'ne':return v!==r.arg?'hit':'miss';
+    }
+    return'broken';
+  }
+
+  function buildCtx(){
+    var a=actionEl.value,host=hostEl.value;
+    var ctx={'tool.name':a,intent:'','page.host':host,command:'','element.name':'','mcp.server':'','mcp.tool':'','mcp.effect':'',ref:null};
+    if(a==='computer_click'){ctx.intent='activate';ctx['element.name']='提交订单';ctx.ref='e13';}
+    else if(a==='computer_type'){ctx.intent='type';ctx['element.name']='单价输入框';ctx.ref='e27';}
+    else if(a==='computer_run_command'){ctx.intent='shell';ctx.command=cmdEl.value;}
+    else if(a==='mcp_call'){
+      var parts=mcpEl.value.split('|');
+      ctx['mcp.server']=parts[0];ctx['mcp.tool']=parts[1];ctx['mcp.effect']=parts[2];
+      ctx.intent=parts[2]==='write'?'write':'read';
+    }
+    return ctx;
+  }
+  function judge(ctx){
+    function side(ta){
+      return ta.value.split('\n').map(function(line){
+        var r=parseRule(line);r.status=evalRule(r,ctx);return r;
+      });
+    }
+    var deny=side(denyEl),allow=side(allowEl),i,hit=null;
+    for(i=0;i<deny.length;i++){var s=deny[i].status;if(s==='hit'||s==='broken'){hit=deny[i];break;}}
+    if(hit)return{deny:deny,allow:allow,verdict:'deny',rule:hit.src,broken:hit.status==='broken'};
+    var permit=null;
+    for(i=0;i<allow.length;i++){if(allow[i].status==='hit'){permit=allow[i];break;}}
+    if(permit)return{deny:deny,allow:allow,verdict:'allow',rule:permit.src};
+    return{deny:deny,allow:allow,verdict:'deny',rule:'',byDefault:true};
+  }
+
+  function bodyResolve(ctx){
+    if(ctx.ref)return'<div><span class="w2-chip">ref: '+esc(ctx.ref)+'</span> → <b>button「'+esc(ctx['element.name'])+'」</b></div>'+
+      '<div class="w3-note">来自 server 持有的快照解析,不信调用方自报——「按模型给的标签做决定的网关是演戏」。</div>';
+    return'<div class="w3-note">该行动不带 ref:命令与 MCP 调用没有元素要对质,跳过 locate 与 run 代际检查——不该为一次策略求值惊动容器管家。</div>';
+  }
+  function bodyContext(ctx){
+    var fields=['tool.name','intent','page.host','command','element.name','mcp.server','mcp.tool','mcp.effect'];
+    var h='<table class="w3-kv">';
+    fields.forEach(function(f){
+      var v=ctx[f];
+      h+='<tr><td>'+esc(f)+'</td><td>'+(v?esc(v):'<span class="w3-neutral">""(中性空值)</span>')+'</td></tr>';
+    });
+    h+='</table><div class="w3-note">每个字段永远存在,缺值给中性空值——contains(command, …) 不该因为一次点击没有 command 就拦下所有点击。</div>';
+    return h;
+  }
+  function bodyRules(rules,sideName){
+    var h='',n=0;
+    rules.forEach(function(r){
+      if(r.status==='skip')return;
+      n++;
+      var st,cls,note;
+      if(sideName==='deny'){
+        if(r.status==='hit'){st='✓';cls='st-deny-hit';note='命中';}
+        else if(r.status==='broken'){st='⚠';cls='st-broken';note='坏规则,按命中(fail-closed)';}
+        else{st='✗';cls='st-miss';note='未命中';}
+      }else{
+        if(r.status==='hit'){st='✓';cls='st-hit';note='许可';}
+        else if(r.status==='broken'){st='⚠';cls='st-broken';note='坏规则,不许可(fail-closed)';}
+        else{st='✗';cls='st-miss';note='不许可';}
+      }
+      h+='<div class="w3-rule"><span class="st '+cls+'">'+st+'</span><code>'+esc(r.src)+'</code><span class="w3-note" style="margin:0">'+note+'</span></div>';
+    });
+    if(!n)h='<div class="w3-note">(无 '+sideName+' 规则)</div>';
+    return h;
+  }
+  function bodyVerdict(res){
+    if(res.verdict==='allow')
+      return'<span class="w3-verdict allow">ALLOW</span> <span class="w3-note" style="display:inline">许可规则:<code>'+esc(res.rule)+'</code></span>';
+    if(res.byDefault)
+      return'<span class="w3-verdict deny">DENY</span><div class="w3-note">缺省全拒:没有任何 allow 规则许可——引擎假设「沉默等于什么都不许」。</div>';
+    return'<span class="w3-verdict deny">DENY</span><div class="w3-note">'+(res.broken?'坏规则视同命中':'命中规则')+':<code>'+esc(res.rule)+'</code>——拒绝要命名拦下它的规则。</div>';
+  }
+  function bodyAudit(ctx,res){
+    var ev={'computer_click':'computer.click','computer_type':'computer.type','computer_run_command':'computer.command','mcp_call':'mcp.call'}[ctx['tool.name']];
+    var payload={};
+    if(ctx.ref){payload.ref=ctx.ref;payload.effect=ctx.intent;}
+    if(ctx.command)payload.command=ctx.command;
+    if(ctx['mcp.tool']){payload.mcp={server:ctx['mcp.server'],tool:ctx['mcp.tool'],effect:ctx['mcp.effect']};}
+    var row={
+      actor:'chen@corp',
+      initiator:{kind:'person',id:'chen@corp'},
+      event_type:ev,
+      tool:ctx['tool.name'],
+      page:{host:ctx['page.host']},
+      target:ctx.ref?{ref:ctx.ref,element:ctx['element.name'],from:'server 快照'}:'(无 ref 行动,element 字段不出现)',
+      payload:payload,
+      decision:{result:res.verdict.toUpperCase(),mode:'enforce',rule:res.byDefault?'(default deny)':res.rule}
+    };
+    return'<pre class="w3-audit">'+esc(JSON.stringify(row,null,1))+'</pre>'+
+      '<div class="w3-note">先写行,后行动:拒绝也落行——被审计的拒绝往往是最重要的行,它回答「有人试过什么」。</div>';
+  }
+  function bodyOutcome(ctx,res){
+    if(res.verdict==='deny')
+      return'<div class="w3-err-text">ActionRefusedError: action denied'+(res.byDefault?' (default deny: no allow rule matched)':' by rule: '+esc(res.rule))+'</div>'+
+        '<div class="w3-note">拒绝命名拦下它的规则,Bot 可据此换一条路;这次拒绝已落上面的审计行。</div>';
+    var what=ctx.ref?'已发往该 Bot 自己的电脑执行,结果贴回元素名「'+esc(ctx['element.name'])+'」后返回 Bot——模型听到的是「点了 '+esc(ctx['element.name'])+' 按钮」,不是「'+esc(ctx.ref)+' 完成」。':
+      ctx.command?'命令已落入该 Bot 的电脑执行;命令全文入账,输出不入账。':
+      'MCP 调用已放行;读写分类 ('+esc(ctx['mcp.effect'])+') 写进审计行。';
+    return'<div class="w3-note" style="color:var(--ok)">✓ 执行:'+what+'</div>';
+  }
+
+  function run(){
+    timers.forEach(clearTimeout);timers=[];
+    steps.forEach(function(li){li.classList.remove('on');li.querySelector('.w3-s-body').innerHTML='';});
+    var ctx=buildCtx(),res=judge(ctx);
+    var bodies=[bodyResolve(ctx),bodyContext(ctx),bodyRules(res.deny,'deny'),bodyRules(res.allow,'allow'),bodyVerdict(res),bodyAudit(ctx,res),bodyOutcome(ctx,res)];
+    steps.forEach(function(li,i){
+      li.querySelector('.w3-s-body').innerHTML=bodies[i];
+      timers.push(setTimeout(function(){li.classList.add('on');},300*(i+1)));
+    });
+  }
+  runBtn.addEventListener('click',run);
+
+  var PRESETS={
+    p1:{action:'computer_run_command',host:'acme-corp.slack.com',command:'rm -rf /tmp',deny:'contains(command, "rm -rf")',allow:'true'},
+    p2:{action:'computer_click',host:'acme-corp.slack.com',command:'ls -la',deny:'contains(command, "rm -rf")',allow:'true'},
+    p3:{action:'computer_click',host:'evil-phish.example',command:'ls -la',deny:'command ~> rm',allow:'true'}
+  };
+  root.querySelectorAll('.w3-scen').forEach(function(b){
+    b.addEventListener('click',function(){
+      var p=PRESETS[b.getAttribute('data-s')];if(!p)return;
+      actionEl.value=p.action;hostEl.value=p.host;cmdEl.value=p.command;
+      denyEl.value=p.deny;allowEl.value=p.allow;
+      syncForm();run();
+    });
+  });
+})();
+
+/* ---- W4 work_items 双副本认领模拟器 ---- */
+(function(){
+  var root=document.getElementById('w4');if(!root)return;
+  var table=document.getElementById('w4table'),tbody=table.tBodies[0],
+      repA=document.getElementById('w4repA'),repB=document.getElementById('w4repB'),
+      tag=document.getElementById('w4tag'),offer=document.getElementById('w4offer'),
+      cap=document.getElementById('w4cap'),
+      playBtn=document.getElementById('w4play'),prevBtn=document.getElementById('w4prev'),
+      nextBtn=document.getElementById('w4next'),resetBtn=document.getElementById('w4reset'),
+      dotsEl=document.getElementById('w4dots');
+  var N={cls:'',by:'—',lease:'—',att:'0',fin:'—'};
+  function R(cls,by,lease,att,fin){return{cls:cls,by:by,lease:lease,att:att,fin:fin};}
+  var FRAMES=[
+    {a:'home',b:'home',rows:[N,N,N,N,N],
+     cap:'初始:5 行到期、没人持有,两个副本同时开始 sweep——没有协调者,没有领导者选举,加副本加的是吞吐。'},
+    {a:0,b:'home',rows:[R('lk-a','A','now()+15min','1','—'),N,N,N,N],
+     cap:'副本 A 先出手:SELECT … FOR UPDATE SKIP LOCKED 锁住第 1 行,同一事务写入 claimed_by、新租约、attempts+1——查到了,就一定拿到了。'},
+    {a:0,b:1,tag:true,rows:[R('lk-a','A','now()+15min','1','—'),R('lk-b','B','now()+15min','1','—'),N,N,N],
+     cap:'副本 B 撞上 A 的锁:不等待,跳过第 1 行(SKIP LOCKED),拿走空闲的第 2 行。队列因此并发,而不是仅仅正确。'},
+    {a:0,b:'home',rows:[R('lk-a w4-flash','A','now()+30min','1','—'),R('fin','B','—','1','✓'),N,N,N],
+     cap:'A 续约:lease_until 再延长 15 分钟,租约按数据库的钟计时;B 完成第 2 行:finished=✓。完成行保留在表里——它就是迟到 offer 要撞的那堵墙。'},
+    {a:0,b:'home',offer:true,rows:[R('lk-a','A','now()+30min','1','—'),R('fin','B','—','1','✓'),N,N,N],
+     cap:'迟到的重复 offer 带着相同的 (kind, key) 到来:撞主键,onConflictDoNothing,标 already 灰掉——幂等住在主键里。'},
+    {a:'home',b:'home',rows:[R('lk-a','A','now()+30min','1','—'),R('fin','B','—','1','✓'),N,N,N],
+     cap:'总结:恰好一次。skip locked is what makes this concurrent rather than merely correct——没有它,第二个副本只是阻塞在锁上:正确,但不并发。'}
+  ];
+  var cur=0,timer=null;
+  FRAMES.forEach(function(f,i){
+    var d=document.createElement('button');d.type='button';d.className='w-dot';
+    d.setAttribute('aria-label','第 '+String(i+1)+' 帧');
+    d.addEventListener('click',function(){stop();go(i);});
+    dotsEl.appendChild(d);
+  });
+  function rowY(r){return table.offsetTop+tbody.rows[r].offsetTop+tbody.rows[r].offsetHeight/2;}
+  function place(el,p){
+    if(p==='home'){el.style.top=(el===repA?'8':'36')+'px';}
+    else{el.style.top=(rowY(p)-12)+'px';}
+  }
+  function go(i){
+    cur=Math.max(0,Math.min(FRAMES.length-1,i));
+    var f=FRAMES[cur];
+    for(var r=0;r<5;r++){
+      var tr=tbody.rows[r],s=f.rows[r];
+      tr.className=s.cls;
+      tr.cells[3].textContent=s.by;
+      tr.cells[4].textContent=s.lease;
+      tr.cells[5].textContent=s.att;
+      tr.cells[6].textContent=s.fin;
+    }
+    place(repA,f.a);place(repB,f.b);
+    tag.classList.toggle('show',!!f.tag);
+    if(f.tag)tag.style.top='30px';
+    offer.classList.toggle('show',!!f.offer);
+    if(f.offer)offer.style.top=(rowY(1)-16)+'px';
+    cap.textContent=f.cap;
+    dotsEl.querySelectorAll('.w-dot').forEach(function(d,k){d.classList.toggle('on',k===cur);});
+  }
+  function stop(){
+    if(timer){clearInterval(timer);timer=null;}
+    playBtn.textContent='▶ 播放';playBtn.classList.remove('on');
+  }
+  playBtn.addEventListener('click',function(){
+    if(timer){stop();return;}
+    if(cur>=FRAMES.length-1)go(0);
+    playBtn.textContent='⏸ 暂停';playBtn.classList.add('on');
+    timer=setInterval(function(){
+      if(cur>=FRAMES.length-1){stop();return;}
+      go(cur+1);
+    },1800);
+  });
+  prevBtn.addEventListener('click',function(){stop();go(cur-1);});
+  nextBtn.addEventListener('click',function(){stop();go(cur+1);});
+  resetBtn.addEventListener('click',function(){stop();go(0);});
+  go(0);
 })();
 </script>
 </body>
