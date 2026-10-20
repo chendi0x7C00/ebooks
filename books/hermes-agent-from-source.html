@@ -203,6 +203,99 @@
     main { padding: 0 16px 48px; }
   }
 
+  /* ---- Hermes interactive widgets (P0) ---- */
+  .hw { margin: 8px 0 26px; padding: 16px; background: var(--bg-soft);
+    border: 1px solid var(--line); border-radius: 12px; }
+  .hw-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 0 10px; }
+  .hw-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--amber); border: 1px solid var(--amber-dim); border-radius: 99px; padding: 2px 9px; }
+  .hw-title { font-weight: 600; color: var(--ink); font-size: 15.5px; }
+  .hw-hint { font-size: 12.5px; color: var(--muted); flex-basis: 100%; }
+  .hw button { font: 500 12.5px/1 var(--mono); color: var(--ink-2); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; cursor: pointer; min-height: 34px; }
+  .hw button:hover { border-color: var(--amber-dim); color: var(--ink); }
+  .hw button[aria-pressed="true"], .hw button.on { border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+  .hw button:disabled { opacity: .4; cursor: default; }
+  .hw button:focus-visible, .hw [tabindex]:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .hw-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .hw-panel { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 8px;
+    background: var(--panel); padding: 10px 14px; font-size: 14px; color: var(--ink-2); min-height: 64px; }
+  .hw-panel b { color: var(--ink); }
+  .hw-panel a { color: var(--blue); }
+  .hw code { font-size: .88em; }
+  .hw noscript, .hw .hw-fallback { font-size: 13px; color: var(--muted); }
+  /* explorer */
+  .hw-arch-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;
+    background: radial-gradient(circle at 50% 40%, rgba(255,180,84,.05), transparent 60%); }
+  .hw-arch svg { display: block; width: 100%; min-width: 600px; height: auto; user-select: none; -webkit-user-select: none; }
+  .hw-arch .n { cursor: pointer; touch-action: none; }
+  .hw-arch .n rect { stroke-width: 1.4; transition: opacity .15s; }
+  .hw-arch .n text { font-family: var(--mono); pointer-events: none; transition: opacity .15s; }
+  .hw-arch .n .lb { font-size: 12.5px; fill: var(--ink); font-weight: 600; }
+  .hw-arch .n .cn { font-size: 9.5px; fill: var(--muted); letter-spacing: .08em; }
+  .hw-arch .k-door rect { fill: #13213a; stroke: var(--blue); }
+  .hw-arch .k-core rect { fill: #2a2112; stroke: var(--amber); }
+  .hw-arch .k-store rect { fill: #10261f; stroke: var(--green); }
+  .hw-arch .k-loop rect { fill: #1c1a2e; stroke: #A89BFF; }
+  .hw-arch .n.sel rect { stroke-width: 2.6; }
+  .hw-arch .dim { opacity: .22; }
+  .hw-arch .e line { stroke: #3a4a68; stroke-width: 1.3; transition: stroke .15s, opacity .15s; }
+  .hw-arch .e text { font-family: var(--mono); font-size: 10px; fill: var(--amber); opacity: 0; paint-order: stroke;
+    stroke: var(--bg-soft); stroke-width: 4px; pointer-events: none; }
+  .hw-arch .e.hot line { stroke: var(--amber); stroke-width: 2; }
+  .hw-arch .e.hot text { opacity: 1; }
+  .hw-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 11.5px var(--mono); color: var(--muted); margin: 8px 0 10px; }
+  .hw-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1.5px solid; }
+  /* stepper */
+  .hw-phases { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; margin: 0 0 12px; }
+  .hw-ph { font: 600 12px/1.25 var(--mono); padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line);
+    color: var(--muted); background: var(--bg); text-align: center; transition: all .2s; }
+  .hw-ph small { display: block; font-weight: 400; font-size: 10px; margin-top: 3px; opacity: .8; }
+  .hw-ph.seen { color: var(--ink-2); border-color: var(--line); background: var(--panel); }
+  .hw-ph.cur { color: var(--bg); background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+  .hw-ph.cur.bad { background: #FF7A7A; border-color: #FF7A7A; }
+  .hw-step-n { font: 11px var(--mono); color: var(--amber); letter-spacing: .1em; }
+  .hw-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 12px; }
+  .hw-tx { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); min-height: 64px; }
+  .hw-tx .h { font: 10.5px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .hw-msg { font: 12px/1.35 var(--mono); padding: 4px 8px; border-radius: 6px; margin: 0 0 4px; border-left: 3px solid var(--line); color: var(--ink-2); background: var(--panel); }
+  .hw-msg.r-system { border-left-color: var(--muted); }
+  .hw-msg.r-user { border-left-color: var(--blue); }
+  .hw-msg.r-assistant { border-left-color: var(--amber); }
+  .hw-msg.r-tool { border-left-color: var(--green); }
+  .hw-msg.r-note { border-left-color: #FF7A7A; font-style: italic; }
+  .hw-msg.new { animation: hwflash 1s ease; }
+  @keyframes hwflash { from { background: var(--amber-soft); } to { background: var(--panel); } }
+  .hw-meter { font: 11.5px var(--mono); color: var(--muted); margin-top: 8px; }
+  .hw-meter b { color: var(--amber); }
+  /* gating */
+  .hw-pipe { list-style: none; margin: 0; padding: 0; counter-reset: hwp; }
+  .hw-pipe > li { position: relative; padding: 7px 10px 7px 38px; margin: 0 0 5px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 13.5px; transition: all .2s; }
+  .hw-pipe > li::before { counter-increment: hwp; content: counter(hwp); position: absolute; left: 10px; top: 8px;
+    width: 19px; height: 19px; border-radius: 50%; border: 1px solid var(--line); font: 600 10.5px/18px var(--mono); text-align: center; }
+  .hw-pipe .t { font-family: var(--mono); font-size: 12.5px; color: inherit; font-weight: 600; }
+  .hw-pipe .v { display: block; font-size: 12.5px; margin-top: 2px; min-height: 0; }
+  .hw-pipe .sub { list-style: none; margin: 6px 0 2px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .hw-pipe .sub li { font: 11.5px/1.3 var(--mono); padding: 5px 7px; border-radius: 6px; border: 1px dashed var(--line); transition: all .2s; }
+  .hw-pipe .pass { color: var(--ink-2); border-color: var(--green) !important; background: rgba(95,214,164,.07); }
+  .hw-pipe .pass::before { border-color: var(--green); color: var(--green); }
+  .hw-pipe .skip { color: var(--muted); border-style: dashed !important; opacity: .7; }
+  .hw-pipe .ask { color: var(--ink); border-color: var(--blue) !important; background: var(--blue-soft); }
+  .hw-pipe .deny { color: #FFB3B3; border-color: #FF7A7A !important; background: rgba(255,122,122,.09); }
+  .hw-pipe .deny::before { border-color: #FF7A7A; color: #FF7A7A; }
+  .hw-pipe .cur { box-shadow: 0 0 0 3px var(--amber-soft); }
+  .hw-verdict { margin-top: 10px; }
+  .hw-verdict.ok { border-left-color: var(--green); }
+  .hw-verdict.no { border-left-color: #FF7A7A; }
+  @media (max-width: 720px) {
+    .hw { padding: 12px; margin-left: -4px; margin-right: -4px; }
+    .hw-phases { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .hw-cols { grid-template-columns: 1fr; }
+    .hw-pipe .sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .hw * { transition: none !important; animation: none !important; } }
+
 </style>
 </head>
 <body>
@@ -228,6 +321,7 @@
     <span class="chip">18 chapters</span>
     <span class="chip">6 parts</span>
     <span class="chip">Mermaid diagrams</span>
+    <span class="chip">3 interactive widgets</span>
     <span class="chip">MIT-studied · independent</span>
   </div>
   <div class="disclaimer">
@@ -293,6 +387,8 @@ graph TD
     Agent --> DB["Session DB<br/>SQLite + FTS5"]
     Dispatch --> Backends["Terminal, browser, web backends"]
 </div>
+<figure class="hw hw-arch" id="hw-arch" data-hermes-widget="arch"><p class="hw-fallback">Interactive architecture explorer (needs JavaScript). The Mermaid map above shows the same structure.</p></figure>
+
 <p>The public architecture page draws the same picture: entry points on top, <code>AIAgent</code> in the middle, session storage and tool backends underneath. The useful refinement is what &ldquo;entry point&rdquo; means. The TUI and the Electron desktop app are not alternate agents. They are clients of a session authority — usually the profile&rsquo;s gateway — that admits work and then calls the same turn. Chapter 9 is where that authority is earned. For this chapter it is enough to see that a new surface does not get to invent a loop.</p>
 <p>Inside the facade the work splits three ways, and the split is the whole product:</p>
 <ul>
@@ -799,6 +895,8 @@ stateDiagram-v2
     Finalize --> [*]
     Stop --> [*]
 </div>
+<figure class="hw hw-stepper" id="hw-stepper" data-hermes-widget="stepper"><p class="hw-fallback">Interactive turn-loop stepper (needs JavaScript). The state diagram above shows the same phases.</p></figure>
+
 <p>The internal message list is the OpenAI shape from Chapter 4, including the alternation rules providers actually enforce. After the system message, roles alternate user and assistant. A tool round is assistant-with-calls, then one or more <code>tool</code> results, then the next assistant. Two user messages in a row are illegal. Two assistant messages in a row are illegal. Only tool results may sit next to each other, because parallel calls return in a burst. When a code path is tempted to &ldquo;just insert a note,&rdquo; it has to insert it somewhere those rules allow. That constraint is why several of the clever injections below target the newest tool result instead of the transcript head.</p>
 <p>The API call itself is interruptible. The HTTP request runs on a worker while the main thread waits on the response, an interrupt event, or a timeout. A new user message, <code>/stop</code>, or a signal abandons the worker. The partial response is not written into history. Abandon means abandon. A half-parsed tool call in the transcript is worse than a lost second, because the next request would send a malformed assistant turn and the provider would reject the session.</p>
 <hr />
@@ -989,7 +1087,7 @@ return a string the model can read, or a JSON error
 </code></pre>
 <p>Hooks that throw do not take down the turn; the registry&rsquo;s job is a string result either way. Argument JSON is repaired when models emit trailing commas or truncated objects. Surrogates are sanitized before they hit a provider that rejects them. Tool-call ids are canonicalized because strict providers dedupe or reject duplicates, and Codex&rsquo;s Responses ids are not the same shape as chat-completions ids. That work is sanitization at the boundary, Chapter 4&rsquo;s projection applied to the tool channel.</p>
 <p>Async handlers cannot be called from the sync dispatcher directly. The bridge depends on who is asking. A CLI with no running loop uses a persistent event loop so cached async clients stay alive. A gateway that already has a loop spins a disposable thread with <code>asyncio.run</code> so it does not deadlock the platform loop. Worker threads in the parallel tool pool keep a per-thread loop in thread-local storage. One bridge for all three will either deadlock the gateway or reconnect a CLI client on every call.</p>
-<p>Approval sits in this pipeline and is implemented in <code>tools/approval.py</code>. Chapter 16 is the threat model: hardline blocklist, user deny rules, YOLO, gateway prompts. The dispatch chapter&rsquo;s only claim is that the check happens before the handler, and that a plugin pre-hook can also deny. A tool that shells out inside the handler and skips the gate is a bug, not a shortcut.</p>
+<p>Approval sits in this pipeline and is implemented in <code>tools/approval.py</code>. Chapter 16 is the threat model: hardline blocklist, user deny rules, YOLO, gateway prompts. The dispatch chapter&rsquo;s only claim is that the check happens before the handler, and that a plugin pre-hook can also deny. A tool that shells out inside the handler and skips the gate is a bug, not a shortcut. An interactive trace of this pipeline, with the command gate expanded, sits in <a href="#ch16">Chapter 16</a>.</p>
 <p>Result size is capped per tool. A terminal session that returns a megabyte of logs will blow the next request and then force compression. The cap turns that into a truncated string the model can ask to narrow. Observers — metrics, the UI — get a side channel of tool name, duration, and a redacted preview. They do not get to rewrite the result unless they are the transform hook, which is explicit.</p>
 <hr />
 <h2 id="the-four-intercepts">The Four Intercepts</h2>
@@ -1648,6 +1746,8 @@ flowchart TD
     P -->|deny| Deny
     P -->|allow| Run
 </div>
+<figure class="hw hw-gating" id="hw-gating" data-hermes-widget="gating"><p class="hw-fallback">Interactive tool-gating trace (needs JavaScript). The flowchart above shows the same order.</p></figure>
+
 <p>YOLO is a session latch (<code>hermes chat --yolo</code>, or a frozen environment flag some embeds set at launch). It skips the interactive prompt. It does not skip the hardline. Subagents do not inherit the parent&rsquo;s TUI prompt; Chapter 12 gave them deny-by-default unless <code>delegation.subagent_auto_approve</code> is set, and even then the return value is &ldquo;once,&rdquo; logged, not a permanent allow. Cron does not grow a quieter blocklist. Gateway approvals use a per-session queue and a platform button instead of stdin, with a timeout. Timeout is deny. Silence is not consent.</p>
 <p>Modes worth knowing, without pretending the enum is the architecture: a normal interactive mode asks; an off mode stops asking and still hits the hardline; YOLO is that choice scoped to a session and seeded into the session&rsquo;s stored model config so <code>/resume</code> does not forget it. A smart-deny path can still let an interactive owner override a classifier&rsquo;s no, once, for that operation. Consecutive denies escalate the copy so a model that keeps pushing gets a hard stop instead of a debate. The exact detector patterns change. The order does not.</p>
 <p><code>execute_code</code> is in scope. A Python sandbox that shells out is still a command. File writes have their own protected paths — Hermes&rsquo;s own home, credentials, the things a model should not rewrite to persist an attack — and an optional write root for operators who want a sandbox even on the local backend. Cron state is included in &ldquo;do not let the model edit the scheduler to escape.&rdquo; A tool that writes by opening files itself and skipping these checks is the bug Chapter 7&rsquo;s pipeline was meant to prevent.</p>
@@ -1850,9 +1950,448 @@ def run_turn(session, user_text, tools):
   <p>Drop-in path on the Pages site: <code>books/hermes-agent-from-source.html</code>.</p>
 </footer>
 
+<script>
+/* Hermes Agent from Source — interactive widgets (P0). Vanilla JS, no dependencies, works offline. */
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, html) {
+    var e = document.createElement(tag);
+    for (var k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+  function sv(tag, attrs, parent) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function head(root, tag, title, hint) {
+    root.innerHTML = '';
+    root.appendChild(el('div', { 'class': 'hw-head' },
+      '<span class="hw-tag">' + tag + '<\/span><span class="hw-title">' + title + '<\/span>' +
+      '<span class="hw-hint">' + hint + '<\/span>'));
+  }
+  function go(ch) {
+    var t = document.getElementById(ch);
+    if (!t) return;
+    if (history.pushState) history.pushState(null, '', '#' + ch);
+    t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ------------------------------------------------------------------ */
+  /* 1. Architecture Explorer                                            */
+  /* ------------------------------------------------------------------ */
+  var NODES = [
+    ['cli', 'CLI · TUI · Desktop', 'ch02', 'door', 90, 40, '<code>cli.py<\/code> is a facade over <code>hermes_cli/cli_*_mixin.py<\/code>. TUI and Desktop are clients of the session authority, not second agents.'],
+    ['gateway', 'Gateway', 'ch09', 'door', 255, 40, 'Long-running runner: authorizes the sender, resolves a session key, owns the session, then calls the same <code>run_conversation()<\/code>.'],
+    ['cron', 'Cron', 'ch10', 'door', 410, 40, 'A due job builds a <b>fresh<\/b> <code>AIAgent<\/code>: attached skills injected, <code>cronjob<\/code> toolset disabled, no prior run transcript.'],
+    ['acp', 'ACP editor', 'ch11', 'door', 560, 40, 'Editor sessions over stdio. Editor blocks become the same user content the loop already understands.'],
+    ['batch', 'Batch · API · lib', 'ch01', 'door', 710, 40, 'Batch runner, API server, and a plain Python import are more doors into the same turn.'],
+    ['boot', 'Bootstrap', 'ch02', 'core', 110, 150, '<code>hermes_bootstrap<\/code> imports first, recovers interrupted updates, binds the profile (<code>hermes -p<\/code>) before an agent is constructed.'],
+    ['agent', 'AIAgent · the turn', 'ch05', 'core', 400, 150, '<code>run_agent.py<\/code> facade; <code>run_conversation<\/code> in <code>agent/conversation_loop.py<\/code> runs prompt → model → tools → persist, and stops for reasons it can name.'],
+    ['child', 'Child agents', 'ch12', 'loop', 690, 150, '<code>delegate_task<\/code> spawns another <code>AIAgent<\/code> with its own transcript and its own iteration budget (default 50).'],
+    ['prompt', 'Prompt builder', 'ch06', 'core', 110, 265, 'One system prompt in three tiers (stable, context, volatile). Built once, not rebuilt until compression.'],
+    ['provider', 'Runtime provider', 'ch04', 'core', 290, 265, 'Resolves <code>(provider, model)<\/code> into API mode, base URL, and credentials. Three modes: chat completions, Codex Responses, Anthropic Messages.'],
+    ['dispatch', 'Tool dispatch', 'ch07', 'core', 490, 265, '<code>handle_function_call<\/code> over <code>tools/registry.py<\/code>: guard, hooks, approval gate, execute, capped string result.'],
+    ['compress', 'Compression', 'ch15', 'loop', 690, 265, 'The one legal cache break: summarizes the middle of the conversation and keeps who asked.'],
+    ['memory', 'Memory & recall', 'ch13', 'loop', 90, 385, 'Curated facts and a bounded user profile, FTS session search, plus at most one external memory provider.'],
+    ['skills', 'Skills', 'ch14', 'loop', 270, 385, 'Documents with progressive disclosure: an index line until the body loads. The agent may write the next one.'],
+    ['approvals', 'Approvals', 'ch16', 'loop', 470, 385, 'Hardline blocklist → user deny rules → allowlist → a human. DM pairing for strangers. YOLO never skips the hardline.'],
+    ['backends', 'Backends', 'ch08', 'store', 670, 385, 'Same tool names on local, Docker, SSH, Modal, Daytona, Singularity, Vercel Sandbox, plus browser and web backends.'],
+    ['db', 'Session DB', 'ch03', 'store', 230, 490, '<code>state.db<\/code> per profile: SQLite in WAL mode with FTS5. Most processes may not write canonical transcripts.'],
+    ['profiles', 'Profiles & cost', 'ch17', 'store', 560, 490, 'One gateway process can serve many profile islands; every path goes through <code>get_hermes_home()<\/code>.']
+  ];
+  var EDGES = [
+    ['cli', 'agent', 'same turn'], ['gateway', 'agent', 'run_conversation()'], ['cron', 'agent', 'fresh agent'],
+    ['acp', 'agent', 'editor blocks → user content'], ['batch', 'agent', 'same turn'], ['boot', 'agent', 'constructs'],
+    ['child', 'agent', 'another AIAgent'], ['agent', 'prompt', 'cached system prompt'], ['agent', 'provider', 'API mode'],
+    ['agent', 'dispatch', 'tool calls'], ['agent', 'compress', 'preflight'], ['compress', 'prompt', 'legal rebuild'],
+    ['dispatch', 'approvals', 'gate before handler'], ['dispatch', 'backends', 'execute'], ['dispatch', 'child', 'delegate_task'],
+    ['dispatch', 'memory', 'memory · session_search'], ['memory', 'prompt', 'frozen snapshot'], ['skills', 'prompt', 'index line'],
+    ['memory', 'db', 'FTS5 search'], ['agent', 'db', 'persist'], ['gateway', 'db', 'session authority'], ['profiles', 'db', 'one db per profile']
+  ];
+  var W = 150, H = 42, VW = 800, VH = 530;
+
+  function arch(root) {
+    head(root, 'Interactive', 'Architecture Explorer — one core, many doors',
+      'Hover or focus a node for a one-line summary. Click (or tap twice) to jump to its chapter. Drag nodes to rearrange. On a narrow screen, swipe the map sideways.');
+    var legend = el('div', { 'class': 'hw-legend' },
+      '<span><i style="border-color:var(--blue)"><\/i>Entry surface<\/span>' +
+      '<span><i style="border-color:var(--amber)"><\/i>Core turn<\/span>' +
+      '<span><i style="border-color:#A89BFF"><\/i>Learning &amp; policy<\/span>' +
+      '<span><i style="border-color:var(--green)"><\/i>State &amp; execution<\/span>');
+    var wrap = el('div', { 'class': 'hw-arch-wrap' });
+    var svg = sv('svg', { viewBox: '0 0 ' + VW + ' ' + VH, role: 'group', 'aria-label': 'Hermes architecture map' });
+    var defs = sv('defs', {}, svg);
+    [['hwa', '#3a4a68'], ['hwah', '#FFB454']].forEach(function (m) {
+      var mk = sv('marker', { id: m[0], viewBox: '0 -5 10 10', refX: 9, refY: 0, markerWidth: 7, markerHeight: 7, orient: 'auto' }, defs);
+      sv('path', { d: 'M0,-4L10,0L0,4', fill: m[1] }, mk);
+    });
+    var gE = sv('g', {}, svg), gN = sv('g', {}, svg);
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' },
+      '<b>Start at the waist.<\/b> Every door on top calls the same <code>AIAgent<\/code> turn; everything below is a constraint on that one turn.');
+    var bar = el('div', { 'class': 'hw-bar', style: 'margin:10px 0 0' });
+    var reset = el('button', { type: 'button' }, 'Reset layout');
+    bar.appendChild(reset);
+    wrap.appendChild(svg);
+    root.appendChild(legend); root.appendChild(wrap); root.appendChild(panel); root.appendChild(bar);
+
+    var pos = {}, nodeEl = {}, edgeEls = [], selected = null;
+    NODES.forEach(function (n) { pos[n[0]] = { x: n[4], y: n[5] }; });
+    EDGES.forEach(function (e) {
+      var g = sv('g', { 'class': 'e' }, gE);
+      var ln = sv('line', { 'marker-end': 'url(#hwa)' }, g);
+      var tx = sv('text', { 'text-anchor': 'middle', dy: -4 }, g);
+      tx.textContent = e[2];
+      edgeEls.push({ e: e, g: g, ln: ln, tx: tx });
+    });
+    function clip(ax, ay, bx, by) {
+      var dx = bx - ax, dy = by - ay;
+      var t = Math.min((W / 2 + 3) / (Math.abs(dx) || 1e-6), (H / 2 + 3) / (Math.abs(dy) || 1e-6));
+      t = Math.min(t, 0.5);
+      return [ax + dx * t, ay + dy * t, bx - dx * t, by - dy * t];
+    }
+    function drawEdges() {
+      edgeEls.forEach(function (o) {
+        var a = pos[o.e[0]], b = pos[o.e[1]], c = clip(a.x, a.y, b.x, b.y);
+        o.ln.setAttribute('x1', c[0]); o.ln.setAttribute('y1', c[1]);
+        o.ln.setAttribute('x2', c[2]); o.ln.setAttribute('y2', c[3]);
+        o.tx.setAttribute('x', (c[0] + c[2]) / 2); o.tx.setAttribute('y', (c[1] + c[3]) / 2);
+      });
+    }
+    function place(id) { nodeEl[id].setAttribute('transform', 'translate(' + (pos[id].x - W / 2) + ',' + (pos[id].y - H / 2) + ')'); }
+    function focusNode(id) {
+      var near = {}; if (id) near[id] = 1;
+      edgeEls.forEach(function (o) {
+        var hot = id && (o.e[0] === id || o.e[1] === id);
+        o.g.classList.toggle('hot', !!hot);
+        o.g.classList.toggle('dim', !!id && !hot);
+        o.ln.setAttribute('marker-end', hot ? 'url(#hwah)' : 'url(#hwa)');
+        if (hot) { near[o.e[0]] = 1; near[o.e[1]] = 1; }
+      });
+      NODES.forEach(function (n) {
+        nodeEl[n[0]].classList.toggle('dim', !!id && !near[n[0]]);
+        nodeEl[n[0]].classList.toggle('sel', n[0] === id);
+      });
+      if (id) {
+        var n = NODES.filter(function (x) { return x[0] === id; })[0];
+        var num = n[2].slice(2);
+        panel.innerHTML = '<b>' + n[1] + '<\/b> — ' + n[6] + ' <a href="#' + n[2] + '" data-go="' + n[2] + '">Chapter ' + num + ' →<\/a>';
+      }
+    }
+    panel.addEventListener('click', function (ev) {
+      var a = ev.target.closest && ev.target.closest('[data-go]');
+      if (a) { ev.preventDefault(); go(a.getAttribute('data-go')); }
+    });
+    function svgPt(ev) {
+      var p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+      var m = svg.getScreenCTM(); return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+    }
+    NODES.forEach(function (n) {
+      var id = n[0];
+      var g = sv('g', { 'class': 'n k-' + n[3], tabindex: 0, role: 'link', 'data-node': id, 'data-ch': n[2],
+        'aria-label': n[1] + ', chapter ' + n[2].slice(2) }, gN);
+      sv('rect', { width: W, height: H, rx: 9 }, g);
+      var t1 = sv('text', { 'class': 'lb', x: W / 2, y: 18, 'text-anchor': 'middle' }, g); t1.textContent = n[1];
+      var t2 = sv('text', { 'class': 'cn', x: W / 2, y: 33, 'text-anchor': 'middle' }, g); t2.textContent = 'CH ' + n[2].slice(2);
+      nodeEl[id] = g; place(id);
+      var drag = null;
+      g.addEventListener('pointerenter', function (ev) { if (ev.pointerType !== 'touch' && !drag) focusNode(id); });
+      g.addEventListener('pointerleave', function (ev) { if (ev.pointerType !== 'touch' && !drag) focusNode(selected); });
+      g.addEventListener('focus', function () { focusNode(id); });
+      g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(n[2]); } });
+      g.addEventListener('pointerdown', function (ev) {
+        var p = svgPt(ev);
+        drag = { dx: p.x - pos[id].x, dy: p.y - pos[id].y, sx: p.x, sy: p.y, moved: false, type: ev.pointerType };
+        try { g.setPointerCapture(ev.pointerId); } catch (e) {}
+        gN.appendChild(g);
+      });
+      g.addEventListener('pointermove', function (ev) {
+        if (!drag) return;
+        var p = svgPt(ev);
+        if (!drag.moved && Math.abs(p.x - drag.sx) + Math.abs(p.y - drag.sy) < 6) return;
+        drag.moved = true;
+        pos[id].x = Math.max(W / 2, Math.min(VW - W / 2, p.x - drag.dx));
+        pos[id].y = Math.max(H / 2, Math.min(VH - H / 2, p.y - drag.dy));
+        place(id); drawEdges();
+      });
+      function end(ev) {
+        if (!drag) return;
+        var d = drag; drag = null;
+        if (d.moved) { focusNode(id); return; }
+        if (d.type === 'touch' && selected !== id) { selected = id; focusNode(id); return; }
+        selected = id; go(n[2]);
+      }
+      g.addEventListener('pointerup', end);
+      g.addEventListener('pointercancel', function () { drag = null; });
+    });
+    reset.addEventListener('click', function () {
+      NODES.forEach(function (n) { pos[n[0]] = { x: n[4], y: n[5] }; place(n[0]); });
+      drawEdges(); selected = null; focusNode(null);
+    });
+    drawEdges();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 2. Turn loop stepper                                                */
+  /* ------------------------------------------------------------------ */
+  var PHASES = [
+    ['prepare', 'Prepare', 'task id · user msg'], ['preflight', 'Preflight', 'compress if oversized'],
+    ['assemble', 'Assemble', 'provider messages'], ['call', 'Call model', 'interruptible'],
+    ['tools', 'Tool round', 'execute · append'], ['recover', 'Recover', 'retry / fallback'],
+    ['finalize', 'Finalize', 'persist · return'], ['stop', 'Stop', 'typed terminal result']
+  ];
+  var SYS = ['system', 'system prompt (cached, reused)'];
+  var USR = ['user', 'user: “fix the failing test”'];
+  var SCEN = {
+    tool: { label: 'One tool round', steps: [
+      ['prepare', 'Ensure a task id, append the user message', 'A door (CLI, gateway, cron, ACP…) calls <code>run_conversation()<\/code>. It ensures a task id and appends the user message. Roles must alternate after the system message.', [SYS, USR], 0],
+      ['assemble', 'Reuse the cached prompt, build provider messages', 'History is under budget, so preflight is skipped. The cached system prompt is <b>reused<\/b>, not rebuilt. Messages are built for this API mode; ephemeral layers are injected outside the cached prompt; cache markers are applied when the route supports them.', null, 1],
+      ['call', 'Interruptible API call', 'The HTTP request runs on a worker while the main thread waits on the response, an interrupt event, or a timeout.', null, 1],
+      ['tools', 'Model returned tool calls → tool round', 'Agent-level tools (<code>todo<\/code>, <code>memory<\/code>, <code>session_search<\/code>, <code>delegate_task<\/code>) are intercepted; the rest go through <code>handle_function_call()<\/code>. Several calls run on a pool (sequential if one is <code>clarify<\/code>). Results are written back in the model’s <b>call order<\/b>, not completion order.', [['assistant', 'assistant: tool_calls [read_file, terminal]'], ['tool', 'tool: read_file → …'], ['tool', 'tool: terminal → …']], 1],
+      ['assemble', 'Results appended, next iteration', 'The loop iterates. The <code>IterationBudget<\/code> counts another iteration. Any mid-turn notice may only go on the newest <b>unpersisted<\/b> tool result, so the cached prefix never moves.', null, 2],
+      ['call', 'Second model call', 'Same API mode, same cached prefix plus the new tool results. This time the model answers with text and no tool calls.', null, 2],
+      ['finalize', 'Text, no tool calls → finalize', 'Persistence is the last phase: new messages go to the session store under the writer rules; memory flushes only on a real boundary (<code>/new<\/code>, <code>/reset<\/code>, <code>/resume<\/code>). <code>run_conversation()<\/code> returns a dict — messages, usage, metadata, why the turn stopped — and the door renders it.', [['assistant', 'assistant: “The test now passes because …”']], 2]
+    ] },
+    big: { label: 'Oversized history', steps: [
+      ['prepare', 'Append the user message', 'A long session continues. The rough budget says the request may not fit.', [SYS, ['user', '… 400 earlier messages …'], USR], 0],
+      ['preflight', 'Preflight compression', 'The anchored token estimate crosses the threshold, so compression (Chapter 15) runs <b>before<\/b> the request — the one legal cache break. If it cannot make the request fit, or times out while still oversized, that is a terminal result, not a silent oversized send.', [['note', 'middle of history → summary (handoff)']], 0],
+      ['assemble', 'Handoff guard', 'If compaction left a summary and dropped the user’s ask, the loop re-appends the real user message. A summary must not impersonate the user.', [['user', 'user: original ask restored']], 1],
+      ['call', 'Model call on the compacted history', 'The request now fits; the model answers.', null, 1],
+      ['finalize', 'Finalize', 'Persist through the writer rules and return the result dict.', [['assistant', 'assistant: answer to the real ask']], 1]
+    ] },
+    fallback: { label: 'Retry → fallback', steps: [
+      ['prepare', 'Append the user message', 'Normal start.', [SYS, USR], 0],
+      ['assemble', 'Assemble', 'Cached prompt reused; provider messages built.', null, 1],
+      ['call', 'Model call fails', 'A malformed response, an auth error, or exhausted transient retries.', null, 1],
+      ['recover', 'Activate fallback (inside the machine)', 'Fallback from Chapter 4 sits inside the turn, not beside it: the activation helper switches to <code>fallback_model<\/code>. The latch fires only once. A 429 may rotate the credential pool first, if the pool has somewhere else to go.', [['note', 'fallback activated (once)']], 1],
+      ['call', 'Same request, fallback model', 'The turn continues on the fallback route.', null, 1],
+      ['finalize', 'Finalize', 'Persist and return. The result records why it stopped.', [['assistant', 'assistant: answer via fallback']], 1]
+    ] },
+    interrupt: { label: 'User interrupts', steps: [
+      ['prepare', 'Append the user message', 'Normal start.', [SYS, USR], 0],
+      ['assemble', 'Assemble', 'Cached prompt reused; provider messages built.', null, 1],
+      ['call', 'Streaming… then /stop arrives', 'A new user message, <code>/stop<\/code>, or a signal sets the interrupt event while the worker is still waiting on the provider.', null, 1],
+      ['stop', 'Abandon means abandon', 'The worker is abandoned and the partial response is <b>not<\/b> written into history — a half-parsed tool call would poison the next request. The user sees a status; the result carries a typed stop reason. (A redirect instead cancels the in-flight call and continues the same turn.)', [['note', 'partial response discarded — not in transcript']], 1]
+    ] },
+    budget: { label: 'Budget exhausted', steps: [
+      ['prepare', 'Append the user message', 'A long autonomous task. The CLI passes <code>agent.max_turns<\/code> (500) as the cap; a child would get <code>delegation.max_iterations<\/code> (50).', [SYS, USR], 0],
+      ['tools', 'Tool round after tool round', 'Each model call returns more tool calls; results are appended and the loop iterates. <code>execute_code<\/code> iterations can be refunded so a programmatic loop does not eat the conversational budget.', [['assistant', 'assistant: tool_calls …'], ['tool', 'tool: … (×n)']], 499],
+      ['call', 'Last allowed iteration', 'No “you are running out of turns” warnings — they taught models to give up early.', null, 500],
+      ['stop', 'Cap reached → typed stop', 'At the cap the agent stops and returns a summary of work already done, as a distinct result kind — not a generic exception.', [['assistant', 'assistant: summary of work done so far']], 500]
+    ] }
+  };
+
+  function stepper(root) {
+    head(root, 'Interactive', 'Turn loop stepper — one call to run_conversation()',
+      'Pick a scenario, then step with Prev / Next (or ← →) or press Play. Phases match the state diagram above.');
+    var sbar = el('div', { 'class': 'hw-bar', role: 'group', 'aria-label': 'Scenario' });
+    var phases = el('div', { 'class': 'hw-phases' });
+    var cbar = el('div', { 'class': 'hw-bar' });
+    var bPrev = el('button', { type: 'button', 'data-act': 'prev' }, '◀ Prev');
+    var bNext = el('button', { type: 'button', 'data-act': 'next' }, 'Next ▶');
+    var bPlay = el('button', { type: 'button', 'data-act': 'play' }, '▶ Play');
+    var bReset = el('button', { type: 'button', 'data-act': 'reset' }, '↺ Reset');
+    [bPrev, bNext, bPlay, bReset].forEach(function (b) { cbar.appendChild(b); });
+    var cols = el('div', { 'class': 'hw-cols' });
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' });
+    var tx = el('div', { 'class': 'hw-tx' });
+    cols.appendChild(panel); cols.appendChild(tx);
+    var phEl = {};
+    PHASES.forEach(function (p) {
+      var d = el('div', { 'class': 'hw-ph', 'data-phase': p[0] }, p[1] + '<small>' + p[2] + '<\/small>');
+      phEl[p[0]] = d; phases.appendChild(d);
+    });
+    var sBtns = {};
+    Object.keys(SCEN).forEach(function (k) {
+      var b = el('button', { type: 'button', 'aria-pressed': 'false', 'data-scen': k }, SCEN[k].label);
+      b.addEventListener('click', function () { setScen(k); });
+      sBtns[k] = b; sbar.appendChild(b);
+    });
+    root.appendChild(sbar); root.appendChild(phases); root.appendChild(cbar); root.appendChild(cols);
+    root.setAttribute('tabindex', '0');
+
+    var scen = 'tool', i = 0, timer = null;
+    function render(animate) {
+      var steps = SCEN[scen].steps, s = steps[i];
+      var seen = {};
+      for (var j = 0; j <= i; j++) seen[steps[j][0]] = 1;
+      PHASES.forEach(function (p) {
+        phEl[p[0]].className = 'hw-ph' + (seen[p[0]] ? ' seen' : '') + (p[0] === s[0] ? ' cur' + (p[0] === 'stop' ? ' bad' : '') : '');
+      });
+      panel.innerHTML = '<div class="hw-step-n">STEP ' + (i + 1) + ' / ' + steps.length + '<\/div><b>' + s[1] + '<\/b><br>' + s[2] +
+        '<div class="hw-meter">iterations used: <b>' + s[4] + '<\/b><\/div>';
+      var html = '<div class="h">transcript<\/div>';
+      for (var k = 0; k <= i; k++) {
+        (steps[k][3] || []).forEach(function (m) {
+          html += '<div class="hw-msg r-' + m[0] + (animate && k === i ? ' new' : '') + '">' + m[1] + '<\/div>';
+        });
+      }
+      tx.innerHTML = html;
+      bPrev.disabled = i === 0; bNext.disabled = i === steps.length - 1;
+      root.setAttribute('data-step', i);
+    }
+    function stop() { if (timer) { clearInterval(timer); timer = null; } bPlay.textContent = '▶ Play'; bPlay.classList.remove('on'); }
+    function next() { if (i < SCEN[scen].steps.length - 1) { i++; render(true); } else stop(); }
+    function setScen(k) {
+      stop(); scen = k; i = 0;
+      Object.keys(sBtns).forEach(function (x) { sBtns[x].setAttribute('aria-pressed', x === k ? 'true' : 'false'); });
+      render(true);
+    }
+    bNext.addEventListener('click', function () { stop(); next(); });
+    bPrev.addEventListener('click', function () { stop(); if (i > 0) { i--; render(false); } });
+    bReset.addEventListener('click', function () { stop(); i = 0; render(true); });
+    bPlay.addEventListener('click', function () {
+      if (timer) return stop();
+      if (i === SCEN[scen].steps.length - 1) { i = 0; render(true); }
+      bPlay.textContent = '❚❚ Pause'; bPlay.classList.add('on');
+      timer = setInterval(next, REDUCED ? 3200 : 2400);
+    });
+    root.addEventListener('keydown', function (ev) {
+      if (ev.target.tagName === 'BUTTON' && (ev.key === ' ' || ev.key === 'Enter')) return;
+      if (ev.key === 'ArrowRight') { ev.preventDefault(); stop(); next(); }
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); stop(); if (i > 0) { i--; render(false); } }
+    });
+    setScen('tool');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 3. Tool gating flow                                                 */
+  /* ------------------------------------------------------------------ */
+  var STAGES = [
+    ['guard', 'Guard name & arguments', 'repair malformed JSON, sanitize, canonicalize ids'],
+    ['mw', 'Request middleware', ''],
+    ['pre', 'pre_tool_call hook', 'a plugin pre-hook can also deny'],
+    ['gate', 'Approval gate (tools/approval.py)', 'checked before the handler, for commands'],
+    ['exec', 'Execute handler', 'or bridge an async handler onto a loop'],
+    ['xf', 'transform_tool_result hook', ''],
+    ['post', 'post_tool_call hook', ''],
+    ['ret', 'Return a string to the model', 'capped result, or a JSON error the model can correct']
+  ];
+  var GATE = [['hard', 'Hardline?'], ['deny', 'User deny rule?'], ['allow', 'Permanent allow?'], ['danger', 'Dangerous pattern?'], ['mode', 'Mode'], ['human', 'Human']];
+  /* each path entry: [stageOrGateId, cls, note] ; cls: pass | skip | ask | deny */
+  var P = 'pass', S = 'skip', A = 'ask', D = 'deny';
+  function okTail() { return [['exec', P, 'handler runs on the configured backend'], ['xf', P, ''], ['post', P, ''], ['ret', P, 'result string, capped per tool']]; }
+  function noTail(why) { return [['exec', S, 'never reached'], ['xf', S, ''], ['post', S, ''], ['ret', D, why]]; }
+  var GSCEN = [
+    { id: 'read', label: 'Safe read (read_file)', ok: true,
+      cmd: '<code>read_file<\/code> on a project file',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, 'no plugin objects'], ['gate', S, 'not a shell command — the command gate does not apply']].concat(okTail()),
+      verdict: 'Runs. A read is not a command, so it walks the pipeline without an approval prompt. (File <i>writes<\/i> have their own protected paths.)' },
+    { id: 'plain', label: 'Ordinary command', ok: true,
+      cmd: '<code>terminal<\/code> with a command no detector flags',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', P, 'walks the fixed order'], ['hard', P, 'no'], ['deny', P, 'no'], ['allow', P, 'no'], ['danger', P, 'no → run']].concat(okTail()),
+      verdict: 'Runs. Nothing in the fixed order matched, so no human is asked.' },
+    { id: 'ask', label: 'Dangerous → ask → approve once', ok: true,
+      cmd: '<code>terminal<\/code> with destructive git, interactive CLI, mode <code>ask<\/code>',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', A, 'callback to the surface'], ['hard', P, 'no'], ['deny', P, 'no'], ['allow', P, 'no'], ['danger', A, 'yes'], ['mode', A, 'ask'], ['human', P, 'once / session / always / deny → once']].concat(okTail()),
+      verdict: 'Runs after the operator chooses <b>once<\/b>. <code>session<\/code> and <code>always<\/code> widen the grant; <code>hermes approvals suggest<\/code> can later propose allowlist entries, never auto-applied.' },
+    { id: 'gwto', label: 'Gateway prompt times out', ok: false,
+      cmd: 'dangerous command from a Telegram chat, nobody presses the button',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', A, 'per-session queue + platform button'], ['hard', P, 'no'], ['deny', P, 'no'], ['allow', P, 'no'], ['danger', A, 'yes'], ['mode', A, 'ask'], ['human', D, 'timeout → deny']].concat(noTail('structured denial reason, not a stack trace')),
+      verdict: 'Denied. Timeout is deny. Silence is not consent.' },
+    { id: 'yolo', label: 'Dangerous + YOLO', ok: true,
+      cmd: 'dangerous command in a <code>hermes chat --yolo<\/code> session',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', P, 'YOLO is a session latch'], ['hard', P, 'no'], ['deny', P, 'no'], ['allow', P, 'no'], ['danger', A, 'yes'], ['mode', P, 'off / YOLO → run'], ['human', S, 'prompt skipped']].concat(okTail()),
+      verdict: 'Runs without a prompt. YOLO skips the human — and only the human.' },
+    { id: 'hard', label: 'Catastrophic + YOLO', ok: false,
+      cmd: 'a recursive delete aimed at the runtime itself, YOLO on',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', D, ''], ['hard', D, 'match → deny, no override'], ['deny', S, ''], ['allow', S, ''], ['danger', S, ''], ['mode', S, 'YOLO never consulted'], ['human', S, '']].concat(noTail('denied, with a reason the model can read')),
+      verdict: 'Denied. The hardline runs first and cannot be disabled by session settings, YOLO, or <code>approvals.mode: off<\/code>.' },
+    { id: 'udeny', label: 'Operator deny rule', ok: false,
+      cmd: 'a command matching <code>approvals.deny<\/code>',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', D, ''], ['hard', P, 'no'], ['deny', D, 'match → deny'], ['allow', S, ''], ['danger', S, ''], ['mode', S, ''], ['human', S, '']].concat(noTail('denied by policy the operator wrote')),
+      verdict: 'Denied. The user deny list sits before any allowlist or prompt.' },
+    { id: 'plugin', label: 'Plugin pre-hook denies', ok: false,
+      cmd: 'any tool; a plugin’s <code>pre_tool_call<\/code> hook objects',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', D, 'plugin pre-hook denies'], ['gate', S, 'never reached']].concat(noTail('JSON error string — the turn keeps going')),
+      verdict: 'Denied before the approval gate. Hooks fail closed into a string result; they do not take down the turn.' },
+    { id: 'child', label: 'Subagent, dangerous', ok: false,
+      cmd: 'a child agent from <code>delegate_task<\/code> hits a dangerous command',
+      path: [['guard', P, ''], ['mw', P, ''], ['pre', P, ''], ['gate', A, 'no TUI prompt is inherited'], ['hard', P, 'no'], ['deny', P, 'no'], ['allow', P, 'no'], ['danger', A, 'yes'], ['mode', D, 'children: deny by default'], ['human', S, 'nobody to ask']].concat(noTail('denied unless delegation.subagent_auto_approve')),
+      verdict: 'Denied by default. With <code>delegation.subagent_auto_approve<\/code> set, the answer is “once”, logged — never a permanent allow.' }
+  ];
+
+  function gating(root) {
+    head(root, 'Interactive', 'Tool gating flow — from tool call to result',
+      'Pick a scenario to trace its path through the dispatch pipeline (Chapter 7) and the command gate (this chapter). Green passes, blue asks, red denies, dashed is skipped.');
+    var sbar = el('div', { 'class': 'hw-bar', role: 'group', 'aria-label': 'Scenario' });
+    var cmd = el('div', { 'class': 'hw-hint', style: 'margin:0 0 8px' });
+    var list = el('ol', { 'class': 'hw-pipe' });
+    var verdict = el('div', { 'class': 'hw-panel hw-verdict', 'aria-live': 'polite' });
+    var items = {};
+    STAGES.forEach(function (s) {
+      var li = el('li', { 'data-stage': s[0] }, '<span class="t">' + s[1] + '<\/span>' + (s[2] ? ' <span style="font-size:12px">— ' + s[2] + '<\/span>' : '') + '<span class="v"><\/span>');
+      if (s[0] === 'gate') {
+        var sub = el('ul', { 'class': 'sub' });
+        GATE.forEach(function (g) {
+          var gi = el('li', { 'data-stage': g[0] }, g[1] + '<span class="v"><\/span>');
+          items[g[0]] = gi; sub.appendChild(gi);
+        });
+        li.appendChild(sub);
+      }
+      items[s[0]] = li; list.appendChild(li);
+    });
+    var btns = {}, timers = [];
+    GSCEN.forEach(function (sc) {
+      var b = el('button', { type: 'button', 'aria-pressed': 'false', 'data-gscen': sc.id }, sc.label);
+      b.addEventListener('click', function () { run(sc); });
+      btns[sc.id] = b; sbar.appendChild(b);
+    });
+    var replay = el('button', { type: 'button' }, '↺ Replay');
+    root.appendChild(sbar); root.appendChild(cmd); root.appendChild(list); root.appendChild(verdict);
+    var rb = el('div', { 'class': 'hw-bar', style: 'margin:10px 0 0' }); rb.appendChild(replay); root.appendChild(rb);
+    var current = GSCEN[0];
+    replay.addEventListener('click', function () { run(current); });
+    function clear() {
+      timers.forEach(clearTimeout); timers = [];
+      Object.keys(items).forEach(function (k) {
+        items[k].className = ''; var v = items[k].querySelector('.v'); if (v) v.textContent = '';
+      });
+    }
+    function run(sc) {
+      current = sc; clear();
+      Object.keys(btns).forEach(function (k) { btns[k].setAttribute('aria-pressed', k === sc.id ? 'true' : 'false'); });
+      cmd.innerHTML = 'Scenario: ' + sc.cmd;
+      verdict.className = 'hw-panel hw-verdict'; verdict.innerHTML = '<span class="hw-step-n">TRACING…<\/span>';
+      root.setAttribute('data-result', 'pending');
+      var dt = REDUCED ? 0 : 260;
+      sc.path.forEach(function (p, idx) {
+        timers.push(setTimeout(function () {
+          Object.keys(items).forEach(function (k) { items[k].classList.remove('cur'); });
+          var it = items[p[0]]; it.className = p[1] + ' cur';
+          var v = it.querySelector('.v'); if (v && p[2]) v.textContent = p[2];
+        }, dt * idx));
+      });
+      timers.push(setTimeout(function () {
+        Object.keys(items).forEach(function (k) { items[k].classList.remove('cur'); });
+        verdict.className = 'hw-panel hw-verdict ' + (sc.ok ? 'ok' : 'no');
+        verdict.innerHTML = '<b>' + (sc.ok ? '✓ ' : '✕ ') + '<\/b>' + sc.verdict;
+        root.setAttribute('data-result', sc.ok ? 'run' : 'deny');
+      }, dt * sc.path.length));
+    }
+    run(GSCEN[0]);
+  }
+
+  var REG = { arch: arch, stepper: stepper, gating: gating };
+  function boot() {
+    var list = document.querySelectorAll('[data-hermes-widget]');
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i], f = REG[r.getAttribute('data-hermes-widget')];
+      if (!f) continue;
+      try { f(r); r.setAttribute('data-ready', '1'); } catch (e) { if (window.console) console.error('hermes widget', e); }
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
+</script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>
-  mermaid.initialize({
+  if (window.mermaid) mermaid.initialize({
     startOnLoad: true,
     theme: 'dark',
     securityLevel: 'loose',
