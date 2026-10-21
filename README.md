@@ -5,6 +5,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
+| [Inside DeepSeek Harness](books/inside-deepseek-harness.html) | English | 381 KB |
 | [DeepInfer from source](books/deepinfer-from-source.html) | English | 534 KB |
 | [Codex from Source](books/codex-source-book.html) | English | 3.9 MB |
 | [手把手教你构建 C 语言编译器](books/build-a-c-compiler.html) | 中文 | 272 KB |
@@ -36,3 +37,9 @@ English edition: 20 chapters in seven parts, about 45,000 words, 18 interactive 
 An English source study of DeepInfer commit `774ce244b87cc0eb8d4b94ab9f5de2ab22049f01`: 12 chapters, 32 diagrams and 11 interactive mechanism labs. Each chapter starts with a visual summary; full explanations expand on demand. Follow two requests through admission, cache ownership, overlapping execution, experts, speculative decoding and sampling. The self-contained reader supports offline access, full-text search, themes, diagram zoom and no-JavaScript summaries.
 
 [Read online](https://chendi0x7c00.github.io/ebooks/books/deepinfer-from-source.html). Research date: 2026-10-21. Source facts and teaching models are distinguished; accelerator execution and published performance were not reproduced on the authoring host.
+
+## Inside DeepSeek Harness
+
+A visual field guide to DeepSeek Harness commit `687f282e8625c6b8d11ff58211a90524be2e4317` (`0.2.1-rc.2`). Twelve compact chapters follow one CSV fix through runtime composition, model calls, tools, context, persistence, delegation, and interfaces. Includes 36 diagrams, 12 labs with 36 scenarios, 24 pseudocode examples, a downloadable runnable miniature, and 152 immutable source references.
+
+[Read online](https://chendi0x7c00.github.io/ebooks/books/inside-deepseek-harness.html). The HTML is self-contained and readable without JavaScript. Search, themes, diagram zoom, and a visual reading route work offline. Chromium, Firefox, and Playwright WebKit were checked at 320–1920 px; this is automated-engine coverage, not a physical-device certification. Research date: 2026-10-21. The existing Chinese architecture book remains available separately.
