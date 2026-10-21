@@ -5,6 +5,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
+| [The mathematics that makes deep learning work](books/math-and-architectures-of-deep-learning.html) | English | 304 KB |
 | [The Reversible Harness: Inside DeepSeek Harness](books/the-reversible-harness.html) | English | 1.0 MB |
 | [Inside DeepSeek Harness](books/inside-deepseek-harness.html) | English | 381 KB |
 | [DeepInfer from source](books/deepinfer-from-source.html) | English | 534 KB |
@@ -56,3 +57,11 @@ An English source study of DeepSeek Harness commit `687f282e8625c6b8d11ff58211a9
 The self-contained reader includes 38 drawn SVG diagrams, 11 interactive mechanism labs with resets and no-JavaScript summaries, full-text search, light/dark themes, diagram zoom, keyboard navigation, and a source audit covering 348 citations to 291 unique ranges. It has no network dependencies and opens directly from disk.
 
 [Read online](https://chendi0x7c00.github.io/ebooks/books/the-reversible-harness.html). Research date: 2026-10-21. The runtime did not expose the requested `4.1-Flash-1017` model; planning, drafting, review, and integration ran on `deepseek-flash`. Chromium, Firefox, and Playwright WebKit layouts were checked at 320–1920 px; this is automated engine coverage, not physical-device certification.
+
+## The mathematics that makes deep learning work
+
+A one-hour condensation of Krishnendu Chaudhury’s *Math and Architectures of Deep Learning* (Manning, 2024), following the mathematical argument across all 14 chapters. Twelve sections connect linear algebra, probability, backpropagation, optimization, convolutional architectures, Bayesian inference, and variational autoencoders through worked derivations, 16 figures, and six interactive experiments.
+
+The single HTML file works offline, with light/dark themes, keyboard controls, and readable no-JavaScript content. Layouts were checked in Chromium, Firefox, and WebKit at 320–1440 CSS pixels; all 64 numerical lab cases passed independent checks. The included PyTorch training example was executed successfully.
+
+[Read online](https://chendi0x7c00.github.io/ebooks/books/math-and-architectures-of-deep-learning.html).
