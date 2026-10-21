@@ -7,7 +7,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 |---|---|---|
 | [Inside DeepSeek Harness](books/inside-deepseek-harness.html) | English | 381 KB |
 | [DeepInfer from source](books/deepinfer-from-source.html) | English | 534 KB |
-| [Codex from Source](books/codex-source-book.html) | English | 3.9 MB |
+| [Codex from Source](books/codex-source-book.html) | English | 4.8 MB |
 | [手把手教你构建 C 语言编译器](books/build-a-c-compiler.html) | 中文 | 272 KB |
 | [Down to the Wire — Python Sockets from First Principles](books/python-sockets-from-first-principles.html) | English | 180 KB |
 | [Writing Modern Python](books/writing-modern-python.html) | English | 162 KB |
@@ -25,12 +25,15 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 ## Codex from Source
 
-English edition: 20 chapters in seven parts, about 45,000 words, 18 interactive panels, and 58 diagrams. Based on OpenAI Codex commit `e4568a3538c9cab6627d64ff8cdfc7d98b79b7db`. Prose revised with [blader/humanizer 3.1.0](https://github.com/blader/humanizer/tree/8c307f367c91bd974002f10f2be2965d642c13df).
+Visual first-principles edition: 20 concise English chapters, 108 diagrams, 29 code and pseudocode examples, and 18 interactive teaching panels. The main reading route is about 14,500 words, 68% shorter than the earlier English edition. Start with the whole system, derive each mechanism from its constraints, then connect a simplified learning model to the source. Source guides expand on demand.
 
-- [在线阅读](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html)
-- [交互图解目录](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html#interactive-index)
-- [EPUB 下载](books/codex-source-book.epub)
-- [Markdown 原稿](books/codex-source-book.md)
+The self-contained HTML reader supports offline access, search, light/dark themes, diagram zoom, keyboard navigation, and no-JavaScript summaries. Layout was checked in Chrome at 320–1920 CSS pixels, in landscape, and with text enlarged to 200%.
+
+Based on OpenAI Codex commit `e4568a3538c9cab6627d64ff8cdfc7d98b79b7db`. Revised 2026-10-21. English prose edited with [blader/humanizer 3.1.0](https://github.com/blader/humanizer/tree/8c307f367c91bd974002f10f2be2965d642c13df).
+
+- [Read online](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html)
+- [Start with the system map](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html#preface-diagram-1)
+- [Browse the interactive panels](https://chendi0x7c00.github.io/ebooks/books/codex-source-book.html#interactive-index)
 
 ## DeepInfer from source
 
