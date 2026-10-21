@@ -1,0 +1,2731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A0F1A">
+<meta name="description" content="An architecture book about OpenHands and its Software Agent SDK — independent educational analysis with Mermaid diagrams and interactive widgets.">
+<title>OpenHands from Source — How an Open Coding Agent Is Built</title>
+<style>
+
+  :root {
+    --bg: #0A0F1A;
+    --bg-soft: #0D1422;
+    --panel: #121B2E;
+    --line: #263450;
+    --line-soft: #1C2A44;
+    --ink: #E9EEF7;
+    --ink-2: #B9C4D8;
+    --muted: #8493AC;
+    --amber: #FFB454;
+    --amber-dim: #C98B3F;
+    --amber-soft: rgba(255,180,84,.12);
+    --blue: #6FA8FF;
+    --blue-soft: rgba(111,168,255,.12);
+    --green: #5FD6A4;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei",
+            -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16.5px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+  ::selection { background: var(--amber-soft); color: var(--amber); }
+
+  #progress {
+    position: fixed; top: 0; left: 0; height: 2px; width: 0%;
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    z-index: 50;
+  }
+  nav.topnav {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(10,15,26,.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  nav.topnav .rail {
+    max-width: 1100px; margin: 0 auto; padding: 0 16px;
+    display: flex; align-items: center; gap: 2px;
+    overflow-x: auto; scrollbar-width: none;
+    white-space: nowrap;
+  }
+  nav.topnav .rail::-webkit-scrollbar { display: none; }
+  nav.topnav .brand {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    color: var(--amber); text-transform: uppercase;
+    padding-right: 12px; margin-right: 4px;
+    border-right: 1px solid var(--line-soft); flex: none;
+  }
+  nav.topnav a {
+    color: var(--muted); text-decoration: none;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .03em;
+    padding: 12px 7px; display: inline-block; flex: none;
+  }
+  nav.topnav a:hover, nav.topnav a:focus-visible { color: var(--ink); }
+  a { color: var(--blue); }
+  a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 3px; }
+
+  main { max-width: 840px; margin: 0 auto; padding: 0 20px 64px; }
+  section.chapter { padding-top: 56px; border-top: 1px solid var(--line-soft); margin-top: 8px; }
+  section.chapter:first-of-type { border-top: none; }
+
+  .partlabel {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--amber);
+    display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+  }
+  .partlabel::after { content: ""; height: 1px; flex: 1; background: var(--line-soft); }
+
+  h1 {
+    font-size: clamp(30px, 5vw, 48px); line-height: 1.08;
+    letter-spacing: -0.022em; margin: 10px 0 18px; font-weight: 750;
+  }
+  h2 {
+    font-size: clamp(22px, 3vw, 28px); letter-spacing: -0.015em;
+    margin: 36px 0 12px; line-height: 1.2; color: var(--ink);
+  }
+  h3 { font-size: 17.5px; margin: 28px 0 8px; color: var(--ink); }
+  h4 { font-size: 15.5px; margin: 22px 0 6px; color: var(--ink-2); }
+  p { margin: 0 0 16px; color: var(--ink-2); }
+  p strong, li strong { color: var(--ink); font-weight: 640; }
+  ul, ol { color: var(--ink-2); margin: 0 0 16px; padding-left: 1.35em; }
+  li { margin-bottom: 6px; }
+  hr {
+    border: none; border-top: 1px solid var(--line-soft);
+    margin: 32px 0;
+  }
+  blockquote {
+    margin: 18px 0; padding: 12px 18px;
+    border-left: 3px solid var(--amber);
+    background: var(--bg-soft); border-radius: 0 8px 8px 0;
+    color: var(--ink-2);
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+
+  code {
+    font-family: var(--mono); font-size: 0.86em;
+    background: rgba(255,255,255,.06); color: var(--amber);
+    padding: 1px 6px; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-soft); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; overflow-x: auto;
+    margin: 0 0 20px; line-height: 1.5;
+  }
+  pre code {
+    background: none; color: var(--ink-2); padding: 0;
+    font-size: 13px; white-space: pre;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 0 0 20px;
+    font-size: 14.5px;
+  }
+  th, td {
+    border: 1px solid var(--line); padding: 8px 12px;
+    text-align: left; vertical-align: top;
+  }
+  th {
+    background: var(--panel); color: var(--ink);
+    font-family: var(--mono); font-size: 12px;
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+  td { color: var(--ink-2); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+  .mermaid {
+    background: var(--bg-soft); border: 1px solid var(--line);
+    border-radius: 10px; padding: 18px 12px; margin: 0 0 20px;
+    overflow-x: auto; text-align: center;
+  }
+
+  header.hero { padding: 56px 0 28px; }
+  .backlink {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+    color: var(--muted); text-decoration: none;
+  }
+  .backlink:hover { color: var(--amber); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--amber); margin: 18px 0 0;
+  }
+  .subtitle { font-size: 18px; color: var(--ink-2); max-width: 38em; margin: 0 0 18px; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0;
+  }
+  .chip {
+    font-family: var(--mono); font-size: 11.5px;
+    border: 1px solid var(--line); border-radius: 99px;
+    padding: 4px 12px; color: var(--ink-2); background: var(--panel);
+  }
+  .disclaimer {
+    margin-top: 22px; padding: 14px 16px;
+    border: 1px solid var(--line); border-left: 3px solid var(--blue);
+    border-radius: 8px; background: var(--bg-soft);
+    font-size: 13.5px; color: var(--muted);
+  }
+  .disclaimer strong { color: var(--ink-2); }
+
+  #toc { margin: 8px 0 40px; }
+  #toc h2 { margin-top: 8px; }
+  .toc-grid { display: grid; gap: 6px; margin: 12px 0 0; }
+  .toc-grid a {
+    display: grid; grid-template-columns: 48px 1fr;
+    gap: 10px; text-decoration: none; color: var(--ink-2);
+    padding: 8px 10px; border-radius: 8px; border: 1px solid transparent;
+  }
+  .toc-grid a:hover { border-color: var(--line); background: var(--panel); color: var(--ink); }
+  .toc-grid .n { font-family: var(--mono); color: var(--amber); font-size: 12px; }
+  .toc-part {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--muted);
+    margin: 18px 0 6px; padding-left: 10px;
+  }
+
+  footer {
+    max-width: 840px; margin: 0 auto; padding: 28px 20px 60px;
+    border-top: 1px solid var(--line-soft);
+    color: var(--muted); font-size: 13.5px;
+  }
+  footer a { color: var(--blue); }
+
+  @media (max-width: 720px) {
+    nav.topnav a { padding: 12px 8px; }
+    main { padding: 0 16px 48px; }
+  }
+
+  /* ---- OpenHands interactive widgets (base styles adapted from the Hermes book) ---- */
+  .hw { margin: 8px 0 26px; padding: 16px; background: var(--bg-soft);
+    border: 1px solid var(--line); border-radius: 12px; }
+  .hw-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 0 10px; }
+  .hw-tag { font-family: var(--mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--amber); border: 1px solid var(--amber-dim); border-radius: 99px; padding: 2px 9px; }
+  .hw-title { font-weight: 600; color: var(--ink); font-size: 15.5px; }
+  .hw-hint { font-size: 12.5px; color: var(--muted); flex-basis: 100%; }
+  .hw button { font: 500 12.5px/1 var(--mono); color: var(--ink-2); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; cursor: pointer; min-height: 34px; }
+  .hw button:hover { border-color: var(--amber-dim); color: var(--ink); }
+  .hw button[aria-pressed="true"], .hw button.on { border-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+  .hw button:disabled { opacity: .4; cursor: default; }
+  .hw button:focus-visible, .hw [tabindex]:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .hw-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .hw-panel { border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 8px;
+    background: var(--panel); padding: 10px 14px; font-size: 14px; color: var(--ink-2); min-height: 64px; }
+  .hw-panel b { color: var(--ink); }
+  .hw-panel a { color: var(--blue); }
+  .hw code { font-size: .88em; }
+  .hw noscript, .hw .hw-fallback { font-size: 13px; color: var(--muted); }
+  /* explorer */
+  .hw-arch-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px;
+    background: radial-gradient(circle at 50% 40%, rgba(255,180,84,.05), transparent 60%); }
+  .hw-arch svg { display: block; width: 100%; min-width: 600px; height: auto; user-select: none; -webkit-user-select: none; }
+  .hw-arch .n { cursor: pointer; touch-action: none; }
+  .hw-arch .n rect { stroke-width: 1.4; transition: opacity .15s; }
+  .hw-arch .n text { font-family: var(--mono); pointer-events: none; transition: opacity .15s; }
+  .hw-arch .n .lb { font-size: 12.5px; fill: var(--ink); font-weight: 600; }
+  .hw-arch .n .cn { font-size: 9.5px; fill: var(--muted); letter-spacing: .08em; }
+  .hw-arch .k-door rect { fill: #13213a; stroke: var(--blue); }
+  .hw-arch .k-core rect { fill: #2a2112; stroke: var(--amber); }
+  .hw-arch .k-store rect { fill: #10261f; stroke: var(--green); }
+  .hw-arch .k-loop rect { fill: #1c1a2e; stroke: #A89BFF; }
+  .hw-arch .n.sel rect { stroke-width: 2.6; }
+  .hw-arch .dim { opacity: .22; }
+  .hw-arch .e line { stroke: #3a4a68; stroke-width: 1.3; transition: stroke .15s, opacity .15s; }
+  .hw-arch .e text { font-family: var(--mono); font-size: 10px; fill: var(--amber); opacity: 0; paint-order: stroke;
+    stroke: var(--bg-soft); stroke-width: 4px; pointer-events: none; }
+  .hw-arch .e.hot line { stroke: var(--amber); stroke-width: 2; }
+  .hw-arch .e.hot text { opacity: 1; }
+  .hw-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 11.5px var(--mono); color: var(--muted); margin: 8px 0 10px; }
+  .hw-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1.5px solid; }
+  /* stepper */
+  .hw-phases { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; margin: 0 0 12px; }
+  .hw-ph { font: 600 12px/1.25 var(--mono); padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line);
+    color: var(--muted); background: var(--bg); text-align: center; transition: all .2s; }
+  .hw-ph small { display: block; font-weight: 400; font-size: 10px; margin-top: 3px; opacity: .8; }
+  .hw-ph.seen { color: var(--ink-2); border-color: var(--line); background: var(--panel); }
+  .hw-ph.cur { color: var(--bg); background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+  .hw-ph.cur.bad { background: #FF7A7A; border-color: #FF7A7A; }
+  .hw-step-n { font: 11px var(--mono); color: var(--amber); letter-spacing: .1em; }
+  .hw-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-top: 12px; }
+  .hw-tx { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); min-height: 64px; }
+  .hw-tx .h { font: 10.5px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .hw-msg { font: 12px/1.35 var(--mono); padding: 4px 8px; border-radius: 6px; margin: 0 0 4px; border-left: 3px solid var(--line); color: var(--ink-2); background: var(--panel); }
+  .hw-msg.r-system { border-left-color: var(--muted); }
+  .hw-msg.r-user { border-left-color: var(--blue); }
+  .hw-msg.r-assistant { border-left-color: var(--amber); }
+  .hw-msg.r-tool { border-left-color: var(--green); }
+  .hw-msg.r-note { border-left-color: #FF7A7A; font-style: italic; }
+  .hw-msg.new { animation: hwflash 1s ease; }
+  @keyframes hwflash { from { background: var(--amber-soft); } to { background: var(--panel); } }
+  .hw-meter { font: 11.5px var(--mono); color: var(--muted); margin-top: 8px; }
+  .hw-meter b { color: var(--amber); }
+  /* gating */
+  .hw-pipe { list-style: none; margin: 0; padding: 0; counter-reset: hwp; }
+  .hw-pipe > li { position: relative; padding: 7px 10px 7px 38px; margin: 0 0 5px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg); color: var(--muted); font-size: 13.5px; transition: all .2s; }
+  .hw-pipe > li::before { counter-increment: hwp; content: counter(hwp); position: absolute; left: 10px; top: 8px;
+    width: 19px; height: 19px; border-radius: 50%; border: 1px solid var(--line); font: 600 10.5px/18px var(--mono); text-align: center; }
+  .hw-pipe .t { font-family: var(--mono); font-size: 12.5px; color: inherit; font-weight: 600; }
+  .hw-pipe .v { display: block; font-size: 12.5px; margin-top: 2px; min-height: 0; }
+  .hw-pipe .sub { list-style: none; margin: 6px 0 2px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .hw-pipe .sub li { font: 11.5px/1.3 var(--mono); padding: 5px 7px; border-radius: 6px; border: 1px dashed var(--line); transition: all .2s; }
+  .hw-pipe .pass { color: var(--ink-2); border-color: var(--green) !important; background: rgba(95,214,164,.07); }
+  .hw-pipe .pass::before { border-color: var(--green); color: var(--green); }
+  .hw-pipe .skip { color: var(--muted); border-style: dashed !important; opacity: .7; }
+  .hw-pipe .ask { color: var(--ink); border-color: var(--blue) !important; background: var(--blue-soft); }
+  .hw-pipe .deny { color: #FFB3B3; border-color: #FF7A7A !important; background: rgba(255,122,122,.09); }
+  .hw-pipe .deny::before { border-color: #FF7A7A; color: #FF7A7A; }
+  .hw-pipe .cur { box-shadow: 0 0 0 3px var(--amber-soft); }
+  .hw-verdict { margin-top: 10px; }
+  .hw-verdict.ok { border-left-color: var(--green); }
+  .hw-verdict.no { border-left-color: #FF7A7A; }
+  @media (max-width: 720px) {
+    .hw { padding: 12px; margin-left: -4px; margin-right: -4px; }
+    .hw-phases { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .hw-cols { grid-template-columns: 1fr; }
+    .hw-pipe .sub { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .hw * { transition: none !important; animation: none !important; } }
+  /* ---- P1: memory & skills ---- */
+  .hw-ms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .hw-ms-col { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); min-width: 0; transition: box-shadow .3s, border-color .3s; }
+  .hw-ms-col.chg { border-color: var(--amber-dim); box-shadow: 0 0 0 3px var(--amber-soft); }
+  .hw-ms-col .h { font: 600 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 6px; }
+  .hw-ms-col .sub { font: 10.5px var(--mono); color: var(--muted); margin: 8px 0 4px; }
+  .hw-ms-col .hw-msg { overflow-wrap: anywhere; }
+  .hw-badge { display: inline-block; font: 600 9.5px/1 var(--mono); letter-spacing: .04em; text-transform: none; padding: 3px 6px; border-radius: 99px; margin-left: 4px; vertical-align: 1px; }
+  .hw-badge.ok { color: var(--green); border: 1px solid var(--green); }
+  .hw-badge.warn { color: var(--amber); border: 1px solid var(--amber); }
+  .hw-bad { color: #FF9A9A; }
+  /* ---- P1: sub-agent tree ---- */
+  .hw-ctl { align-items: center; }
+  .hw-cnt { font: 600 12.5px var(--mono); color: var(--amber); min-width: 64px; text-align: center; }
+  .hw-subagents svg { display: block; width: 100%; min-width: 600px; height: auto; }
+  .hw-subagents .tn rect { fill: #13213a; stroke: var(--blue); stroke-width: 1.4; }
+  .hw-subagents .tn.p rect { fill: #2a2112; stroke: var(--amber); }
+  .hw-subagents .tn.g rect { fill: #1c1a2e; stroke: #A89BFF; }
+  .hw-subagents .tn.ok rect { fill: #10261f; stroke: var(--green); }
+  .hw-subagents .tn.bad rect { fill: rgba(255,122,122,.1); stroke: #FF7A7A; }
+  .hw-subagents .tn text { font-family: var(--mono); fill: var(--ink); }
+  .hw-subagents .tn .l1 { font-size: 11.5px; font-weight: 600; }
+  .hw-subagents .tn .l2 { font-size: 9.5px; fill: var(--muted); }
+  .hw-subagents .tl { stroke: #3a4a68; stroke-width: 1.4; }
+  .hw-subagents .tl.dash { stroke: #FF7A7A; stroke-dasharray: 4 4; }
+  /* ---- P1: compression ---- */
+  .hw-win { position: relative; margin: 26px 0 24px; }
+  .hw-track { display: flex; height: 46px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background:
+    repeating-linear-gradient(90deg, transparent 0 9.9%, rgba(255,255,255,.04) 9.9% 10%); }
+  .hw-blk { flex: none; height: 100%; border-right: 1px solid var(--bg); font: 600 10px/46px var(--mono); color: var(--bg);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 3px; transition: width .35s ease, opacity .3s; }
+  .k-sys { background: #8493AC; } .k-user { background: var(--blue); } .k-asst { background: var(--amber); }
+  .k-tool { background: var(--green); } .k-skill { background: #A89BFF; } .k-sum { background: #FFD59A; }
+  .hw-blk.stub { opacity: .55; }
+  .hw-blk.z-head, .hw-blk.z-tail { box-shadow: inset 0 -5px 0 rgba(10,15,26,.75); }
+  .hw-blk.z-mid { opacity: .45; outline: 1px dashed #FF7A7A; outline-offset: -2px; }
+  .hw-th { position: absolute; top: -20px; bottom: -4px; width: 0; border-left: 2px dashed var(--amber); }
+  .hw-th.g { border-left-color: #FF7A7A; }
+  .hw-th span { position: absolute; top: 0; left: 4px; font: 10px var(--mono); color: var(--amber); white-space: nowrap; }
+  .hw-th.g { top: -4px; bottom: -20px; }
+  .hw-th.g span { color: #FF9A9A; left: auto; right: 4px; top: auto; bottom: 0; }
+  .hw-legend i.k-sys, .hw-legend i.k-user, .hw-legend i.k-asst, .hw-legend i.k-tool, .hw-legend i.k-skill, .hw-legend i.k-sum { border: none; }
+  .hw-phases-4 { margin-top: 10px; }
+  @media (max-width: 720px) {
+    .hw-ms { grid-template-columns: 1fr; }
+    .hw-phases-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  }
+  /* ---- OpenHands additions ---- */
+  .hw-illus { font-style: italic; }
+  .hw-stat { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .04em; padding: 7px 9px; border-radius: 7px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--bg); overflow-wrap: anywhere; transition: all .2s; }
+  .hw-status-v .hw-stat { color: var(--bg); background: var(--amber); border-color: var(--amber); }
+  .hw-status-v .hw-stat.s-finished { background: var(--green); border-color: var(--green); }
+  .hw-status-v .hw-stat.s-waiting_for_confirmation { background: var(--blue); border-color: var(--blue); }
+  .hw-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hw-pills .hw-stat.on { color: var(--bg); background: var(--amber); border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+  .hw-pills .hw-stat.on.s-finished { background: var(--green); border-color: var(--green); }
+  .hw-pills .hw-stat.on.s-error, .hw-pills .hw-stat.on.s-stuck { background: #FF7A7A; border-color: #FF7A7A; }
+  .hw-pills .hw-stat.on.s-waiting_for_confirmation { background: var(--blue); border-color: var(--blue); }
+  .hw-lanes { display: grid; gap: 8px; margin: 0 0 10px; }
+  .hw-lane { font: 600 12px/1.3 var(--mono); text-align: center; padding: 18px 6px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--muted); overflow-wrap: anywhere; transition: all .2s; position: relative; }
+  .hw-lane.seen { color: var(--ink-2); background: var(--panel); }
+  .hw-lane.cur { color: var(--bg); background: var(--green); border-color: var(--green); box-shadow: 0 0 0 3px rgba(95,214,164,.18); }
+  .hw-gate { display: grid; gap: 8px; margin: 0 0 12px; }
+  .hw-grp { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .hw-grp-l { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); min-width: 120px; }
+  .hw-ctrack { display: flex; flex-wrap: wrap; gap: 2px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); min-height: 40px; margin: 8px 0 0; }
+  .hw-ev { display: inline-block; width: 10px; height: 18px; border-radius: 2px; background: var(--line); }
+  .hw-ev.link { margin-left: -2px; border-left: 1px solid rgba(0,0,0,.35); }
+  .hw-ev.head { outline: 1px solid var(--ink-2); outline-offset: -1px; }
+  .k-sys { background: var(--muted) !important; }
+  .k-user { background: var(--blue) !important; }
+  .k-act { background: var(--amber) !important; }
+  .k-obs { background: var(--green) !important; }
+  .k-sum { background: #A89BFF !important; width: 26px; }
+  .hw-cbar { display: block; height: 6px; border-radius: 4px; background: var(--line); margin: 6px 0; overflow: hidden; }
+  .hw-cbar i { display: block; height: 100%; background: var(--amber); transition: width .3s; }
+  .hw-ckey { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .hw-ckey i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 2px; vertical-align: -1px; }
+  .hw-ckey i.k-sum { width: 10px; }
+  @media (max-width: 720px) {
+    .hw-lane { padding: 12px 4px; font-size: 11px; }
+    .hw-grp-l { min-width: 100%; }
+    .hw-pills .hw-stat { font-size: 10px; }
+  }
+  /* Mermaid offline fallback: show diagram source as readable text */
+  .mermaid.mmd-off { text-align: left; white-space: pre; font: 12.5px/1.45 var(--mono); color: var(--ink-2); overflow-x: auto; }
+  .mmd-note { font: 12px var(--mono); color: var(--muted); margin: -12px 0 20px; }
+  /* long identifiers and tables on narrow screens */
+  main p code, main li code, main td code { overflow-wrap: anywhere; }
+  @media (max-width: 720px) {
+    main table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    main th, main td { overflow-wrap: anywhere; padding: 7px 8px; }
+  }
+
+  /* ---- Font size control (Default / Large) ---- */
+  nav.topnav { display: flex; align-items: center; }
+  nav.topnav .rail { flex: 1 1 auto; min-width: 0; }
+  .fontctl { flex: none; display: flex; align-items: center; gap: 4px; padding: 0 12px 0 6px; }
+  .fontctl .lbl { font: 10.5px var(--mono); letter-spacing: .12em; color: var(--muted); text-transform: uppercase; margin-right: 2px; }
+  .fontctl button { font: 600 12px/1 var(--mono); color: var(--ink-2); background: transparent;
+    border: 1px solid var(--line); border-radius: 7px; min-width: 34px; min-height: 30px; padding: 0 8px; cursor: pointer; }
+  .fontctl button.big { font-size: 15px; }
+  .fontctl button[aria-pressed="true"] { color: var(--amber); border-color: var(--amber); background: var(--amber-soft); }
+  .fontctl button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  @media (max-width: 720px) { .fontctl .lbl { display: none; } .fontctl { padding-right: 8px; } }
+
+  html.fs-large body { font-size: 19.5px; line-height: 1.72; }
+  html.fs-large h3 { font-size: 20.5px; }
+  html.fs-large h4 { font-size: 18px; }
+  html.fs-large pre code { font-size: 15px; }
+  html.fs-large table { font-size: 17px; }
+  html.fs-large th { font-size: 13.5px; }
+  html.fs-large .subtitle { font-size: 21px; }
+  html.fs-large .disclaimer { font-size: 15.5px; }
+  html.fs-large nav.topnav .rail a { font-size: 12.5px; }
+  @media (min-width: 721px) { html.fs-large .mermaid > svg { zoom: 1.2; } }
+  html.fs-large .hw-title { font-size: 18px; }
+  html.fs-large .hw-hint, html.fs-large .hw .hw-fallback { font-size: 15px; }
+  html.fs-large .hw-panel { font-size: 16.5px; }
+  html.fs-large .hw button { font-size: 14px; }
+  html.fs-large .hw-ph { font-size: 13.5px; }
+  html.fs-large .hw-ph small { font-size: 11.5px; }
+  html.fs-large .hw-msg { font-size: 13.5px; }
+  html.fs-large .hw-meter, html.fs-large .hw-legend { font-size: 13px; }
+  html.fs-large .hw-pipe > li { font-size: 15.5px; }
+  html.fs-large .hw-pipe .t { font-size: 14px; }
+  html.fs-large .hw-pipe .v { font-size: 14px; }
+  html.fs-large .hw-pipe .sub li { font-size: 13px; }
+  html.fs-large .hw-arch .n .lb { font-size: 13.5px; }
+  html.fs-large .hw-arch .n .cn { font-size: 11px; }
+  html.fs-large .hw-arch .e text { font-size: 11.5px; }
+  @media (max-width: 720px) {
+    html.fs-large table { font-size: 15.5px; }
+    html.fs-large th, html.fs-large td { padding: 7px 8px; overflow-wrap: anywhere; }
+  }
+  html.fs-large .hw-ms-col .h { font-size: 12px; }
+  html.fs-large .hw-ms-col .sub { font-size: 12px; }
+  html.fs-large .hw-badge { font-size: 11px; }
+  html.fs-large .hw-cnt { font-size: 14px; }
+  html.fs-large .hw-subagents .tn .l1 { font-size: 12.5px; }
+  html.fs-large .hw-subagents .tn .l2 { font-size: 10.5px; }
+  html.fs-large .hw-blk { font-size: 11px; }
+  html.fs-large .hw-th span { font-size: 11.5px; }
+  html.fs-large .hw-stat { font-size: 12.5px; }
+  html.fs-large .hw-lane { font-size: 14px; }
+  html.fs-large .hw-grp-l { font-size: 12px; }
+  html.fs-large .hw-step-n { font-size: 12.5px; }
+  html.fs-large .mermaid.mmd-off { font-size: 14px; }
+  @media (max-width: 720px) { html.fs-large .hw-lane { font-size: 12.5px; } html.fs-large .hw-pills .hw-stat { font-size: 11px; } }
+
+</style>
+<script>try{if(localStorage.getItem('oh-font')==='large')document.documentElement.classList.add('fs-large')}catch(e){}</script>
+</head>
+<body>
+<div id="progress" aria-hidden="true"></div>
+<nav class="topnav" aria-label="Chapters">
+  <div class="rail">
+    <span class="brand">OPENHANDS / FROM SOURCE</span>
+    <a href="#hero">Intro</a>
+    <a href="#toc">TOC</a>
+    <a href="#ch01">01 Shape</a><a href="#ch02">02 Events</a><a href="#ch03">03 State</a><a href="#ch04">04 Models</a><a href="#ch05">05 Step</a><a href="#ch06">06 Loop</a><a href="#ch07">07 Tools</a><a href="#ch08">08 Where</a><a href="#ch09">09 Safety</a><a href="#ch10">10 Secrets</a><a href="#ch11">11 Forget</a><a href="#ch12">12 Context</a><a href="#ch13">13 Sub-agents</a><a href="#ch14">14 Server</a><a href="#ch15">15 Canvas</a><a href="#ch16">16 Close</a>
+  </div>
+  <div class="fontctl" role="group" aria-label="Text size">
+    <span class="lbl">Text</span>
+    <button type="button" data-font="default" aria-pressed="true" title="Default text size">A</button>
+    <button type="button" class="big" data-font="large" aria-pressed="false" title="Large text size">A+</button>
+  </div>
+</nav>
+
+<main>
+<header class="hero" id="hero">
+  <a class="backlink" href="../index.html">↑ 电子书架</a>
+  <p class="eyebrow">Architecture · Open Coding Agent · Educational</p>
+  <h1>OpenHands from Source</h1>
+  <p class="subtitle">How <a href="https://github.com/OpenHands/OpenHands">OpenHands</a> is built:
+  the agent core in the <a href="https://github.com/OpenHands/software-agent-sdk">Software Agent SDK</a>,
+  the Agent Server that runs it, and the Agent Canvas on top. Each chapter starts from the problem,
+  weighs the options, explains the choice OpenHands made, and ends with what you can reuse.</p>
+  <div class="meta">
+    <span class="chip">16 chapters</span>
+    <span class="chip">6 parts</span>
+    <span class="chip">42 Mermaid diagrams</span>
+    <span class="chip">6 interactive widgets</span>
+    <span class="chip">MIT-studied · independent</span>
+  </div>
+  <div class="disclaimer">
+    <strong>Independent educational analysis.</strong>
+    Not affiliated with, endorsed by, or sponsored by OpenHands or All Hands AI.
+    Based on reading the public, MIT-licensed repositories
+    <code>OpenHands/OpenHands</code> (snapshot 9057a57, 2026-10-21) and
+    <code>OpenHands/software-agent-sdk</code> (snapshot 0996c33, 2026-10-20).
+    Not official documentation; details may have changed since. Example values in widgets are labelled illustrative.
+  </div>
+</header>
+
+<section id="toc">
+  <h2>Table of Contents</h2>
+  <p>Architecture over code: every chapter goes problem → options → OpenHands&rsquo;s choice → trade-offs → a short &ldquo;Apply This&rdquo;.</p>
+  <div class="toc-grid">
+<div class="toc-part">Part I — Foundations</div>
+<a href="#ch01"><span class="n">01</span><span>The Shape of OpenHands</span></a>
+<a href="#ch02"><span class="n">02</span><span>Everything Is an Event</span></a>
+<a href="#ch03"><span class="n">03</span><span>The Conversation State and Its Log</span></a>
+<a href="#ch04"><span class="n">04</span><span>Talking to Models</span></a>
+<div class="toc-part">Part II — The Agent Loop</div>
+<a href="#ch05"><span class="n">05</span><span>One Step of the Agent</span></a>
+<a href="#ch06"><span class="n">06</span><span>The Run Loop and Its States</span></a>
+<a href="#ch07"><span class="n">07</span><span>Tools — Schemas In, Observations Out</span></a>
+<a href="#ch08"><span class="n">08</span><span>Where Actions Run</span></a>
+<div class="toc-part">Part III — Safety</div>
+<a href="#ch09"><span class="n">09</span><span>Risk, Confirmation, and Hooks</span></a>
+<a href="#ch10"><span class="n">10</span><span>Secrets</span></a>
+<div class="toc-part">Part IV — Context</div>
+<a href="#ch11"><span class="n">11</span><span>Forgetting on Purpose</span></a>
+<a href="#ch12"><span class="n">12</span><span>Prompts, Skills, and Memory</span></a>
+<div class="toc-part">Part V — Scaling Out</div>
+<a href="#ch13"><span class="n">13</span><span>Sub-agents, Goals, and Critics</span></a>
+<a href="#ch14"><span class="n">14</span><span>The Agent Server</span></a>
+<a href="#ch15"><span class="n">15</span><span>Agent Canvas, the Face on Top</span></a>
+<div class="toc-part">Part VI — Looking Back</div>
+<a href="#ch16"><span class="n">16</span><span>What Holds It Together</span></a>
+  </div>
+</section>
+
+<section class="chapter" id="ch01">
+<div class="partlabel">Part I — Foundations</div>
+<h1>Chapter 1: The Shape of OpenHands</h1>
+<h2 id="the-problem-an-agent-is-not-one-program">The Problem: An Agent Is Not One Program</h2>
+<p>A coding agent sounds like one program: send it a task, it edits files, it reports back. In practice it is at least four jobs that want to live in different places.</p>
+<p>Someone has to <strong>think</strong>: build a prompt, call a model, turn the reply into tool calls. Someone has to <strong>act</strong>: run shell commands and edit files somewhere, ideally not on the only laptop you own. Someone has to <strong>remember</strong>: keep a record of what happened so a run can pause, crash, resume, or be audited. And someone has to <strong>show</strong> it: a UI where a person watches, approves, and steers.</p>
+<p>If all four live in one process, every change is a change to everything. If they live in four processes, you need a contract between them that does not rot.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>One monolith.</strong> A single app that owns the UI, the loop, and the sandbox. Simple to ship, hard to embed, and the sandbox boundary ends up wherever the UI happens to run.</li>
+<li><strong>A UI with a private backend.</strong> The frontend talks to a server only it understands. Works until a second client (a script, a CI job, another product) wants the same agent.</li>
+<li><strong>A library first, with a server and a UI as clients.</strong> The agent is an importable SDK. A server wraps it with a public API. The UI is one client of that API among many.</li>
+</ul>
+<h2 id="openhandss-choice-sdk-at-the-bottom-canvas-on-top">OpenHands&rsquo;s Choice: SDK at the Bottom, Canvas on Top</h2>
+<p>OpenHands takes the third option and splits it across repositories. The <code>OpenHands/OpenHands</code> repository is now <strong>Agent Canvas</strong>, a React and TypeScript frontend described as a self-hosted control center for coding agents and automations. The agent itself lives in <code>OpenHands/software-agent-sdk</code>, which owns the Python SDK, the <strong>Agent Server</strong>, agents and tools, conversations, events, workspaces, and the canonical REST and WebSocket API. Reusable skills and plugins live in <code>OpenHands/extensions</code>; scheduling and webhooks live in <code>OpenHands/automation</code>.</p>
+<p>This book reads both main repositories, because neither makes sense alone. Canvas&rsquo;s own architecture notes say it is <em>not</em> responsible for executing agent actions or providing sandbox isolation. Those jobs are below it.</p>
+<div class="mermaid">
+graph TD
+    subgraph CanvasRepo["OpenHands/OpenHands"]
+        UI["Agent Canvas<br/>React UI"]
+        ING["Ingress proxy<br/>one local origin"]
+    end
+    subgraph SdkRepo["OpenHands/software-agent-sdk"]
+        TS["typescript-client"]
+        AS["Agent Server<br/>REST + WebSocket"]
+        SDK["openhands-sdk<br/>agent, conversation, events"]
+        TOOLS["openhands-tools"]
+        WS["openhands-workspace"]
+    end
+    AUTO["OpenHands/automation<br/>schedules, webhooks"]
+    UI --> TS --> ING --> AS
+    ING --> AUTO
+    AS --> SDK
+    SDK --> TOOLS
+    SDK --> WS
+    AUTO -->|"dispatches conversations"| AS
+</div>
+<figure class="hw hw-arch" id="hw-arch" data-oh-widget="arch"><p class="hw-fallback">Interactive architecture explorer (needs JavaScript). The Mermaid map above shows the same structure.</p></figure>
+
+<h2 id="the-contract-runs-one-way">The Contract Runs One Way</h2>
+<p>Both repositories state the dependency direction in their contributor notes: <strong>Agent Server contract → OpenAPI → TypeScript client → Agent Canvas.</strong> A feature that crosses the line is built in the SDK first, exposed through <code>clients/typescript</code>, and only then consumed in the UI. Canvas is told not to reimplement server endpoints.</p>
+<p>This one rule explains a lot of the structure. Canvas has a test named <code>no-direct-agent-server-calls</code>. Its service layer wraps typed client classes rather than hand-written HTTP. When Canvas starts needing a newer server feature, it raises <code>compatibility.minimumAgentServer</code> in <code>config/defaults.json</code>, and at runtime it refuses servers older than that floor.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant SDK as SDK / Agent Server
+    participant API as OpenAPI contract
+    participant TC as typescript-client
+    participant CV as Agent Canvas
+    SDK->>API: new endpoint or field
+    API->>TC: regenerate typed client
+    TC->>CV: pinned npm version
+    CV->>CV: raise minimumAgentServer if required
+</div>
+<h2 id="three-ways-to-run-it">Three Ways to Run It</h2>
+<p>The README offers three install shapes, and they map directly onto where the &ldquo;act&rdquo; job happens.</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Where actions run</th>
+<th>Isolation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No sandbox (<code>agent-canvas</code>)</td>
+<td>The Agent Server runs on your machine</td>
+<td>None: the agent can touch your whole filesystem</td>
+</tr>
+<tr>
+<td>One Docker sandbox</td>
+<td>One container with a mounted projects folder</td>
+<td>The container boundary</td>
+</tr>
+<tr>
+<td>Many Docker sandboxes (<code>OH_CONVERSATION_RUNTIME=docker</code>)</td>
+<td>One container per conversation, each with its own Agent Server</td>
+<td>Per conversation</td>
+</tr>
+</tbody>
+</table>
+<p>The local stack is three processes behind an ingress: the Agent Server, the automation backend, and the static frontend. Default ports are recorded in <code>config/defaults.json</code> (ingress 8000, Agent Server 18000, automation 18001), and the ingress matches the longest path prefix first, so <code>/api/automation</code> goes to automation before <code>/api</code> goes to the Agent Server.</p>
+<h2 id="the-thesis-of-this-book">The Thesis of This Book</h2>
+<p>Strip away the UI and the deployment options and one design remains. <strong>Each conversation is an append-only log of events. The agent is a stateless function that reads that log and appends to it.</strong> Every other layer is a way to carry that log across a boundary: to disk, to a container, over a WebSocket, into a browser.</p>
+<p>The SDK says so in its own words. <code>AgentBase</code> describes agents as &ldquo;stateless and fully defined by their configuration&rdquo;. The condenser documentation calls the event log append-only and &ldquo;an almost perfect record of what transpired&rdquo;, even if the environment is lost. The rest of this book follows that log outward.</p>
+<div class="mermaid">
+graph LR
+    LOG["Event log<br/>append-only"] --> AG["Agent<br/>stateless step"]
+    AG -->|"new events"| LOG
+    LOG --> DISK["Files on disk"]
+    LOG --> SRV["Agent Server"]
+    SRV --> WSK["WebSocket frames"]
+    WSK --> CAN["Canvas stores"]
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Three repositories, pinned together.</strong> Canvas records exact versions for the server and client, and mixing unpinned branches is called unsupported. Coordination cost is real.</li>
+<li><strong>A library-first agent needs a server to be useful to a UI.</strong> The server is extra surface: auth, capacity limits, persistence.</li>
+<li><strong>The thin UI cannot fix backend gaps.</strong> Anything the server does not expose, Canvas cannot do.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Make the agent a library, and the server one client of it.</strong> Other clients then come for free.</p>
+<p><strong>Write the dependency direction down.</strong> &ldquo;Contract first, client second, UI last&rdquo; prevents a UI from growing its own private backend.</p>
+<p><strong>Pin versions in one file and enforce a minimum at runtime.</strong> A clear refusal beats a mysterious half-working UI.</p>
+<p><strong>Name the isolation level in the install instructions.</strong> &ldquo;This mode can touch your whole filesystem&rdquo; belongs on the first page.</p>
+<p><strong>Find the one data structure everything else carries.</strong> For OpenHands it is the event log.</p>
+</section>
+
+<section class="chapter" id="ch02">
+<h1>Chapter 2: Everything Is an Event</h1>
+<h2 id="the-problem-what-exactly-happened">The Problem: What Exactly Happened?</h2>
+<p>Chapter 1 claimed the event log is the center. Before trusting that, ask what a log has to capture for an agent.</p>
+<p>A model call produces text, reasoning, and tool calls. Tools produce results, errors, or nothing because a person said no. Users send messages, pause, and interrupt. The system prompt itself is a decision worth recording. If any of these lives outside the log, a resumed conversation will not match the original, and the model will be shown a history that never happened.</p>
+<p>There is a second constraint. Model APIs are strict about history: every tool call must be followed by its result, roles must alternate, the system message comes first. The log has to be easy to turn into exactly that shape.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Store the chat messages.</strong> Simple, and close to what the API wants. But pauses, rejections, state changes, and condensation do not fit in a chat transcript.</li>
+<li><strong>Store snapshots of state.</strong> Easy to restore, impossible to audit, and every snapshot repeats the whole past.</li>
+<li><strong>Store typed events, and derive messages from them.</strong> More types to design, but nothing is lost and the message list becomes a projection.</li>
+</ul>
+<h2 id="openhandss-choice-typed-events-some-of-which-become-messages">OpenHands&rsquo;s Choice: Typed Events, Some of Which Become Messages</h2>
+<p>Every event inherits from <code>Event</code>, which carries an <code>id</code>, a <code>timestamp</code>, a <code>source</code>, and a <code>parent_id</code>. A subset inherits from <code>LLMConvertibleEvent</code>, which adds one method: <code>to_llm_message()</code>. Only those events can ever reach the model.</p>
+<div class="mermaid">
+graph TD
+    E["Event<br/>id, timestamp, source, parent_id"]
+    L["LLMConvertibleEvent<br/>to_llm_message()"]
+    E --> L
+    E --> P["PauseEvent / InterruptEvent"]
+    E --> C["Condensation / CondensationRequest"]
+    E --> S["ConversationStateUpdateEvent"]
+    E --> X["ConversationErrorEvent"]
+    L --> SP["SystemPromptEvent"]
+    L --> M["MessageEvent"]
+    L --> A["ActionEvent"]
+    L --> O["ObservationBaseEvent"]
+    O --> OE["ObservationEvent"]
+    O --> UR["UserRejectObservation"]
+    O --> AE["AgentErrorEvent"]
+</div>
+<h2 id="the-core-pair-action-and-observation">The Core Pair: Action and Observation</h2>
+<p>When the model asks for a tool, the agent records an <strong><code>ActionEvent</code></strong>. It holds the model&rsquo;s thought, any reasoning or thinking blocks, the validated <code>action</code>, the <code>tool_name</code>, the <code>tool_call_id</code>, the id of the model response it came from, and a <code>security_risk</code> label (Chapter 9).</p>
+<p>Everything that answers a tool call inherits from <strong><code>ObservationBaseEvent</code></strong>, which carries the same <code>tool_name</code> and <code>tool_call_id</code>. There are three kinds:</p>
+<table>
+<thead>
+<tr>
+<th>Answer</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ObservationEvent</code></td>
+<td>The tool ran and returned a result</td>
+</tr>
+<tr>
+<td><code>UserRejectObservation</code></td>
+<td>A person rejected it, or a hook blocked it (<code>rejection_source</code> says which)</td>
+</tr>
+<tr>
+<td><code>AgentErrorEvent</code></td>
+<td>The scaffold failed: bad arguments, a crash, an interrupted call</td>
+</tr>
+</tbody>
+</table>
+<p>Because all three are observations, &ldquo;every action gets exactly one answer&rdquo; is checkable. <code>ConversationState.get_unmatched_actions()</code> finds actions with no answer yet. Those are either waiting for confirmation or were interrupted. Error events match by <code>tool_call_id</code> rather than action id, which matters after a crash, when an error is written for an action the new process never saw.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant LLM as Model
+    participant AG as Agent
+    participant LOG as Event log
+    participant T as Tool
+    LLM->>AG: tool_call(id=t1, terminal)
+    AG->>LOG: ActionEvent(tool_call_id=t1)
+    AG->>T: run
+    alt success
+        T-->>LOG: ObservationEvent(t1)
+    else rejected
+        AG-->>LOG: UserRejectObservation(t1)
+    else failure
+        AG-->>LOG: AgentErrorEvent(t1)
+    end
+</div>
+<h2 id="messages-are-also-events">Messages Are Also Events</h2>
+<p>User and agent text is a <strong><code>MessageEvent</code></strong>. A user message can carry <code>activated_skills</code> and <code>extended_content</code>: knowledge injected because a skill&rsquo;s keyword matched (Chapter 12). It can carry a <code>sender</code>, which matters when one agent talks to another. An agent message can carry a <code>critic_result</code>.</p>
+<p>The system prompt is an event too. <strong><code>SystemPromptEvent</code></strong> stores the static prompt, the tool definitions, and an optional <code>dynamic_context</code> block. It converts to a single system message with one or two content blocks; Chapter 4 shows why the split matters for caching.</p>
+<h2 id="batches-and-the-projection">Batches and the Projection</h2>
+<p>One model reply can contain several tool calls. Each becomes its own <code>ActionEvent</code>, but only the first carries the thought and reasoning. <code>LLMConvertibleEvent.events_to_messages()</code> folds a batch back into one assistant message with several tool calls, so the provider sees what it sent. The docstring calls this a read-only projection: events are immutable once created.</p>
+<h2 id="a-log-that-can-branch">A Log That Can Branch</h2>
+<p>Every event has a <code>parent_id</code>. Usually that is just the previous event, but it lets the log become a <strong>tree</strong>. <code>navigate_to(event_id)</code> moves the conversation&rsquo;s HEAD back to an earlier event; appending after that creates a sibling branch. Abandoned branches stay on disk and simply drop out of what the model sees. <code>fork()</code> copies a conversation, optionally only up to one event, into a new id.</p>
+<div class="mermaid">
+graph LR
+    S["system"] --> U1["user: fix test"]
+    U1 --> A1["action: run tests"]
+    A1 --> O1["observation: 2 failed"]
+    O1 --> A2["action: edit file"]
+    O1 -.->|"navigate_to + new message"| U2["user: try another way"]
+    U2 --> A3["action: read docs"]
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Many event types.</strong> Every new feature is a schema decision, and old events must keep loading.</li>
+<li><strong>The projection has to be perfect.</strong> A bug in converting events to messages becomes a provider error. Chapter 5 shows the recovery path.</li>
+<li><strong>Trees complicate everything that reads history.</strong> Stuck detection, the view, and condensers must read the active branch, not the raw log.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Record decisions, not just dialogue.</strong> Pauses, rejections, and state changes belong in the log.</p>
+<p><strong>Give every tool call exactly one answer, with three possible kinds.</strong> Result, rejection, error. Then &ldquo;unanswered&rdquo; is a query.</p>
+<p><strong>Mark which events the model may see.</strong> A single <code>to_llm_message()</code> boundary keeps internal events out of prompts.</p>
+<p><strong>Treat the message list as a projection.</strong> Never edit history; derive it.</p>
+<p><strong>Add a parent pointer early.</strong> Branching later is cheap if every event already knows its parent.</p>
+</section>
+
+<section class="chapter" id="ch03">
+<h1>Chapter 3: The Conversation State and Its Log</h1>
+<h2 id="the-problem-a-log-that-survives-real-life">The Problem: A Log That Survives Real Life</h2>
+<p>Chapter 2 defined what goes into the log. Now the log has to live somewhere, and real life is unkind to it.</p>
+<p>Several threads touch one conversation at once: the run loop appending events, a user sending a message, a UI reading a snapshot, a pause request. Processes restart. A server may be asked to resume a conversation it did not start. Secrets end up in state and must not end up in plain text on disk. And a user may resume with a different model or a new tool, and expect it to work.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>A database.</strong> Strong guarantees, but a heavy dependency for an SDK that should run in a script.</li>
+<li><strong>One big JSON file per conversation.</strong> Easy, but every append rewrites the whole history, and a crash mid-write loses everything.</li>
+<li><strong>One small file per event, plus a small file for everything else.</strong> Appends are cheap and atomic per event; the rest of the state is small enough to rewrite.</li>
+</ul>
+<h2 id="openhandss-choice-base-state-plus-an-event-directory">OpenHands&rsquo;s Choice: Base State Plus an Event Directory</h2>
+<p>A conversation&rsquo;s persistence directory holds two things:</p>
+<ul>
+<li><strong><code>base_state.json</code></strong>: everything in <code>ConversationState</code> except the events. Status, confirmation policy, security analyzer, activated skills, blocked actions, the HEAD pointer, stats, the secret registry, tags.</li>
+<li><strong><code>events/</code></strong>: one JSON file per event, named <code>event-{index:05d}-{event_id}.json</code>. The index is padded to five digits but not capped.</li>
+</ul>
+<div class="mermaid">
+graph TD
+    CS["ConversationState"] --> BS["base_state.json<br/>status, policy, analyzer,<br/>HEAD, stats, secrets"]
+    CS --> EL["EventLog"]
+    EL --> E0["events/event-00000-…json"]
+    EL --> E1["events/event-00001-…json"]
+    EL --> EN["events/event-0000N-…json"]
+    CS --> V["View<br/>cached, active branch only"]
+</div>
+<p><strong>Events are written through one chokepoint.</strong> <code>ConversationState.append_event()</code> stamps the <code>parent_id</code>, appends through <code>EventLog</code>, and advances HEAD. Stamping there, not only in the emit callback, guarantees no event enters the log without a parent, even one a hook swapped in.</p>
+<p><strong>The log locks across processes.</strong> <code>EventLog.append()</code> takes a file lock from the <code>FileStore</code> and keeps a small length marker so it can tell whether another process appended since it last looked. If so, it scans only the new files. The code warns that <code>flock()</code> is not reliable on NFS, so shared network storage needs a different coordination mechanism.</p>
+<p><strong>Base state saves itself.</strong> Assigning a public field on <code>ConversationState</code> writes <code>base_state.json</code> immediately. Inside a <code>with state:</code> block, writes are deferred until the block exits, so several changes cost one write.</p>
+<h2 id="one-lock-first-come-first-served">One Lock, First Come First Served</h2>
+<p>Every mutation of the state happens while holding <code>ConversationState</code>&rsquo;s lock, which is a <strong><code>FIFOLock</code></strong>: reentrant like <code>RLock</code>, but threads acquire it in the order they asked. A standard lock can starve a thread; here a user&rsquo;s <code>send_message()</code> cannot be starved by a busy run loop.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant RL as Run loop
+    participant LK as FIFOLock
+    participant UM as send_message()
+    participant UI as Snapshot reader
+    RL->>LK: acquire (step)
+    UM->>LK: wait (queued 1st)
+    UI->>LK: wait (queued 2nd)
+    RL->>LK: release
+    LK-->>UM: granted
+    UM->>LK: release
+    LK-->>UI: granted
+</div>
+<p>The async run path goes further. While waiting on the network for a model reply, it releases the state lock and reacquires it afterwards, so <code>send_message()</code> and snapshots stay responsive during a long completion. Chapter 6 shows why this matters.</p>
+<h2 id="secrets-on-disk-encrypt-or-forget">Secrets on Disk: Encrypt or Forget</h2>
+<p>State contains secrets: API keys inside the LLM config, values in the secret registry. When the state is saved with a <strong>cipher</strong>, secrets are encrypted. Without one, they are <strong>redacted</strong>, meaning lost. A resumed conversation without a cipher will not have its keys back.</p>
+<p>The Agent Server makes this explicit. Its <code>OH_SECRET_KEY</code> setting encrypts sensitive values in stored conversations, and its README calls it required for persistence across restarts. Chapter 10 covers the rest of the secret path.</p>
+<h2 id="resuming-same-agent-type-tools-only-grow">Resuming: Same Agent Type, Tools Only Grow</h2>
+<p><code>ConversationState.create()</code> either starts a new conversation or loads a persisted one. On load, it does not merge old and new configuration. It checks compatibility and then uses the <strong>runtime</strong> agent.</p>
+<p><code>AgentBase.verify()</code> holds two rules: the agent class must match, and <strong>tools may be added but never removed</strong>. The reason is in the docstring: the model may already have been told about a tool, and history may contain calls to it. Adding a tool is safe; the model simply gains a capability next turn. Everything else, including the LLM, the condenser, the prompts, and the agent context, may change freely between sessions.</p>
+<div class="mermaid">
+flowchart TD
+    R["Resume conversation"] --> T{"Agent class matches?"}
+    T -->|no| X["Refuse"]
+    T -->|yes| U{"Any persisted tool missing?"}
+    U -->|yes| X
+    U -->|no| OK["Use runtime agent<br/>new LLM, prompts, condenser allowed"]
+</div>
+<h2 id="the-view-is-cached">The View Is Cached</h2>
+<p>The model never reads the raw log. It reads a <strong><code>View</code></strong> of the active branch, with condensation applied (Chapter 11). Rebuilding that from thousands of events every step would be slow, so <code>state.view</code> is maintained incrementally: a normal append replays only the new tail. A branch switch, a fork, or a cold load triggers one full rebuild with all API-shape rules enforced.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Many small files.</strong> Cheap appends, but large conversations mean large directories, and counting events means scanning them.</li>
+<li><strong>File locks are local.</strong> Shared network filesystems need extra care.</li>
+<li><strong>No cipher, no secrets.</strong> Redaction is safe by default but surprises people who expected a full resume.</li>
+<li><strong>Tool removal is forbidden.</strong> Cleaning up a tool list means starting a new conversation.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Split append-only history from small mutable state.</strong> Each gets the storage it deserves.</p>
+<p><strong>Write events through one function.</strong> Stamping, appending, and moving HEAD in one place keeps invariants from leaking.</p>
+<p><strong>Use a fair lock when users and loops share state.</strong> Starvation shows up as an unresponsive Send button.</p>
+<p><strong>Encrypt secrets or drop them, never store them plain.</strong> Make the choice explicit in configuration.</p>
+<p><strong>On resume, verify instead of merge.</strong> &ldquo;Tools may only grow&rdquo; is a rule you can state and check.</p>
+</section>
+
+<section class="chapter" id="ch04">
+<h1>Chapter 4: Talking to Models</h1>
+<h2 id="the-problem-every-provider-is-slightly-different">The Problem: Every Provider Is Slightly Different</h2>
+<p>The agent needs one call: here are messages and tools, give me a reply. Behind that call sit dozens of providers with different endpoints, tool-calling formats, caching rules, reasoning formats, error messages, and rate limits. Some models have no native tool calling at all. Requests fail transiently. Users want to switch models mid-conversation and see what each one cost.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Write one client per provider.</strong> Full control, endless maintenance.</li>
+<li><strong>Use a provider-neutral library and accept its lowest common denominator.</strong> Fast to start, but caching, reasoning, and error handling get lost in translation.</li>
+<li><strong>Use a neutral library for transport, and own the behaviour on top.</strong> Retries, caching marks, tool-calling fallback, error classification, metrics, and profiles live in your code.</li>
+</ul>
+<h2 id="openhandss-choice-one-llm-class-over-litellm">OpenHands&rsquo;s Choice: One <code>LLM</code> Class Over LiteLLM</h2>
+<p>The SDK&rsquo;s <code>LLM</code> class is a Pydantic model that wraps <code>litellm</code>. LiteLLM handles transport to each provider; <code>LLM</code> owns everything the agent depends on. It is configuration, not a connection: like <code>Agent</code>, it is treated as frozen and may be shared across conversations. Per-call context is threaded through each request instead of stored on the object.</p>
+<div class="mermaid">
+graph LR
+    AG["Agent.step"] --> G["LLM.generate<br/>messages + tools"]
+    G --> CACHE["apply prompt-cache marks"]
+    G --> FC{"native tool calling?"}
+    FC -->|yes| LIT["litellm completion / responses"]
+    FC -->|no| MOCK["tool calls described in prompt,<br/>parsed back from text"]
+    MOCK --> LIT
+    LIT --> RT["retry with backoff"]
+    RT --> FB["fallback profiles"]
+    FB --> ERR["classify errors"]
+    LIT --> RESP["LLMResponse<br/>message + metrics"]
+</div>
+<h2 id="what-llm-owns">What <code>LLM</code> Owns</h2>
+<p><strong>Endpoint mode.</strong> <code>api_mode</code> is <code>auto</code>, <code>chat</code>, or <code>responses</code>. Auto resolves from model metadata; the explicit values exist for proxy aliases and brand-new models. <code>capability_overrides</code> can force flags like vision or prompt-cache support when metadata is wrong.</p>
+<p><strong>Retries.</strong> The defaults are five retries with exponential backoff between 8 and 64 seconds (<code>num_retries</code>, <code>retry_min_wait</code>, <code>retry_max_wait</code>, <code>retry_multiplier</code>). Hard timeouts sit inside each attempt so a timeout is itself retryable; a streaming idle timeout resets every time a chunk arrives.</p>
+<p><strong>Tool calling without native support.</strong> <code>native_tool_calling</code> defaults to on. When it is off, a mixin converts tool definitions into prompt text and parses the reply back into tool calls, so the rest of the agent never knows the difference.</p>
+<p><strong>A risk field in every tool schema.</strong> The agent calls <code>generate()</code> with <code>add_security_risk_prediction=True</code>. The tool schema sent to the model gains a <code>security_risk</code> field so the model labels each action. Chapter 9 explains who reads that label.</p>
+<h2 id="caching-without-moving-the-prefix">Caching Without Moving the Prefix</h2>
+<p>Prompt caching pays only if the beginning of the request stays byte-identical. <code>LLM._apply_prompt_caching()</code> places two breakpoints:</p>
+<ol>
+<li>The <strong>system message&rsquo;s first block</strong>. The system prompt is built as two blocks, a static prompt and a per-conversation dynamic context, and only the static block is marked. That lets different conversations share one cached system prompt.</li>
+<li>The <strong>last user or tool message</strong>, so the cached prefix extends every turn. The code notes this second mark is Anthropic-specific; Gemini is excluded because its cache cannot extend that way.</li>
+</ol>
+<div class="mermaid">
+graph LR
+    S1["system block 1<br/>static prompt<br/>CACHE MARK"] --> S2["system block 2<br/>dynamic context<br/>no mark"]
+    S2 --> H["history…"]
+    H --> L["last user / tool message<br/>CACHE MARK"]
+</div>
+<p>The SDK also enforces an invariant for every request it builds, including condenser and security-analyzer calls: a <code>system</code> message comes before the first <code>user</code> message. Exceptions must be documented.</p>
+<h2 id="errors-are-routed-not-just-raised">Errors Are Routed, Not Just Raised</h2>
+<p><code>LLM</code> classifies provider errors into a small set of typed exceptions, and the agent loop treats each differently (Chapter 5):</p>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>What happens next</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Malformed function call</td>
+<td>Sent back to the model as a user message, so it can correct itself</td>
+</tr>
+<tr>
+<td>Content policy block</td>
+<td>A nudge asking the model to rephrase; the run continues</td>
+</tr>
+<tr>
+<td>Context window exceeded</td>
+<td>A condensation request, if the condenser can handle one</td>
+</tr>
+<tr>
+<td>Malformed history</td>
+<td>View rebuilt with full rules, then condensation</td>
+</tr>
+<tr>
+<td>Authentication</td>
+<td>The conversation goes to <code>ERROR</code> with a clear message</td>
+</tr>
+</tbody>
+</table>
+<h2 id="many-models-in-one-conversation">Many Models in One Conversation</h2>
+<p><strong>Registry and metrics.</strong> An <code>LLMRegistry</code> keeps instances by usage id and gives each its own metrics. Cost tracking can then say how much the agent, the condenser, and each sub-agent spent separately.</p>
+<p><strong>Profiles.</strong> An <code>LLMProfileStore</code> saves named configurations. A conversation can <code>switch_llm()</code> or <code>switch_profile()</code> between steps.</p>
+<p><strong>Fallback.</strong> A <code>FallbackStrategy</code> tries alternate profiles when the primary fails with a transient error after its retries. Fallback is per call: the next request starts with the primary again.</p>
+<p><strong>Routing.</strong> <code>RouterLLM</code> is itself an <code>LLM</code> that picks one of several underlying models per request and delegates everything else to it.</p>
+<p><strong>OpenHands-hosted models.</strong> Public config uses <code>openhands/&lt;model&gt;</code>. It is translated to LiteLLM&rsquo;s proxy form only at the LiteLLM boundary, so nothing upstream needs to know.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>A large configuration surface.</strong> Dozens of fields, many of them escape hatches for one provider&rsquo;s quirk.</li>
+<li><strong>Caching marks are provider-specific.</strong> The second breakpoint helps Anthropic models only.</li>
+<li><strong>Prompt-mocked tool calling is less reliable</strong> than native calls. It exists so weaker or self-hosted models can play at all.</li>
+<li><strong>Fallback hides failures</strong> unless metrics are watched. Each call silently may use another model.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Own behaviour, rent transport.</strong> Let a library talk to providers; keep retries, caching, and error policy in your code.</p>
+<p><strong>Split the system prompt into static and dynamic blocks.</strong> Cache the static one across conversations.</p>
+<p><strong>Put the timeout inside the retry.</strong> A slow attempt should be retried, not fatal.</p>
+<p><strong>Give every error a next step.</strong> Correctable errors go back to the model; context errors trigger condensation.</p>
+<p><strong>Track metrics per usage, not per process.</strong> &ldquo;The condenser cost more than the agent&rdquo; is a finding you want to be able to make.</p>
+</section>
+
+<section class="chapter" id="ch05">
+<div class="partlabel">Part II — The Agent Loop</div>
+<h1>Chapter 5: One Step of the Agent</h1>
+<h2 id="the-problem-turning-a-log-into-the-next-move">The Problem: Turning a Log Into the Next Move</h2>
+<p>Chapters 2 to 4 gave us a log, a place to keep it, and a way to call a model. The agent&rsquo;s job is to connect them: read the log, decide what happens next, and append the result.</p>
+<p>That sounds like one function call, but a step has many ways to go. The model may answer with text, or ask for three tools at once, or return nothing useful. The history may be too long for the model. A tool call may need a human&rsquo;s approval first. A hook may have blocked the user&rsquo;s message. And the step must leave the log in a shape the provider will accept next time.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>One loop that does everything.</strong> Call the model, run tools, repeat, all inside one function. Hard to pause, hard to test, and approval has nowhere to wait.</li>
+<li><strong>A planner and an executor as separate components.</strong> Clean on paper, but they need a shared notion of &ldquo;what happened&rdquo;, which is the log anyway.</li>
+<li><strong>A single, small step over the log.</strong> Each call to <code>step()</code> does at most one model call or one batch of pending work, appends events, and returns. Something outside decides whether to call it again.</li>
+</ul>
+<h2 id="openhandss-choice-agentstep-does-one-thing-and-returns">OpenHands&rsquo;s Choice: <code>Agent.step()</code> Does One Thing and Returns</h2>
+<p><code>Agent.step(conversation, on_event)</code> is the whole agent. It holds no state of its own between calls; everything it needs is in <code>conversation.state</code>, and everything it produces goes out through <code>on_event</code>. Chapter 6 covers the loop that calls it.</p>
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> Pending: step()
+    Pending --> RunPending: unmatched actions exist
+    RunPending --> [*]: observations appended
+    Pending --> Blocked: no pending actions
+    Blocked --> Finished: user message blocked by hook
+    Blocked --> Prepare: not blocked
+    Prepare --> Condense: condenser wants to condense
+    Condense --> [*]: Condensation event
+    Prepare --> Call: messages ready
+    Call --> Recover: typed LLM error
+    Recover --> [*]: nudge or CondensationRequest
+    Call --> Classify: reply
+    Classify --> Tools: TOOL_CALLS
+    Classify --> Finished: CONTENT
+    Classify --> Nudge: REASONING_ONLY or EMPTY
+    Tools --> Confirm: risky
+    Confirm --> [*]: WAITING_FOR_CONFIRMATION
+    Tools --> Execute: allowed
+    Execute --> [*]
+    Nudge --> [*]
+    Finished --> [*]
+</div>
+<figure class="hw hw-stepper" id="hw-stepper" data-oh-widget="stepper"><p class="hw-fallback">Interactive Agent.step() stepper (needs JavaScript). The state diagram above shows the same exits.</p></figure>
+
+<h2 id="before-calling-the-model">Before Calling the Model</h2>
+<p><strong>Pending actions come first.</strong> If the active branch has actions without answers, the step executes them and returns. This is how approval works: a previous step proposed actions and stopped; the user approved by simply running again. The code calls this <em>implicit confirmation</em>.</p>
+<p><strong>Blocked messages end the turn.</strong> A <code>UserPromptSubmit</code> hook can block a user message. If the latest one was blocked, the step marks the conversation finished without calling the model.</p>
+<p><strong>The view becomes messages, or a condensation.</strong> <code>prepare_llm_messages()</code> takes the cached view and the condenser. If the condenser decides to condense, the step emits a <code>Condensation</code> event and returns; the next step sees the shorter view. Otherwise it gets the message list.</p>
+<h2 id="the-call-and-its-failures">The Call and Its Failures</h2>
+<p>The step calls <code>llm.generate()</code> with the messages and every tool in <code>tools_map</code>. Chapter 4 listed the typed errors; here is where they are caught. A malformed tool call becomes a user message with the error text. A content-filter block becomes a polite nudge. A context-window error, or a provider rejecting the history as malformed, becomes a <code>CondensationRequest</code>, but only if the condenser can handle requests. Without one, the error is raised and the run ends in <code>ERROR</code>.</p>
+<h2 id="four-kinds-of-reply">Four Kinds of Reply</h2>
+<p><code>classify_response()</code> is a pure function. It sorts every reply into exactly one type, first match wins:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Test</th>
+<th>What the step does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TOOL_CALLS</code></td>
+<td>the reply has tool calls</td>
+<td>build action events, check confirmation, execute</td>
+</tr>
+<tr>
+<td><code>CONTENT</code></td>
+<td>non-blank text</td>
+<td>emit an agent <code>MessageEvent</code>, set <code>FINISHED</code></td>
+</tr>
+<tr>
+<td><code>REASONING_ONLY</code></td>
+<td>reasoning but nothing visible</td>
+<td>emit it, then nudge</td>
+</tr>
+<tr>
+<td><code>EMPTY</code></td>
+<td>nothing useful</td>
+<td>emit it, then nudge</td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>nudge</strong> is an environment-sourced message telling the model its last response had neither a tool call nor a message. The model sees a user-role message, but the event&rsquo;s source records that the framework, not the human, sent it.</p>
+<p>Notice what <code>CONTENT</code> means: a plain text answer <em>ends the task</em>. In OpenHands, talking to the user is how the agent says &ldquo;your turn&rdquo;.</p>
+<h2 id="executing-a-batch">Executing a Batch</h2>
+<p>Each tool call becomes an <code>ActionEvent</code>. The first one carries the thought and reasoning. Then:</p>
+<div class="mermaid">
+flowchart TD
+    A["Action events from one reply"] --> F{"Contains finish?"}
+    F -->|yes| TR["Drop every call after finish"]
+    F -->|no| C
+    TR --> C{"Needs confirmation?"}
+    C -->|yes| W["WAITING_FOR_CONFIRMATION<br/>return without running"]
+    C -->|no| B{"Blocked by a PreToolUse hook?"}
+    B -->|yes| RJ["UserRejectObservation<br/>source: hook"]
+    B -->|no| EX["Parallel executor runs tools"]
+    EX --> EM["Emit results in original order"]
+    RJ --> EM
+    EM --> FIN{"Finish executed?"}
+    FIN -->|yes| CR{"Critic asks for another pass?"}
+    CR -->|yes| FU["Follow-up user message"]
+    CR -->|no| DONE["FINISHED"]
+</div>
+<p><strong><code>finish</code> is a tool.</strong> Two built-in tools are attached to every agent: <code>FinishTool</code> (carrying the final message) and <code>ThinkTool</code> (logging a thought). Any calls the model placed after <code>finish</code> are discarded with a warning.</p>
+<p><strong>Confirmation is checked for the whole batch.</strong> If any action needs approval, none run yet (Chapter 9).</p>
+<p><strong>Results are emitted in the model&rsquo;s order,</strong> even though tools may run concurrently (Chapter 7). Hook-blocked actions get a rejection in their place, so every action still gets exactly one answer.</p>
+<p><strong>A critic can veto finishing.</strong> If a critic with iterative refinement is configured and its score is too low, the step injects a follow-up message instead of setting <code>FINISHED</code>.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>One step, many exits.</strong> The function is long because every exit must leave a valid log.</li>
+<li><strong>Text ends the task.</strong> A model that chats mid-task will stop early; the nudge and the <code>finish</code> tool push it toward tools.</li>
+<li><strong>Batch-level confirmation.</strong> One risky call holds up its harmless siblings.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Make the agent a step, not a loop.</strong> Something else decides whether to step again.</p>
+<p><strong>Do pending work before new work.</strong> Then &ldquo;approve&rdquo; is just &ldquo;continue&rdquo;.</p>
+<p><strong>Classify replies with a pure function.</strong> Exactly one type per reply, tested in isolation.</p>
+<p><strong>Route each failure to a next step.</strong> Correctable errors go back to the model; size errors go to the condenser.</p>
+<p><strong>Emit results in call order.</strong> Concurrency is an implementation detail; the log should read like the model&rsquo;s plan.</p>
+</section>
+
+<section class="chapter" id="ch06">
+<h1>Chapter 6: The Run Loop and Its States</h1>
+<h2 id="the-problem-when-to-step-again">The Problem: When to Step Again</h2>
+<p>Chapter 5&rsquo;s step does one thing and returns. Someone must call it again, and decide when to stop. That someone also has to answer questions the step cannot: Has the user paused? Is the agent stuck repeating itself? Has it spent its budget? Did a stop hook object to finishing? Can a new user message arrive while the agent is busy without being lost?</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Loop until the agent says done.</strong> Simple, and wrong: agents loop, budgets run out, and users need a brake.</li>
+<li><strong>A hard cap on steps.</strong> Necessary but blunt; it stops a healthy long task and an obvious loop at the same point.</li>
+<li><strong>An explicit status machine.</strong> Every reason to stop is a named status, checked between steps, visible to every client.</li>
+</ul>
+<h2 id="openhandss-choice-localconversationrun-and-eight-statuses">OpenHands&rsquo;s Choice: <code>LocalConversation.run()</code> and Eight Statuses</h2>
+<p><code>ConversationExecutionStatus</code> names the possible states: <code>IDLE</code>, <code>RUNNING</code>, <code>PAUSED</code>, <code>WAITING_FOR_CONFIRMATION</code>, <code>FINISHED</code>, <code>ERROR</code>, <code>STUCK</code>, and <code>DELETING</code>. Three are terminal for a run: <code>FINISHED</code>, <code>ERROR</code>, and <code>STUCK</code>. <code>IDLE</code> is deliberately not terminal, because a WebSocket delivers the initial <code>IDLE</code> state on connect and clients would otherwise think the run had ended.</p>
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> RUNNING: run()
+    RUNNING --> WAITING_FOR_CONFIRMATION: risky actions
+    WAITING_FOR_CONFIRMATION --> RUNNING: run() again (approve)
+    WAITING_FOR_CONFIRMATION --> IDLE: reject_pending_actions()
+    RUNNING --> PAUSED: pause() / interrupt()
+    PAUSED --> RUNNING: run()
+    RUNNING --> FINISHED: text reply or finish
+    RUNNING --> STUCK: stuck detector
+    RUNNING --> ERROR: exception, iteration cap, budget
+    FINISHED --> IDLE: send_message()
+    STUCK --> IDLE: send_message()
+    ERROR --> RUNNING: run()
+</div>
+<figure class="hw hw-status" id="hw-status" data-oh-widget="status"><p class="hw-fallback">Interactive run-loop status machine (needs JavaScript). The state diagram above shows the same transitions.</p></figure>
+
+<h2 id="one-iteration">One Iteration</h2>
+<p><code>run()</code> first sets the status to <code>RUNNING</code> from <code>IDLE</code>, <code>PAUSED</code>, <code>ERROR</code>, or <code>STUCK</code>. Then, under the state lock, each iteration:</p>
+<ol>
+<li>Breaks if the status is <code>PAUSED</code> or <code>STUCK</code>.</li>
+<li>If the status is <code>FINISHED</code>, runs <strong>stop hooks</strong>. A stop hook may refuse; its feedback becomes an environment message and the status goes back to <code>RUNNING</code>. Otherwise the loop ends.</li>
+<li>Checks for <strong>stuck patterns</strong>.</li>
+<li>If the status is <code>WAITING_FOR_CONFIRMATION</code>, sets it back to <code>RUNNING</code>. Calling <code>run()</code> again <em>is</em> the approval.</li>
+<li>Calls <code>agent.step()</code>.</li>
+<li>Breaks on <code>WAITING_FOR_CONFIRMATION</code>, on an exceeded <strong>budget</strong>, or on the <strong>iteration cap</strong>.</li>
+</ol>
+<p>The iteration cap is <code>max_iteration_per_run</code>, default 500. Reaching it sets <code>ERROR</code> with a <code>MaxIterationsReached</code> event, unless the agent finished on that very iteration. A budget overrun emits <code>MaxBudgetReached</code>. Any exception sets <code>ERROR</code>, emits a <code>ConversationErrorEvent</code> (unless the agent already emitted a more detailed one), and re-raises as <code>ConversationRunError</code> carrying the conversation id and persistence directory.</p>
+<h2 id="messages-that-arrive-while-running">Messages That Arrive While Running</h2>
+<p><code>send_message()</code> takes the same FIFO lock. If the conversation is <code>FINISHED</code> or <code>STUCK</code>, a new message resets it to <code>IDLE</code>. The loop body deliberately does <em>not</em> check for <code>FINISHED</code> right after a step. The code comments spell out why: if the agent finishes while a user message is waiting for the lock, the message gets in, resets the status, and the next iteration processes it. Checking too early would drop that message on the floor.</p>
+<h2 id="pause-versus-interrupt">Pause Versus Interrupt</h2>
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant C as Conversation
+    participant L as LLM call
+    U->>C: pause()
+    Note over C: status = PAUSED, PauseEvent
+    C-->>L: current call finishes normally
+    C->>C: loop sees PAUSED at next iteration
+    U->>C: interrupt()
+    C->>L: cancel the running task now
+    Note over C: CancelledError, status = PAUSED, InterruptEvent
+    C->>C: orphan actions get AgentErrorEvent
+</div>
+<p><strong><code>pause()</code></strong> takes effect between steps. If a model call is in flight, it finishes first.</p>
+<p><strong><code>interrupt()</code></strong> works on the async path. It sets a cancellation token, so pending tool calls can be skipped, and cancels the running task. Cancellation propagates from the HTTP stream through the step to the loop without per-layer interrupt APIs, because the LLM and agent hold no per-conversation state. The loop catches it, sets <code>PAUSED</code>, and emits an <code>InterruptEvent</code>. Any action left without an answer gets a synthetic <code>AgentErrorEvent</code>, because providers reject histories with unanswered tool calls.</p>
+<h2 id="the-stuck-detector">The Stuck Detector</h2>
+<p><code>StuckDetector</code> scans events since the last user message on the active branch. It looks for five patterns:</p>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Default threshold</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The same action and observation repeating</td>
+<td>4</td>
+</tr>
+<tr>
+<td>The same action repeatedly erroring</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Agent monologue: messages with no user input</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Two action–observation pairs alternating</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Repeated context-window errors</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>For a repeating error, the loop first <strong>nudges once</strong> with a message about the streak. Only if the pattern continues does it set <code>STUCK</code>. Event comparison ignores ids and metrics, so identical work with fresh ids still counts as a repeat.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Implicit approval is subtle.</strong> &ldquo;Run again&rdquo; meaning &ldquo;yes&rdquo; is elegant for code and confusing in a UI unless the UI hides it behind an Approve button.</li>
+<li><strong>Pause is not instant.</strong> Only <code>interrupt()</code> cancels a model call, and only on the async path.</li>
+<li><strong>Heuristic stuck detection.</strong> Thresholds catch obvious loops; a creative loop slips through until the iteration cap.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Name every reason to stop.</strong> A status per reason makes UIs and logs honest.</p>
+<p><strong>Check control flags between steps, under the same lock as writes.</strong> Pause then has a well-defined moment.</p>
+<p><strong>Do not check &ldquo;finished&rdquo; too eagerly.</strong> Let a racing user message in before ending.</p>
+<p><strong>Backfill unanswered tool calls after a cancel.</strong> The next request must still be valid.</p>
+<p><strong>Nudge before you stop.</strong> One warning often breaks a loop more cheaply than a hard stop.</p>
+</section>
+
+<section class="chapter" id="ch07">
+<h1>Chapter 7: Tools — Schemas In, Observations Out</h1>
+<h2 id="the-problem-giving-a-model-hands">The Problem: Giving a Model Hands</h2>
+<p>A model can only produce text. To do work it needs tools, and each tool raises the same questions. How does the model learn the tool exists and what arguments it takes? How are bad arguments caught before anything runs? What comes back, and in what shape? Which tools may run at the same time without corrupting each other? And how do tools from outside the codebase, such as an MCP server or a browser UI, join in without special cases?</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Functions with docstrings.</strong> Easy to write, but the schema, validation, and output format are all implicit.</li>
+<li><strong>A central list of tools in the agent.</strong> Explicit, but every new tool edits the agent, and outside tools do not fit.</li>
+<li><strong>Typed tool definitions, a registry, and a spec in the agent config.</strong> Each tool declares its input and output types. The agent config names tools by spec; a registry resolves them when the conversation starts.</li>
+</ul>
+<h2 id="openhandss-choice-typed-definitions-resolved-by-name">OpenHands&rsquo;s Choice: Typed Definitions Resolved by Name</h2>
+<p>A tool is a <strong><code>ToolDefinition</code></strong>: a frozen model with a class-level <code>name</code>, a <code>description</code>, an <code>action_type</code> (the input schema), an optional <code>observation_type</code>, optional MCP-style <strong>annotations</strong>, and an <code>executor</code> that does the work. Inputs subclass <strong><code>Action</code></strong>, outputs subclass <strong><code>Observation</code></strong>. An observation carries a list of text and image content plus an <code>is_error</code> flag, and decides how it renders for the model in <code>to_llm_content()</code>.</p>
+<p>The agent does not hold tool objects. It holds <strong>specs</strong>: <code>Tool(name="TerminalTool", params={...})</code>. When the agent initializes for a conversation, each spec is resolved through the registry, and the tool&rsquo;s <code>create()</code> builds instances bound to that conversation&rsquo;s state. That is why an agent can be serialized, sent to a server, and rebuilt there.</p>
+<div class="mermaid">
+graph LR
+    SPEC["Agent config<br/>Tool(name, params)"] --> REG["Registry<br/>resolve_tool(name)"]
+    REG --> CR["ToolDefinition.create(conv_state, params)"]
+    CR --> TD["Tool instances<br/>schema + executor"]
+    TD --> OA["to_openai_tool()<br/>+ security_risk field"]
+    OA --> LLM["Model"]
+    LLM -->|"tool call JSON"| VAL["action_from_arguments()<br/>validate"]
+    VAL --> EXE["executor(action)"]
+    EXE --> OBS["Observation"]
+</div>
+<h2 id="what-every-agent-gets">What Every Agent Gets</h2>
+<p>Two tools are attached to every agent by default: <strong><code>FinishTool</code></strong> and <strong><code>ThinkTool</code></strong>. Other built-ins (invoking a skill, switching models, inspecting an image) attach when their feature is configured. <code>include_default_tools</code> controls the list, and <code>filter_tools_regex</code> can hide tools by name; built-in defaults are exempt from the filter.</p>
+<p>The default preset in <code>openhands-tools</code> adds a <strong>terminal</strong>, a <strong>file editor</strong>, and a <strong>task tracker</strong>, plus a <strong>browser</strong> tool set except in CLI mode, and the <strong>task</strong> tool set for sub-agents when enabled. These are ordinary registered tools; nothing about them is special to the agent.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Terminal</td>
+<td>One persistent shell session: environment, virtualenv, and directory survive between commands. Uses tmux when available, otherwise a subprocess PTY. <code>is_input</code> sends keys such as <code>C-c</code> to a running process.</td>
+</tr>
+<tr>
+<td>File editor</td>
+<td>Commands <code>view</code>, <code>create</code>, <code>str_replace</code>, <code>insert</code>, <code>undo_edit</code></td>
+</tr>
+<tr>
+<td>Task tracker</td>
+<td>A plan the agent keeps for itself</td>
+</tr>
+<tr>
+<td>Browser</td>
+<td>Browser automation, usable only where Chromium is detected</td>
+</tr>
+</tbody>
+</table>
+<p>The terminal handles long commands with a <strong>soft timeout</strong>. With no explicit timeout, a command that produces no new output for 30 seconds pauses and the model is asked whether to continue. The model can set a longer timeout for installs and tests.</p>
+<h2 id="tools-declare-what-they-touch">Tools Declare What They Touch</h2>
+<p><code>AgentBase.tool_concurrency_limit</code> defaults to <strong>1</strong>: tools run one at a time unless you raise it. When you do, the <strong><code>ParallelToolExecutor</code></strong> runs a batch on its own thread pool and uses <strong>declared resources</strong> to decide what must be serialized.</p>
+<p>Each tool may implement <code>declared_resources(action)</code>, returning lock keys:</p>
+<div class="mermaid">
+flowchart TD
+    A["Action in a batch"] --> D{"Tool declared resources?"}
+    D -->|"no (default)"| M["Lock tool:NAME<br/>all calls to this tool serialize"]
+    D -->|"yes, no keys"| N["No lock<br/>runs in parallel"]
+    D -->|"yes, keys"| K["Lock those keys<br/>e.g. file:/abs/path"]
+</div>
+<p>The file editor locks the resolved file path for every command, including <code>view</code>, so a read never sees a half-written file while edits to different files run in parallel. The terminal declares one key, <code>terminal:session</code>, when it has a single subprocess session, and declares nothing when tmux gives each call its own pane. The docstring sums up the difference: undeclared means &ldquo;I haven&rsquo;t thought about it&rdquo;, declared-but-empty means &ldquo;I have, and I&rsquo;m safe.&rdquo;</p>
+<p>Each executor instance has its own pool and lock manager, so a sub-agent running inside a tool call cannot deadlock its parent.</p>
+<h2 id="tools-from-outside">Tools From Outside</h2>
+<p><strong>MCP servers.</strong> <code>mcp_config</code> on the agent is a map of server names to server configs. At startup the SDK connects to each server, lists its tools, and wraps each as an <code>MCPToolDefinition</code>. Those runtime tools go through <code>filter_tools_regex</code> like any other.</p>
+<p><strong>Client tools.</strong> A frontend can register tools purely as JSON in <code>POST /conversations</code>, with no Python. When the agent calls one, the action goes out over the WebSocket for the client to handle, and the SDK returns an acknowledgment observation immediately so the loop continues. Canvas uses this for UI-side tools such as forms.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant CV as Canvas
+    participant AS as Agent Server
+    participant AG as Agent
+    CV->>AS: POST /conversations (client tool JSON schema)
+    AG->>AS: ActionEvent(client tool)
+    AS-->>CV: event over WebSocket
+    AS->>AG: acknowledgment observation
+    CV->>CV: render form, handle it in the UI
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Serial by default.</strong> Safe, but a batch of independent reads runs one at a time unless you opt in.</li>
+<li><strong>Locking depends on honesty.</strong> A tool that declares no resources but shares state will race.</li>
+<li><strong>Specs need a registry at runtime.</strong> A server that cannot import a tool&rsquo;s module cannot rebuild the agent; the Agent Server rejects such a conversation up front.</li>
+<li><strong>Client tools are fire-and-acknowledge.</strong> The model learns only that the request was delivered, not its outcome.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Put specs in config and objects at runtime.</strong> A name and parameters travel; executors do not.</p>
+<p><strong>Type both directions.</strong> Validate arguments into an action; render results from an observation.</p>
+<p><strong>Make the safe default serial, and let tools opt into parallelism.</strong> Declared resources beat a global flag.</p>
+<p><strong>Distinguish &ldquo;unknown&rdquo; from &ldquo;safe&rdquo;.</strong> Treat undeclared as serialize.</p>
+<p><strong>Let outside tools enter through the same door.</strong> MCP and client tools become ordinary definitions.</p>
+</section>
+
+<section class="chapter" id="ch08">
+<h1>Chapter 8: Where Actions Run</h1>
+<h2 id="the-problem-the-laptop-is-the-wrong-place">The Problem: The Laptop Is the Wrong Place</h2>
+<p>Chapter 7&rsquo;s tools run commands and edit files. On a laptop that is convenient and dangerous: the agent sees everything you see. For a team, a CI job, or many conversations at once, it is also the wrong machine. Actions need to run somewhere chosen on purpose, and the agent&rsquo;s code should not change when that place changes.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Run tools locally, ship commands to a sandbox.</strong> Keep the agent here and proxy each command over the network. Every tool needs a remote twin, and every tool call pays a round trip.</li>
+<li><strong>Containers per tool call.</strong> Strong isolation, slow, and state such as a shell session does not survive.</li>
+<li><strong>Move the whole agent next to the files.</strong> Run a server inside the sandbox that hosts the agent, the tools, and the log; the client only sends messages and receives events.</li>
+</ul>
+<h2 id="openhandss-choice-a-workspace-interface-and-remote-means-agent-server-elsewhere">OpenHands&rsquo;s Choice: A Workspace Interface, and Remote Means &ldquo;Agent Server Elsewhere&rdquo;</h2>
+<p><code>BaseWorkspace</code> is a small interface: <code>execute_command</code>, <code>file_upload</code>, <code>file_download</code>, <code>git_changes</code>, <code>git_diff</code>, <code>pause</code>, <code>resume</code>, and context-manager cleanup. <code>LocalWorkspace</code> implements it on the host filesystem; <code>pause</code> and <code>resume</code> are no-ops.</p>
+<p>Every other implementation is a <strong><code>RemoteWorkspace</code></strong>, which connects to an OpenHands <strong>Agent Server</strong>. The remote side is not a command proxy. It is the same SDK running behind an HTTP API, with its own tools and its own event log.</p>
+<div class="mermaid">
+graph TD
+    BW["BaseWorkspace"] --> LW["LocalWorkspace<br/>host filesystem"]
+    BW --> RW["RemoteWorkspace<br/>talks to an Agent Server"]
+    RW --> DW["DockerWorkspace<br/>pre-built agent-server image"]
+    DW --> DDW["DockerDevWorkspace<br/>builds image on the fly"]
+    RW --> AP["ApptainerWorkspace<br/>no root, for HPC"]
+    RW --> API["APIRemoteWorkspace<br/>runtime API"]
+    RW --> CL["OpenHandsCloudWorkspace"]
+    RW --> KS["AgentSandboxWorkspace<br/>Kubernetes warm pool"]
+</div>
+<h2 id="the-factory-picks-the-conversation-too">The Factory Picks the Conversation Too</h2>
+<p><code>Workspace(working_dir=...)</code> returns a local workspace; add a <code>host</code> and it returns a remote one. <code>Conversation(...)</code> follows the same switch. With a local workspace you get a <strong><code>LocalConversation</code></strong>: the agent loop runs in your process. With a remote workspace you get a <strong><code>RemoteConversation</code></strong>: the loop runs on the server, and your process holds a mirror.</p>
+<figure class="hw hw-workspace" id="hw-workspace" data-oh-widget="workspace"><p class="hw-fallback">Interactive local-vs-remote action flow (needs JavaScript). The diagrams in this chapter show the same paths.</p></figure>
+
+<p>The mirror is built from two pieces. <code>RemoteEventsList</code> fetches existing events once, then appends new ones as they arrive over a WebSocket, and can reconcile with the server on demand. <code>RemoteState</code> caches state fields and updates them from <code>ConversationStateUpdateEvent</code>s on the same socket. Calling <code>run()</code> triggers a run on the server and, by default, waits for it to finish.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant U as Your code
+    participant RC as RemoteConversation
+    participant AS as Agent Server (in sandbox)
+    participant AG as Agent + tools
+    U->>RC: send_message("fix the test")
+    RC->>AS: POST message
+    U->>RC: run()
+    RC->>AS: POST run
+    AS->>AG: LocalConversation.run()
+    AG-->>AS: ActionEvent, ObservationEvent…
+    AS-->>RC: events over WebSocket
+    RC-->>U: callbacks, mirrored state
+</div>
+<p>Remote workspaces still offer direct operations for the client&rsquo;s own use: <code>start_command</code> returns an id, <code>get_command_output</code> reads output (a missing exit code means still running), <code>stop_command</code> is idempotent. These are the &ldquo;bash events&rdquo; of Chapter 14, which never enter the agent&rsquo;s log.</p>
+<h2 id="the-remote-backends">The Remote Backends</h2>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>How it gets an Agent Server</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DockerWorkspace</code></td>
+<td>Starts a container from a pre-built agent-server image, waits for health; <code>pause</code> is <code>docker pause</code></td>
+</tr>
+<tr>
+<td><code>DockerDevWorkspace</code></td>
+<td>Builds the image from a base image first, for development</td>
+</tr>
+<tr>
+<td><code>ApptainerWorkspace</code></td>
+<td>Same idea with Apptainer, which needs no root</td>
+</tr>
+<tr>
+<td><code>APIRemoteWorkspace</code></td>
+<td>Asks a runtime API for a container; pause and resume are API calls</td>
+</tr>
+<tr>
+<td><code>OpenHandsCloudWorkspace</code></td>
+<td>Provisions a sandbox through the Cloud API, or connects to the local server when already inside one</td>
+</tr>
+<tr>
+<td><code>AgentSandboxWorkspace</code></td>
+<td>Claims a pod from a Kubernetes <code>SandboxWarmPool</code>, sub-second when the pool is warm</td>
+</tr>
+</tbody>
+</table>
+<p>A remote workspace can also pull the server&rsquo;s saved LLM profile, secret names, MCP servers, and skills, so a client can build an agent that matches the sandbox it is about to use.</p>
+<h2 id="one-container-per-conversation">One Container per Conversation</h2>
+<p>The Agent Server itself can play the same trick. With the Docker conversation runtime (Canvas&rsquo;s <code>OH_CONVERSATION_RUNTIME=docker</code>), the outer server starts <strong>one hardened agent-server container per conversation</strong> and proxies HTTP and WebSocket traffic to it. The container runs as the host user&rsquo;s uid and gid, drops all Linux capabilities, sets <code>no-new-privileges</code>, disables core dumps, publishes its port only on <code>127.0.0.1</code>, and can get memory, CPU, and process limits. It mounts only that conversation&rsquo;s directory, persistence directory, and workspace, so history and files survive a container replacement.</p>
+<div class="mermaid">
+graph LR
+    CV["Canvas"] --> OUT["Outer Agent Server<br/>on host"]
+    OUT -->|"proxy"| C1["Container: conversation A<br/>agent-server, cap-drop ALL"]
+    OUT -->|"proxy"| C2["Container: conversation B"]
+    C1 --- V1["mounts: A's workspace + state"]
+    C2 --- V2["mounts: B's workspace + state"]
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Remote means a second server to run, secure, and version.</strong> The client SDK and the server must agree on the API.</li>
+<li><strong>The mirror lags.</strong> Remote state is eventually consistent; <code>reconcile()</code> exists because sockets drop.</li>
+<li><strong>Isolation depends on the backend.</strong> A local workspace is no sandbox at all. Even the per-conversation containers share any host workspace you point several conversations at.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Abstract the place, not the tool.</strong> A workspace interface lets the same tools run anywhere.</p>
+<p><strong>Move the agent to the files.</strong> Shipping the whole loop into the sandbox beats proxying every command.</p>
+<p><strong>Make the remote client a mirror of the log.</strong> Fetch once, stream after, reconcile on demand.</p>
+<p><strong>Harden containers by default.</strong> Drop capabilities, bind to loopback, mount only what that conversation owns.</p>
+<p><strong>Keep warm capacity for cold starts.</strong> A pre-warmed pool turns provisioning into a claim.</p>
+</section>
+
+<section class="chapter" id="ch09">
+<div class="partlabel">Part III — Safety</div>
+<h1>Chapter 9: Risk, Confirmation, and Hooks</h1>
+<h2 id="the-problem-who-decides-whether-an-action-runs">The Problem: Who Decides Whether an Action Runs?</h2>
+<p>The agent now has hands (Chapter 7) and a place to use them (Chapter 8). Some actions are harmless: reading a file, listing a directory. Some are catastrophic: deleting a home directory, piping a download into a shell. Most are in between, and which is which depends on context the model may or may not understand.</p>
+<p>There are really two questions. <strong>How risky is this action?</strong> And <strong>given that risk, should a person approve it?</strong> Mixing the two leads to systems where changing who must approve means rewriting how risk is judged.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>A blocklist of commands.</strong> Fast and predictable, easy to evade with quoting or a second step.</li>
+<li><strong>Ask the model to rate its own actions.</strong> Cheap, uses context, and trusts the very actor you are worried about.</li>
+<li><strong>A separate judge.</strong> Another model or a rule engine reviews each action. Better separation, more cost.</li>
+<li><strong>Split the job.</strong> Analyzers assign a risk label; a policy turns the label into &ldquo;run&rdquo; or &ldquo;ask&rdquo;. Either side can change alone.</li>
+</ul>
+<h2 id="openhandss-choice-analyzer-labels-policy-decides">OpenHands&rsquo;s Choice: Analyzer Labels, Policy Decides</h2>
+<p>Every action gets a <code>SecurityRisk</code>: <code>LOW</code>, <code>MEDIUM</code>, <code>HIGH</code>, or <code>UNKNOWN</code>. A <strong>security analyzer</strong> on the conversation assigns it. A <strong>confirmation policy</strong> reads it and returns one bit: should a person confirm? If any action in a batch should be confirmed, the conversation enters <code>WAITING_FOR_CONFIRMATION</code> and nothing in the batch runs.</p>
+<div class="mermaid">
+flowchart LR
+    A["Action batch"] --> Q{"Only finish or think?"}
+    Q -->|yes| RUN["Run"]
+    Q -->|no| AN{"Analyzer set?"}
+    AN -->|no| UK["All UNKNOWN"]
+    AN -->|yes| LBL["analyze_actions()<br/>SecurityAnalysisEvent"]
+    UK --> POL["Policy.should_confirm(risk)"]
+    LBL --> POL
+    POL -->|"any true"| WAIT["WAITING_FOR_CONFIRMATION"]
+    POL -->|"all false"| RUN
+</div>
+<figure class="hw hw-gate" id="hw-gate" data-oh-widget="gate"><p class="hw-fallback">Interactive confirmation gate (needs JavaScript). The flowchart above and the tables below give the same rules.</p></figure>
+
+<h2 id="policies">Policies</h2>
+<p>Three policies ship:</p>
+<table>
+<thead>
+<tr>
+<th>Policy</th>
+<th>Confirms when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NeverConfirm</code></td>
+<td>never</td>
+</tr>
+<tr>
+<td><code>AlwaysConfirm</code></td>
+<td>always</td>
+</tr>
+<tr>
+<td><code>ConfirmRisky</code></td>
+<td>risk is at or above <code>threshold</code> (default <code>HIGH</code>), or risk is <code>UNKNOWN</code> and <code>confirm_unknown</code> is true (the default)</td>
+</tr>
+</tbody>
+</table>
+<p><code>ConfirmRisky</code>&rsquo;s comparison is reflexive: with threshold <code>HIGH</code>, a <code>HIGH</code> action is confirmed. The threshold itself may never be <code>UNKNOWN</code>. A lone <code>finish</code> or <code>think</code> action never needs confirmation, whatever the policy.</p>
+<p>The default for <code>confirm_unknown</code> matters. An action no one could assess is treated as risky, not safe.</p>
+<h2 id="analyzers">Analyzers</h2>
+<table>
+<thead>
+<tr>
+<th>Analyzer</th>
+<th>How it labels</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LLMSecurityAnalyzer</code></td>
+<td>Uses the <code>security_risk</code> the acting model attached to its own call (Chapter 4)</td>
+</tr>
+<tr>
+<td><code>PatternSecurityAnalyzer</code></td>
+<td>Deterministic signatures; no network, no model</td>
+</tr>
+<tr>
+<td><code>PolicyRailSecurityAnalyzer</code></td>
+<td>Structural rules on shell commands: fetch-to-exec, raw disk operations, catastrophic deletes → <code>HIGH</code></td>
+</tr>
+<tr>
+<td><code>ToolShieldLLMSecurityAnalyzer</code></td>
+<td>A separate guardrail model judges each action in light of recent history</td>
+</tr>
+<tr>
+<td><code>GraySwanAnalyzer</code></td>
+<td>An external safety API; its violation score maps to a risk level</td>
+</tr>
+<tr>
+<td><code>EnsembleSecurityAnalyzer</code></td>
+<td>Runs several and takes the worst concrete risk</td>
+</tr>
+</tbody>
+</table>
+<p>A few details carry the design:</p>
+<p><strong>The model&rsquo;s own label is ignored without an analyzer.</strong> If no analyzer is configured, any <code>security_risk</code> the model returned is discarded and the action is <code>UNKNOWN</code>. Tools annotated read-only are also <code>UNKNOWN</code>; their risk is not evaluated.</p>
+<p><strong>Two corpora.</strong> The pattern analyzer scans the <em>executable</em> part of an action (tool name and arguments) for destructive shell and code-execution patterns, and <em>all</em> fields, including the model&rsquo;s thought, for injection and social-engineering text. An agent that merely thinks about <code>rm -rf /</code> while running <code>ls</code> is not flagged as destructive.</p>
+<p><strong>Uncertainty is reported.</strong> Shell analysis uses a shared tree-sitter-bash parse. When the parse cannot resolve a relevant structure, the analyzers return <code>UNKNOWN</code> rather than <code>LOW</code>, and <code>ConfirmRisky</code> then asks.</p>
+<p><strong>Fail closed.</strong> In the ensemble, a child analyzer that throws contributes <code>HIGH</code>. If all children say <code>UNKNOWN</code>, the result is <code>UNKNOWN</code>; otherwise unknowns are dropped and the highest concrete level wins. A stricter mode makes any <code>UNKNOWN</code> win.</p>
+<p><strong>Actor and judge can be separated.</strong> The guardrail-model analyzer exists because multi-step attacks are built from steps that each look benign. The acting model has no reason to flag its own reconnaissance; a separate judge reading the sequence might.</p>
+<h2 id="approving-and-rejecting">Approving and Rejecting</h2>
+<div class="mermaid">
+sequenceDiagram
+    participant AG as Agent
+    participant ST as State
+    participant U as User / UI
+    AG->>ST: ActionEvents (unanswered)
+    AG->>ST: status = WAITING_FOR_CONFIRMATION
+    U->>ST: approve = run()
+    ST->>AG: step executes pending actions
+    U-->>ST: or reject_pending_actions(reason)
+    ST->>ST: UserRejectObservation per action, status = IDLE
+</div>
+<p>Approval is &ldquo;run again&rdquo; (Chapter 6). Rejection writes a <code>UserRejectObservation</code> for each pending action with the reason, so the model learns it was refused and why.</p>
+<h2 id="hooks-deterministic-rules-you-own">Hooks: Deterministic Rules You Own</h2>
+<p>Analyzers judge risk; <strong>hooks</strong> enforce your own rules. A <code>HookConfig</code>, loaded from <code>.openhands/hooks.json</code> or built in code, attaches hooks to six events: <code>PreToolUse</code>, <code>PostToolUse</code>, <code>UserPromptSubmit</code>, <code>SessionStart</code>, <code>SessionEnd</code>, and <code>Stop</code>. A matcher selects tools by exact name, wildcard, or regex. A hook can be a shell command, a single model prompt, or an agent with tools.</p>
+<p>For command hooks, the exit code is the contract: <strong>exit 2 blocks</strong>; any other non-zero exit is a non-blocking error. Exit 1 does <em>not</em> block, and the code says so explicitly. A blocked <code>PreToolUse</code> turns into a <code>UserRejectObservation</code> with source <code>hook</code>. A blocked user prompt ends the turn. A <code>Stop</code> hook that refuses sends the agent back to work with its feedback.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Confirmation is per batch.</strong> One risky call pauses harmless siblings.</li>
+<li><strong>Asking on <code>UNKNOWN</code> is noisy.</strong> Safe by default, but users facing frequent prompts learn to approve without reading.</li>
+<li><strong>The model&rsquo;s self-label is cheap and biased.</strong> It is the label source for <code>LLMSecurityAnalyzer</code>, and the reason other analyzers exist.</li>
+<li><strong>Hooks are only as good as their exit codes.</strong> A policy hook that exits 1 by mistake allows everything.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Separate &ldquo;how risky&rdquo; from &ldquo;who approves&rdquo;.</strong> Labels and policies should change independently.</p>
+<p><strong>Treat unknown as risky.</strong> If no one could assess an action, ask.</p>
+<p><strong>Fail closed in combinators.</strong> A crashing checker should raise the risk, not lower it.</p>
+<p><strong>Scan what will execute separately from what was thought.</strong> Different threats live in different fields.</p>
+<p><strong>Use one exit code for &ldquo;block&rdquo;.</strong> Make it hard to block by accident and impossible to allow by crash.</p>
+</section>
+
+<section class="chapter" id="ch10">
+<h1>Chapter 10: Secrets</h1>
+<h2 id="the-problem-the-agent-needs-keys-it-must-not-see">The Problem: The Agent Needs Keys It Must Not See</h2>
+<p>Real tasks need credentials: a GitHub token to push, an API key to call a service. The agent&rsquo;s commands need the values. But everything the agent touches is recorded: the log on disk, events streamed to a browser, the next prompt to the model. A secret that leaks into any of those is leaked for good.</p>
+<p>Secrets also change. Tokens rotate, some are fetched from a server on demand, and a conversation may move to a container that cannot reach the place the secret came from.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Put secrets in the prompt.</strong> The model can use them directly, and they are now in the log and the provider&rsquo;s records.</li>
+<li><strong>Put secrets in the process environment.</strong> The agent&rsquo;s shell inherits everything, including keys it should never touch.</li>
+<li><strong>Give the model names, inject values at execution time, and mask outputs.</strong> The model writes <code>$GITHUB_TOKEN</code>; the runtime supplies the value only to commands that mention it, and scrubs the value from anything that comes back.</li>
+</ul>
+<h2 id="openhandss-choice-a-registry-of-named-sources">OpenHands&rsquo;s Choice: A Registry of Named Sources</h2>
+<p>Each conversation has a <strong><code>SecretRegistry</code></strong> that maps names to <strong>secret sources</strong>. A <code>StaticSecret</code> holds a value. A <code>LookupSecret</code> fetches one from a URL when needed; a relative URL resolves against the current Agent Server. The model sees only names and descriptions, rendered into the dynamic part of the system prompt.</p>
+<div class="mermaid">
+flowchart TD
+    M["Model writes a command<br/>using $GITHUB_TOKEN"] --> SCAN["Registry scans the command<br/>for secret names"]
+    SCAN --> RES["Resolve only those sources"]
+    RES --> ENV["Export as env vars<br/>for this command"]
+    ENV --> RUN["Terminal runs it"]
+    RUN --> OUT["Output"]
+    OUT --> MASK["Mask every known value<br/>→ secret-hidden"]
+    MASK --> LOG["ObservationEvent in the log"]
+</div>
+<h2 id="inject-narrowly">Inject Narrowly</h2>
+<p>Before a terminal command runs, <code>get_secrets_as_env_vars(command)</code> finds the secret names the command mentions and returns only those as environment variables. A command that never mentions <code>AWS_SECRET_ACCESS_KEY</code> never receives it. Failed lookups are remembered for a while, so a broken secret server does not stall every command.</p>
+<h2 id="mask-broadly">Mask Broadly</h2>
+<p>Masking is the opposite: it covers <em>every</em> registered secret, not only the ones a command asked for. The docstring gives the reason: a value can reach output without its name ever appearing, for example a token embedded in a git remote URL. Cached values are not re-resolved for masking, so after a rotation the previous value is still masked.</p>
+<p>Masking happens at several points:</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tool observations</td>
+<td><code>mask_secrets_in_model()</code> walks every nested string in the observation, because tool output is not one text field</td>
+</tr>
+<tr>
+<td>Agent messages</td>
+<td>Text and reasoning are masked; signed thinking blocks are left alone, because rewriting them breaks the provider&rsquo;s signature</td>
+</tr>
+<tr>
+<td>Security analysis events</td>
+<td>Masked before they are emitted</td>
+</tr>
+<tr>
+<td>Streamed tokens</td>
+<td>A streaming mask, below</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Streaming needs a buffer.</strong> A secret can be split across two chunks of a streamed reply, so per-chunk masking misses it. <code>StreamOutputMask</code> holds back the shortest suffix that could still grow into a secret, the length of the longest registered value minus one, and releases text only when it is safe.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant LLM as Model stream
+    participant SM as StreamOutputMask
+    participant UI as Client
+    LLM->>SM: "token is ghp_ab"
+    SM-->>UI: "token is " (holds "ghp_ab")
+    LLM->>SM: "cd1234 done"
+    SM-->>UI: "secret-hidden done"
+</div>
+<h2 id="secrets-at-rest-and-in-transit">Secrets at Rest and in Transit</h2>
+<p><strong>On disk,</strong> secret fields go through one set of helpers in <code>pydantic_secrets</code>: serialize with a cipher (encrypt), or redact to a fixed sentinel; deserialize by decrypting, or treat the sentinel as missing. The repository&rsquo;s contributor notes forbid a second, parallel redaction path. Chapter 3 covered the consequence: no cipher means no secrets after a restart.</p>
+<p><strong>Across a runtime boundary,</strong> sources are resolved first. Before handing secrets to a per-conversation container (Chapter 8), the server <strong>materializes</strong> them: each source is resolved and turned into a static secret, because the container may not be able to reach the original lookup URL.</p>
+<div class="mermaid">
+graph LR
+    SRC["Sources: static + lookup"] --> MAT["materialize_secrets()<br/>resolve now"]
+    MAT --> ST["Static secrets only"]
+    ST --> CT["Conversation container"]
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Name matching is textual.</strong> A command that reads a secret indirectly, through a script that uses the variable, does not mention the name and will not receive it.</li>
+<li><strong>Masking only knows known values.</strong> A secret the registry never saw is not protected.</li>
+<li><strong>The stream mask delays text</strong> by up to the longest secret&rsquo;s length.</li>
+<li><strong>Materializing breaks dynamic rotation</strong> inside the container; it gets a snapshot.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Give the model names, never values.</strong> Describe what each secret is for.</p>
+<p><strong>Inject per command, mask per output.</strong> Narrow on the way in, broad on the way out.</p>
+<p><strong>Mask structured output deeply.</strong> Walk every string, not just the main text field.</p>
+<p><strong>Buffer streams by the longest secret.</strong> Otherwise a split token slips through.</p>
+<p><strong>Route all secret serialization through one helper.</strong> Two redaction paths will disagree eventually.</p>
+</section>
+
+<section class="chapter" id="ch11">
+<div class="partlabel">Part IV — Context</div>
+<h1>Chapter 11: Forgetting on Purpose</h1>
+<h2 id="the-problem-the-log-grows-the-window-does-not">The Problem: The Log Grows, the Window Does Not</h2>
+<p>Every step appends events. A long task produces hundreds of them, and every model call resends the whole history. Cost grows with each step, and eventually the request no longer fits in the model&rsquo;s context window.</p>
+<p>The log, though, is append-only (Chapter 2), and that is a feature: it is the audit trail. So the question is sharper than &ldquo;how do we shorten history&rdquo;. It is: <strong>how do we make the model forget without deleting anything, and without producing a history the provider will reject?</strong></p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Truncate the oldest messages.</strong> Cheap, but the task description and early decisions vanish, and a cut in the middle of a tool call breaks the provider&rsquo;s pairing rules.</li>
+<li><strong>Summarize everything, every time.</strong> Keeps meaning, costs a summary call per step, and destroys the prompt cache constantly.</li>
+<li><strong>Summarize half, occasionally, at safe boundaries.</strong> Keep the head and the recent tail; replace the middle with a summary, and record that decision in the log itself.</li>
+</ul>
+<h2 id="openhandss-choice-condensation-events-and-a-view">OpenHands&rsquo;s Choice: Condensation Events and a View</h2>
+<p>A condenser never edits the log. It emits a <strong><code>Condensation</code></strong> event that names the events to forget, carries a summary, and says where the summary goes. The condenser documentation compares these events to tombstones in systems like Cassandra and Kafka.</p>
+<p>The model reads a <strong><code>View</code></strong>, not the log. The view applies every condensation it encounters: forgotten events drop out, the summary appears in their place. The log keeps everything; the view is what the model sees.</p>
+<div class="mermaid">
+graph LR
+    subgraph Log["Event log (never edited)"]
+        E1["e1…e40"] --> C1["Condensation<br/>forget e5…e22<br/>summary"]
+        C1 --> E2["e41…e60"]
+    end
+    Log --> V["View"]
+    V --> M["Messages to model:<br/>e1…e4, summary, e23…e60"]
+</div>
+<h2 id="when-to-condense">When to Condense</h2>
+<p>The main strategy is <code>LLMSummarizingCondenser</code>. It asks three questions every step:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Trigger</th>
+<th>Strength</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>REQUEST</code></td>
+<td>Someone asked: the user via <code>condense()</code>, or the agent after a context-window error</td>
+<td>hard</td>
+</tr>
+<tr>
+<td><code>TOKENS</code></td>
+<td>The view&rsquo;s token count exceeds the smaller of <code>max_tokens</code> and the model&rsquo;s input limit</td>
+<td>hard</td>
+</tr>
+<tr>
+<td><code>EVENTS</code></td>
+<td>The view has more than <code>max_size</code> events</td>
+<td>soft</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Soft</strong> means &ldquo;condense if you can&rdquo;. If a safe condensation is impossible right now, the condenser returns the view unchanged and tries again next step. <strong>Hard</strong> means the agent cannot proceed without it, so if the balanced strategy fails, it falls back to a <strong>hard context reset</strong>: summarize everything after the system prompt, trimming each event&rsquo;s text and retrying up to five times if the summary call itself overflows.</p>
+<h2 id="how-much-to-forget">How Much to Forget</h2>
+<p>The condenser keeps the first <code>keep_first</code> events and forgets enough of the middle to reach a target:</p>
+<ul>
+<li>For <code>EVENTS</code>: keep about half of <code>max_size</code>.</li>
+<li>For <code>REQUEST</code>: keep about half of the current view.</li>
+<li>For <code>TOKENS</code>: cut until the view is under half the token limit.</li>
+</ul>
+<p>If several reasons apply, the strictest wins. The class defaults are <code>max_size</code> 240 and <code>keep_first</code> 2; the <code>default_condenser()</code> used by the default agent and its sub-agents is tighter, with <code>max_size</code> 80 and <code>keep_first</code> 4. A condensation that would forget less than 10% of the view (<code>minimum_progress</code>) is treated as an error rather than a pointless summary call.</p>
+<figure class="hw hw-condense" id="hw-condense" data-oh-widget="condense"><p class="hw-fallback">Interactive condenser simulator (needs JavaScript). The text below describes the same rules.</p></figure>
+
+<h2 id="safe-boundaries">Safe Boundaries</h2>
+<p>Forgetting is not allowed just anywhere. The view computes <strong>manipulation indices</strong>: positions where events can be inserted or a range deleted without breaking the rules providers enforce. Four properties produce those rules:</p>
+<div class="mermaid">
+graph TD
+    MI["Manipulation indices"] --> P1["Tool-call matching<br/>every action keeps its observation"]
+    MI --> P2["Batch atomicity<br/>tool calls from one reply stay together"]
+    MI --> P3["Tool-loop atomicity<br/>uninterrupted action/observation runs stay whole"]
+    MI --> P4["Observation uniqueness<br/>one answer per tool call"]
+</div>
+<p>The condenser computes a naive cut, then moves both ends forward to the next safe index. The leading system prompt is never forgotten, whatever <code>keep_first</code> says, so the condensed request still opens with a system message. Observation uniqueness exists for crash recovery: a synthetic error can be written for an in-flight call, and then the real result arrives late.</p>
+<h2 id="why-half-occasionally">Why Half, Occasionally</h2>
+<p>The condenser documentation explains the strategy as a balance of four things:</p>
+<ol>
+<li><strong>Cost per call</strong> stays bounded because the view stays bounded.</li>
+<li><strong>Cache damage</strong> is limited. Condensation destroys the prompt cache, but condensing regularly, by half each time, keeps the cost of rebuilding it low.</li>
+<li><strong>Early context survives</strong> as a summary, and summaries are themselves summarized later.</li>
+<li><strong>Recent context is untouched</strong>, so the agent can continue mid-task.</li>
+</ol>
+<p>The summarizing condenser is configured with its own LLM, which can differ from the agent&rsquo;s, and it turns off streaming for summary calls except for providers that require streaming. Because every LLM carries its own usage ID and metrics (Chapter 4), summary costs can be reported apart from the agent&rsquo;s.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Summaries lose detail.</strong> Anything not in the summary is gone from the model&rsquo;s view, though not from the log.</li>
+<li><strong>Each condensation breaks the cache.</strong> Condensing by half is a compromise, not a cure.</li>
+<li><strong>Event count is a weak proxy for size.</strong> One huge tool output can matter more than fifty small events; the token trigger exists for that.</li>
+<li><strong>Boundaries can block a condensation.</strong> A long unbroken tool loop may leave no safe place to cut until it ends.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Never delete from the log; record a forgetting decision instead.</strong> The view applies it.</p>
+<p><strong>Keep head and tail; summarize the middle.</strong> The task and the current work are what matter most.</p>
+<p><strong>Distinguish soft from hard triggers.</strong> Skip a soft one when unsafe; always satisfy a hard one.</p>
+<p><strong>Compute safe cut points from API rules.</strong> Then a condensation can never produce an invalid request.</p>
+<p><strong>Condense by a large fraction each time.</strong> It caps cost and limits how often the cache is rebuilt.</p>
+</section>
+
+<section class="chapter" id="ch12">
+<h1>Chapter 12: Prompts, Skills, and Memory</h1>
+<h2 id="the-problem-what-the-agent-knows-before-it-starts">The Problem: What the Agent Knows Before It Starts</h2>
+<p>A capable model still knows nothing about your repository, your team&rsquo;s conventions, the tools in this sandbox, or what it learned last week. Somebody has to tell it. But every word added to the prompt costs tokens on every call, and anything that changes per conversation can break the prompt cache from Chapter 4.</p>
+<p>So there are three pressures: give the agent the right knowledge, give it only when relevant, and keep the cacheable part of the prompt stable.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>One big system prompt.</strong> Everything always present. Simple, expensive, and the agent drowns in rules for situations it is not in.</li>
+<li><strong>Retrieval for everything.</strong> Embed knowledge and fetch by similarity. Flexible, but hard to predict which rule will appear.</li>
+<li><strong>Tiers and triggers.</strong> A stable base prompt; a per-conversation block; knowledge that loads when a keyword, a task, or a file path calls for it; and an index the agent can read on demand.</li>
+</ul>
+<h2 id="openhandss-choice-sections-in-two-tiers-skills-with-triggers">OpenHands&rsquo;s Choice: Sections in Two Tiers, Skills With Triggers</h2>
+<p>The system prompt is assembled from <strong>sections</strong>. Each section is a pure function of a prompt context, with no template engine and no file access, so each can be tested alone. Every section renders into one of two tiers, matching the two blocks of <code>SystemPromptEvent</code>:</p>
+<ul>
+<li><strong>STATIC</strong>: stable across conversations and cached across them. Role, problem solving, code quality, version control, pull requests, security policy, risk assessment, tool guidance, process management, and more.</li>
+<li><strong>DYNAMIC</strong>: per conversation. Date and time, repository context, the list of available skills, secret names, memory, and any custom suffix.</li>
+</ul>
+<div class="mermaid">
+graph TD
+    SP["SystemPromptEvent"] --> ST["Block 1: STATIC<br/>cached across conversations"]
+    SP --> DY["Block 2: DYNAMIC<br/>this conversation only"]
+    ST --> S1["Role · persona · workflow"]
+    ST --> S2["Security policy · risk assessment"]
+    ST --> S3["Tool guidance · process management"]
+    DY --> D1["Date / time"]
+    DY --> D2["Repo context · available skills"]
+    DY --> D3["Secret names · memory · custom suffix"]
+</div>
+<p>Two override levels exist. <strong><code>persona</code></strong> replaces the built-in persona and coding-workflow sections but keeps the capability and policy sections, including security. <strong><code>system_prompt</code></strong> replaces everything and is documented as not recommended unless you know what you are doing.</p>
+<h2 id="skills-knowledge-that-arrives-when-needed">Skills: Knowledge That Arrives When Needed</h2>
+<p>A <strong>skill</strong> is a named piece of knowledge, usually a Markdown file. What happens to it depends on its format and its trigger:</p>
+<table>
+<thead>
+<tr>
+<th>Skill</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AgentSkills format (<code>SKILL.md</code>), no trigger</td>
+<td>Listed in <code>&lt;available_skills&gt;</code> with name, description, and location; the agent reads the full text on demand</td>
+</tr>
+<tr>
+<td>AgentSkills format, with trigger</td>
+<td>Listed, and also injected automatically when triggered</td>
+</tr>
+<tr>
+<td>Legacy format, with trigger</td>
+<td>Listed; content injected on trigger</td>
+</tr>
+<tr>
+<td>Legacy format, no trigger</td>
+<td>Full content always in the repository context</td>
+</tr>
+</tbody>
+</table>
+<p>Three triggers exist. A <strong>keyword trigger</strong> fires when a word appears in the user&rsquo;s message. A <strong>task trigger</strong> fires for a task type and may ask for input. A <strong>path trigger</strong> fires when the agent touches a file matching a glob; the code calls these skills &ldquo;rules&rdquo;.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant C as Conversation
+    participant AC as AgentContext
+    participant M as Model
+    U->>C: "deploy the docs site"
+    C->>AC: match keyword triggers
+    AC-->>C: skill text, names activated
+    C->>M: user message + extended content
+    M->>C: edit docs/config.yml
+    C->>AC: match path triggers for docs/**
+    AC-->>C: rule text added after the observation
+</div>
+<p>A triggered skill is recorded on the user&rsquo;s <code>MessageEvent</code> (<code>activated_skills</code>, <code>extended_content</code>), so the log shows exactly what knowledge the model received. Skills already activated in a conversation are skipped next time.</p>
+<p><strong>Where skills come from.</strong> Project skills load from <code>.agents/skills/</code> (preferred) and the legacy <code>.openhands/skills/</code> and <code>.openhands/microagents/</code> directories, including the git repository root when the agent runs in a subdirectory. User skills load from <code>~/.agents/skills/</code> and <code>~/.openhands/skills/</code>. Third-party instruction files are recognized as always-on skills: <code>AGENTS.md</code>, <code>CLAUDE.md</code>, <code>GEMINI.md</code>, and <code>.cursorrules</code>. Public skills come from the <code>OpenHands/extensions</code> repository. <code>disabled_skills</code> turns individual skills off.</p>
+<h2 id="memory-two-indexes-not-a-diary">Memory: Two Indexes, Not a Diary</h2>
+<p>The agent can maintain <strong><code>MEMORY.md</code></strong> files in two tiers: the user tier in <code>~/.openhands/memory/</code> and the project tier in <code>&lt;workspace&gt;/.openhands/memory/</code>. With <code>load_memory</code> on, both indexes are read into one prompt-ready string on the first <code>send_message()</code> or <code>run()</code>, when the workspace path is finally known. Daily logs named by date live in the same directories but are deliberately not loaded; the agent reads them when it needs them.</p>
+<h2 id="plugins-bundles-of-everything-above">Plugins: Bundles of Everything Above</h2>
+<p>A <strong>plugin</strong> bundles skills, hooks, MCP configuration, sub-agent definitions, and slash commands in one directory. The format follows Claude Code&rsquo;s plugin layout for compatibility. Plugins can come from a marketplace, and a running conversation can <code>load_plugin()</code>; the server exposes the same as an endpoint.</p>
+<div class="mermaid">
+graph LR
+    PL["Plugin"] --> SK["skills/"]
+    PL --> HK["hooks"]
+    PL --> MC["MCP config"]
+    PL --> AG["agents/"]
+    PL --> CM["commands/"]
+    SK --> CTX["AgentContext"]
+    HK --> HC["HookConfig (Ch. 9)"]
+    MC --> TL["MCP tools (Ch. 7)"]
+    AG --> REG["Sub-agent registry (Ch. 13)"]
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Triggers are literal.</strong> A keyword skill fires on a word, relevant or not, and misses synonyms.</li>
+<li><strong>On-demand skills cost a tool call.</strong> Progressive disclosure saves tokens up front and spends a step later.</li>
+<li><strong>The dynamic tier still varies per conversation.</strong> Only the static block is shared across conversations.</li>
+<li><strong>Many sources of instructions.</strong> Project, user, public, plugin, and third-party files can disagree; precedence rules must be learned.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Build prompts from small, pure sections.</strong> Each can be tested and cached by tier.</p>
+<p><strong>Separate what is stable across conversations from what is not.</strong> Mark only the stable part for caching.</p>
+<p><strong>Let knowledge arrive by trigger, and record what arrived.</strong> The log should show what the model was told.</p>
+<p><strong>List skills by name and load bodies on demand.</strong> An index line is cheaper than a page.</p>
+<p><strong>Read other tools&rsquo; instruction files.</strong> Treating <code>AGENTS.md</code> and friends as skills meets users where they are.</p>
+</section>
+
+<section class="chapter" id="ch13">
+<div class="partlabel">Part V — Scaling Out</div>
+<h1>Chapter 13: Sub-agents, Goals, and Critics</h1>
+<h2 id="the-problem-one-context-is-not-enough">The Problem: One Context Is Not Enough</h2>
+<p>Some work is better done by someone else. Exploring a large codebase fills the context with file listings the main task never needs again. A web search produces pages of text to extract one fact. A long task may stop early, sure it is done when it is not.</p>
+<p>Three related needs follow:</p>
+<ol>
+<li><strong>Delegation</strong>: hand a sub-task to a fresh agent and get back only the result.</li>
+<li><strong>Persistence</strong>: keep going until an objective is truly met, not until the model says &ldquo;done&rdquo;.</li>
+<li><strong>Quality checks</strong>: judge the result and try again if it falls short.</li>
+</ol>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Do everything in one conversation.</strong> No coordination cost, but the context fills with detail, and the agent judges its own work.</li>
+<li><strong>Spawn independent processes.</strong> Full isolation, but configuration, secrets, and cost tracking have to be rebuilt each time.</li>
+<li><strong>Child conversations that inherit from the parent.</strong> Same machinery, a fresh context, settings passed down, costs rolled up.</li>
+</ul>
+<h2 id="openhandss-choice-a-task-tool-that-runs-child-conversations">OpenHands&rsquo;s Choice: A Task Tool That Runs Child Conversations</h2>
+<p>The <strong>task tool set</strong> gives the agent one tool. Its action has a short <code>description</code>, the <code>prompt</code> to send, an optional <code>subagent_type</code>, and an optional <code>resume</code> with a previous task ID. A <strong>task manager</strong> turns that into a child conversation, runs it to completion, and returns the child&rsquo;s final answer as the observation. The call blocks until the child finishes. Each task is tracked as running, completed, or error.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant P as Parent agent
+    participant T as Task tool
+    participant TM as TaskManager
+    participant C as Child conversation
+    P->>T: TaskAction(description, prompt, subagent_type)
+    T->>TM: start task
+    TM->>C: create with inherited settings
+    TM->>C: send prompt and run()
+    C-->>TM: final answer
+    TM-->>T: status completed + result
+    T-->>P: observation
+</div>
+<p><strong>What the child inherits</strong>, from the task manager source:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLM</td>
+<td>A copy of the parent&rsquo;s, with streaming off and its own fresh metrics</td>
+</tr>
+<tr>
+<td>MCP servers</td>
+<td>The parent&rsquo;s MCP configuration and tool provider; a definition may add its own <code>mcp_config</code></td>
+</tr>
+<tr>
+<td>Hooks</td>
+<td>The definition&rsquo;s own hooks</td>
+</tr>
+<tr>
+<td>Confirmation policy</td>
+<td>The parent&rsquo;s, unless the definition sets one</td>
+</tr>
+<tr>
+<td>Iteration and budget limits</td>
+<td>From the definition, else the parent</td>
+</tr>
+<tr>
+<td>Workspace</td>
+<td>The parent&rsquo;s working directory</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>Recorded in the parent&rsquo;s stats under <code>task:&lt;id&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>A sub-agent also may not use a tool its parent lacks when the parent&rsquo;s scope restricts tools; the manager refuses to create it. The task tool declares no resources (Chapter 7), so with a tool concurrency limit above 1, several tasks can run side by side in one step.</p>
+<h2 id="defining-sub-agents">Defining Sub-agents</h2>
+<p>A sub-agent type is a Markdown file with YAML frontmatter: name, description, tools, model, skills, and similar fields, with the body as its system prompt. Definitions are registered with first-wins de-duplication by name, in this priority: agents registered in code, then plugin agents, then the project&rsquo;s <code>.agents/agents/</code> and <code>.openhands/agents/</code>, then the user&rsquo;s <code>~/.agents/agents/</code> and <code>~/.openhands/agents/</code>. Built-in types include <code>general-purpose</code>, <code>code-explorer</code>, <code>bash-runner</code>, and <code>web-researcher</code>.</p>
+<div class="mermaid">
+graph LR
+    P0["register_agent() in code"] --> P1["Plugin agents"]
+    P1 --> A["{project}/.agents/agents"]
+    A --> B["{project}/.openhands/agents"]
+    B --> C["~/.agents/agents"]
+    C --> D["~/.openhands/agents"]
+    D --> R["Registry<br/>first name wins"]
+</div>
+<p>An older <strong>delegate tool</strong> also exists. It has two commands: <code>spawn</code> creates named sub-agents (at most five by default), and <code>delegate</code> sends each a task and runs them in parallel threads.</p>
+<h2 id="goal-a-judge-outside-the-agent">/goal: A Judge Outside the Agent</h2>
+<p>The <code>/goal</code> loop pursues an objective across several runs. A <strong>goal controller</strong> holds the objective, a separate <strong>judge LLM</strong>, and an iteration cap (10 by default). After each run, the judge audits the result and decides: continue with a follow-up message, or stop. The controller does no I/O itself. A driver, either the synchronous <code>run_goal</code> or an async task in the Agent Server, sends messages and runs the agent; both share the same decision logic.</p>
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> Running: start(objective)
+    Running --> Judging: agent run finished
+    Judging --> Running: not met, send follow-up
+    Judging --> Complete: judge says met
+    Judging --> Capped: max_iterations reached
+    Running --> Interrupted: user interrupts
+    Complete --> [*]
+    Capped --> [*]
+</div>
+<p>The outcome says whether the goal was <strong>complete</strong> or merely <strong>capped</strong>, so a caller never mistakes running out of rounds for success. The server publishes live goal status as a state-update event, which a UI can show as a progress chip.</p>
+<h2 id="critics-scoring-the-work">Critics: Scoring the Work</h2>
+<p>A <strong>critic</strong> takes the events, and optionally a git patch, and returns a score. By default it runs when the agent finishes or sends a message; an <code>all_actions</code> mode evaluates every action, which the code warns is much slower. With <strong>iterative refinement</strong> configured, <code>run()</code> sends a follow-up prompt and runs again while the score stays below a threshold, up to a limit. The defaults are a threshold of 0.6 and 3 iterations.</p>
+<p>Built-in critics include simple ones, such as &ldquo;did the agent finish&rdquo; and &ldquo;is the patch empty&rdquo;, and an API-based critic that calls a scoring service.</p>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Blocking tasks.</strong> The parent waits for each child; parallelism needs a concurrency limit above 1.</li>
+<li><strong>Inheritance can surprise.</strong> A child that silently shares the parent&rsquo;s confirmation policy or MCP servers is convenient until it is not.</li>
+<li><strong>Judges and critics are models too.</strong> They cost tokens and can be wrong in their own ways.</li>
+<li><strong>Summaries hide detail.</strong> The parent sees the child&rsquo;s answer, not the child&rsquo;s reasoning.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Make delegation a tool call.</strong> It fits the existing event, confirmation, and cost machinery.</p>
+<p><strong>Pass settings down explicitly and document the rules.</strong> Then a child is predictable.</p>
+<p><strong>Charge child costs to the parent under a clear label.</strong> One bill, itemized.</p>
+<p><strong>Separate judging from doing.</strong> A controller that only decides can be shared by sync and async drivers.</p>
+<p><strong>Report &ldquo;capped&rdquo; separately from &ldquo;complete&rdquo;.</strong> Running out of tries is not success.</p>
+</section>
+
+<section class="chapter" id="ch14">
+<h1>Chapter 14: The Agent Server</h1>
+<h2 id="the-problem-an-agent-behind-a-network-boundary">The Problem: An Agent Behind a Network Boundary</h2>
+<p>So far the agent has been a library: create a conversation, call <code>run()</code>. A real product needs more. A browser UI must start conversations, stream events as they happen, approve actions, and reconnect after a dropped Wi-Fi link. A cloud service must run many conversations in many sandboxes. A sandboxed workspace must be driven from outside (Chapter 8).</p>
+<p>All of that requires putting the agent behind a network API without changing its semantics. The question is what that API should look like, and what happens when the connection is imperfect.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Request-response only.</strong> Poll for new events. Simple and robust, but slow and wasteful.</li>
+<li><strong>A single WebSocket for everything.</strong> Fast, but commands lose the clarity of HTTP status codes, and a reconnect has no standard way to catch up.</li>
+<li><strong>REST for commands and history, WebSocket for live events, with sequence numbers for catch-up.</strong> Each channel does what it is good at.</li>
+</ul>
+<h2 id="openhandss-choice-fastapi-rest-plus-event-streams">OpenHands&rsquo;s Choice: FastAPI REST Plus Event Streams</h2>
+<p>The <strong>Agent Server</strong> is a FastAPI app. REST endpoints create and control conversations; WebSockets stream events. Inside, three services do the work:</p>
+<ul>
+<li><strong>ConversationService</strong> keeps track of all conversations and hydrates them lazily from disk when first used.</li>
+<li><strong>EventService</strong> wraps one conversation: it runs the agent, persists events, and publishes them.</li>
+<li><strong>PubSub</strong> fans each event out to every subscriber: WebSocket clients, webhooks, and anything else listening.</li>
+</ul>
+<div class="mermaid">
+graph TD
+    UI["Canvas / SDK client"] -->|REST| R["Routers"]
+    UI <-->|WebSocket| WS["Socket endpoints"]
+    R --> CS["ConversationService"]
+    CS --> ES1["EventService<br/>conversation A"]
+    CS --> ES2["EventService<br/>conversation B"]
+    ES1 --> LC["LocalConversation<br/>(the SDK loop)"]
+    ES1 --> PS["PubSub"]
+    PS --> WS
+    PS --> WH["Webhooks"]
+    CS -.-> SLOT["Run slots<br/>max_concurrent_runs = 10"]
+</div>
+<p>Inside the server, each conversation is an ordinary <code>LocalConversation</code>. The server adds transport, not new agent behaviour. On the client side, <code>RemoteConversation</code> speaks the same API, so code written against the SDK works whether the agent runs in-process or across the network.</p>
+<h2 id="the-control-surface">The Control Surface</h2>
+<p>The conversation routes map directly onto the concepts of earlier chapters:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Concept</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run</code>, <code>pause</code>, <code>interrupt</code></td>
+<td>The run loop and its two ways to stop (Ch. 6)</td>
+</tr>
+<tr>
+<td><code>confirmation_policy</code>, <code>security_analyzer</code></td>
+<td>The safety gate (Ch. 9)</td>
+</tr>
+<tr>
+<td><code>switch_llm</code></td>
+<td>Changing models mid-conversation (Ch. 4)</td>
+</tr>
+<tr>
+<td><code>condense</code></td>
+<td>A manual condensation request (Ch. 11)</td>
+</tr>
+<tr>
+<td><code>goal</code></td>
+<td>The /goal loop (Ch. 13)</td>
+</tr>
+<tr>
+<td><code>fork</code>, <code>children</code>, <code>navigate</code></td>
+<td>Branching the conversation tree (Ch. 2)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Admission control.</strong> At most <code>max_concurrent_runs</code> conversations (10 by default) can run at once. A run that cannot get a <strong>run slot</strong> is refused with HTTP 429 rather than queued indefinitely.</p>
+<p><strong>Shell commands outside the agent.</strong> A separate <code>BashEventService</code> runs commands sent directly by a client. Its events are not added to the agent&rsquo;s event stream and are not visible to the agent.</p>
+<p><strong>Deferred initialization.</strong> For warm pools of pre-started server pods, <code>OH_DEFERRED_INIT=true</code> boots the server dormant: stateless services start, but every <code>/api/*</code> route answers 503 until an authenticated <code>POST /api/init</code> delivers credentials, workspace paths, and session keys.</p>
+<h2 id="streaming-without-losing-events">Streaming Without Losing Events</h2>
+<p>WebSockets authenticate with the first message rather than a URL token. The newer session protocol at <code>/sockets/session/{id}</code> sends three kinds of frames:</p>
+<div class="mermaid">
+graph LR
+    F["Frames"] --> D["Durable<br/>persisted events, numbered;<br/>replayed after a reconnect"]
+    F --> DL["Delta<br/>streaming tokens;<br/>may be dropped"]
+    F --> IS["ItemStarted<br/>announces an item;<br/>retired once it completes"]
+</div>
+<p>A reconnecting client sends the last sequence number it saw (<code>after_seq</code>) and receives every durable frame after it. Deltas are disposable because the durable event they build up to arrives anyway. Frames are capped at 4 MB.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant S as Agent Server
+    C->>S: GET events (REST history)
+    S-->>C: events up to seq 120
+    C->>S: WebSocket connect + auth message
+    C->>S: resume after_seq = 120
+    S-->>C: durable 121, 122...
+    S-->>C: deltas (tokens) as they stream
+    Note over C,S: connection drops
+    C->>S: reconnect, after_seq = 131
+    S-->>C: durable 132...
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Two channels to keep consistent.</strong> REST history and WebSocket events must agree on numbering, and the client must merge them.</li>
+<li><strong>Dropped deltas mean jumpy text.</strong> Correctness is preserved; smoothness is not guaranteed.</li>
+<li><strong>429 pushes retry logic to clients.</strong> Better than hidden queues, but every client must handle it.</li>
+<li><strong>Lazy hydration delays first access.</strong> A cold conversation pays a load cost on first touch.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Put the network around the loop, not inside it.</strong> The server runs the same conversation the library does.</p>
+<p><strong>Use REST for commands and WebSockets for events.</strong> Each keeps its strengths.</p>
+<p><strong>Number durable events and resume by number.</strong> Reconnects become a simple catch-up.</p>
+<p><strong>Mark streaming fragments as droppable.</strong> Only durable events need delivery guarantees.</p>
+<p><strong>Refuse work explicitly when full.</strong> A 429 is honest; an invisible queue is not.</p>
+</section>
+
+<section class="chapter" id="ch15">
+<h1>Chapter 15: Agent Canvas, the Face on Top</h1>
+<h2 id="the-problem-one-ui-many-backends-many-agents">The Problem: One UI, Many Backends, Many Agents</h2>
+<p>The repository named OpenHands/OpenHands is now the <strong>Agent Canvas</strong>, a React and TypeScript web app. It has to show conversations that may run on a laptop or in the cloud, with agents that may be OpenHands&rsquo;s own or another vendor&rsquo;s coding CLI. It must stay correct while the server API evolves in a separate repository.</p>
+<h2 id="the-options">The Options</h2>
+<ul>
+<li><strong>Call the server directly from components.</strong> Fast to write, and every API change ripples through the whole UI.</li>
+<li><strong>A hand-written client layer.</strong> Centralized, but it drifts from the server unless someone keeps it in sync by hand.</li>
+<li><strong>A generated client from the server&rsquo;s schema, behind data hooks.</strong> The schema is the contract; the UI only talks to hooks.</li>
+</ul>
+<h2 id="openhandss-choice-a-generated-contract-and-data-hooks">OpenHands&rsquo;s Choice: A Generated Contract and Data Hooks</h2>
+<p>The contract flows one way: the SDK&rsquo;s Agent Server publishes an OpenAPI schema; the TypeScript client is generated from it; the Canvas uses that client. Canvas code reaches the server only through <strong>TanStack Query</strong> hooks for server data, with <strong>Zustand</strong> stores for client state. A test, <code>no-direct-agent-server-calls</code>, fails the build if a component calls the Agent Server directly.</p>
+<div class="mermaid">
+graph LR
+    SDK["software-agent-sdk<br/>Agent Server"] -->|OpenAPI schema| TS["TypeScript client<br/>(generated)"]
+    TS --> H["TanStack Query hooks"]
+    H --> UI["React components"]
+    Z["Zustand stores"] --> UI
+    T["Test: no direct<br/>agent-server calls"] -.guards.-> UI
+</div>
+<p>The Canvas also records the <strong>minimum Agent Server version</strong> it needs in <code>config/defaults.json</code>, so an old server is detected rather than misread.</p>
+<h2 id="local-or-cloud">Local or Cloud</h2>
+<p>A backend is either <code>local</code> or <code>cloud</code>. Locally, an <strong>ingress</strong> on port 8000, a small reverse proxy, routes requests by longest matching prefix: in its documented example <code>/api/automation</code> goes to the automation service on 18001, <code>/api</code> to the Agent Server on 18000, and everything else to a default backend serving the UI. The same UI talks to OpenHands Cloud when the backend kind is cloud.</p>
+<div class="mermaid">
+graph TD
+    B["Browser"] --> IN["Ingress :8000<br/>longest-prefix routing"]
+    IN -->|/api| AS["Agent Server :18000"]
+    IN -->|/api/automation| AU["Automation :18001<br/>schedules, webhooks"]
+    IN -->|default| ST["UI dev server"]
+    AS --> WS["Workspaces (Ch. 8)"]
+</div>
+<p>Developer run modes cover the cases in between: a full stack, a minimal stack, static files only, and a mock backend for UI work with no server at all.</p>
+<h2 id="loading-a-conversation">Loading a Conversation</h2>
+<p>Opening a conversation follows the pattern from Chapter 14. The Canvas loads history over REST, then opens a WebSocket and asks the server to resend everything after the last sequence number it has. Streaming text deltas are batched before rendering so a fast token stream does not re-render the page on every token.</p>
+<h2 id="other-agents-in-the-same-window">Other Agents in the Same Window</h2>
+<p>Canvas can drive agents that are not OpenHands&rsquo;s own. Through the <strong>Agent Client Protocol (ACP)</strong>, the Agent Server spawns a coding CLI such as Claude Code, Codex, Gemini CLI, Pi, or OpenCode as a child process and talks JSON-RPC to it over stdio. In the SDK this is an <code>ACPAgent</code>, so the conversation, event log, and UI are the same whichever agent is inside. If the CLI is already logged in, that login is used before any API key. Pi and OpenCode are local-only.</p>
+<div class="mermaid">
+sequenceDiagram
+    participant UI as Canvas
+    participant AS as Agent Server
+    participant ACP as ACPAgent
+    participant CLI as Coding CLI
+    UI->>AS: send message
+    AS->>ACP: step
+    ACP->>CLI: JSON-RPC over stdio
+    CLI-->>ACP: updates, tool calls
+    ACP-->>AS: events
+    AS-->>UI: WebSocket frames
+</div>
+<h2 id="the-trade-offs">The Trade-offs</h2>
+<ul>
+<li><strong>Two repositories, one product.</strong> A UI change may wait on a server release; the version pin makes that explicit.</li>
+<li><strong>Generated clients follow the schema exactly.</strong> A badly modelled endpoint is faithfully reproduced in TypeScript.</li>
+<li><strong>ACP agents are black boxes.</strong> Their internal loop, tools, and safety checks are their own, not OpenHands&rsquo;s.</li>
+<li><strong>Local mode is a small distributed system.</strong> Three services and an ingress must all be up.</li>
+</ul>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Generate the client from the server&rsquo;s schema.</strong> Make the contract a file, not a convention.</p>
+<p><strong>Fence API calls behind hooks, and enforce it with a test.</strong> Rules that are checked are rules that hold.</p>
+<p><strong>Pin the minimum server version in config.</strong> Incompatibility should be an error message.</p>
+<p><strong>Wrap foreign agents in your own event model.</strong> Then one UI can show them all.</p>
+</section>
+
+<section class="chapter" id="ch16">
+<div class="partlabel">Part VI — Looking Back</div>
+<h1>Chapter 16: What Holds It Together</h1>
+<h2 id="looking-back">Looking Back</h2>
+<p>Fifteen chapters covered a lot of parts: events, state, models, the step, the loop, tools, workspaces, safety, secrets, condensation, prompts, sub-agents, the server, and the Canvas. A few ideas show up again and again.</p>
+<h2 id="five-recurring-ideas">Five Recurring Ideas</h2>
+<p><strong>1. The log is the truth.</strong> Everything is an event, events are appended and never edited, and state is rebuilt from them. Pausing, resuming, forking, condensing, streaming, and auditing all follow from this one choice.</p>
+<p><strong>2. Separate what the model sees from what happened.</strong> The view is computed from the log: condensations hide events, secrets are masked, skills are attached. The model gets a curated picture; the log keeps everything.</p>
+<p><strong>3. Same interface, different place.</strong> Local and remote conversations, local and remote workspaces, and the in-process and server loops share interfaces. Location is a deployment choice, not a code change.</p>
+<p><strong>4. Explicit limits everywhere.</strong> Iteration caps, budgets, stuck detection, concurrency slots, retry policies, minimum condensation progress, frame sizes. Each turns a vague failure into a named state.</p>
+<p><strong>5. Policy as data.</strong> Confirmation policies, security analyzers, hooks, tool filters, sub-agent definitions, and skills are configuration, not code paths. They can be swapped, combined, and inherited.</p>
+<div class="mermaid">
+graph TD
+    LOG["Append-only event log"] --> VIEW["Computed view<br/>(condense, mask, attach)"]
+    LOG --> RES["Resume · fork · stream · audit"]
+    IF["Shared interfaces"] --> LOC["Local"]
+    IF --> REM["Remote"]
+    LIM["Explicit limits"] --> NAMED["Named terminal states"]
+    POL["Policy as data"] --> SWAP["Swap · combine · inherit"]
+</div>
+<h2 id="how-a-request-travels">How a Request Travels</h2>
+<p>Put together, one user message travels like this:</p>
+<div class="mermaid">
+sequenceDiagram
+    participant U as User (Canvas)
+    participant S as Agent Server
+    participant L as Conversation loop
+    participant M as Model
+    participant W as Workspace
+    U->>S: message (REST)
+    S->>L: send_message, run
+    L->>L: skills, memory, view, condense?
+    L->>M: messages + tools
+    M-->>L: tool calls
+    L->>L: risk, policy, hooks
+    L->>W: actions
+    W-->>L: observations (secrets masked)
+    L-->>S: events
+    S-->>U: frames (WebSocket)
+</div>
+<h2 id="where-to-read-next">Where to Read Next</h2>
+<p>The SDK repository&rsquo;s own <code>AGENTS.md</code> files, kept next to the code in many packages, explain local design rules and are the best next step for readers who want to change OpenHands itself. The condenser README and the agent and conversation modules are good starting points.</p>
+<h2 id="apply-this">Apply This</h2>
+<p><strong>Pick one source of truth and derive everything else.</strong> For agents, an event log works well.</p>
+<p><strong>Give each failure a name.</strong> Every limit should end in a state a user can understand.</p>
+<p><strong>Keep the boundary interfaces boring.</strong> If local and remote look the same, everything above them stays simple.</p>
+</section>
+</main>
+
+<footer>
+  <p><b>Sources.</b> Public
+  <a href="https://github.com/OpenHands/OpenHands">OpenHands/OpenHands</a> (Agent Canvas) and
+  <a href="https://github.com/OpenHands/software-agent-sdk">OpenHands/software-agent-sdk</a>
+  (SDK, tools, workspaces, Agent Server), both MIT, including their in-repo READMEs and AGENTS.md files.
+  Diagrams are Mermaid redrawings for this book. Built for the
+  <a href="https://chendi0x7c00.github.io/ebooks/">Chendi ebook shelf</a>.</p>
+  <p>Path on the Pages site: <code>books/openhands-from-source.html</code>.</p>
+</footer>
+
+<script>
+/* OpenHands from Source — interactive widgets. Vanilla JS + SVG, no dependencies, works offline. */
+(function () {
+  'use strict';
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, html) {
+    var e = document.createElement(tag);
+    for (var k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+  function sv(tag, attrs, parent) {
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs || {}) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function head(root, tag, title, hint) {
+    root.innerHTML = '';
+    root.appendChild(el('div', { 'class': 'hw-head' },
+      '<span class="hw-tag">' + tag + '<\/span><span class="hw-title">' + title + '<\/span>' +
+      '<span class="hw-hint">' + hint + '<\/span>'));
+  }
+  function go(ch) {
+    var t = document.getElementById(ch);
+    if (!t) return;
+    if (history.pushState) history.pushState(null, '', '#' + ch);
+    t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function btn(label, attrs) { var b = el('button', attrs || {}, label); b.type = 'button'; return b; }
+  var ILLUS = '<span class="hw-illus">Illustrative example — event text is invented; the rules are from the source.<\/span>';
+
+  /* ------------------------------------------------------------------ */
+  /* 1. Architecture Explorer (ch01)                                     */
+  /* ------------------------------------------------------------------ */
+  var NODES = [
+    ['canvas', 'Agent Canvas', 'ch15', 'door', 130, 40, 'The React/TypeScript web app in <code>OpenHands/OpenHands<\/code>. Talks to the Agent Server only through generated-client hooks.'],
+    ['sdk', 'Your Python script', 'ch01', 'door', 400, 40, 'The SDK is a library: build an <code>Agent<\/code>, a <code>Conversation<\/code>, call <code>run()<\/code>. Same objects locally or against a server.'],
+    ['acp', 'ACP coding CLIs', 'ch15', 'door', 670, 40, 'Claude Code, Codex, Gemini CLI, Pi, OpenCode — spawned by the Agent Server and spoken to over stdio JSON-RPC as an <code>ACPAgent<\/code>.'],
+    ['server', 'Agent Server', 'ch14', 'core', 130, 150, 'FastAPI REST + WebSockets. ConversationService, EventService, PubSub. At most 10 concurrent runs by default; more get HTTP 429.'],
+    ['conv', 'Conversation · run loop', 'ch06', 'core', 400, 150, '<code>LocalConversation.run()<\/code> calls <code>agent.step()<\/code> until a named status stops it: FINISHED, ERROR, STUCK, PAUSED, or WAITING_FOR_CONFIRMATION.'],
+    ['sub', 'Sub-agents · /goal', 'ch13', 'loop', 670, 150, 'The task tool runs a child conversation with inherited settings; <code>/goal<\/code> adds a judge LLM; critics can ask for another pass.'],
+    ['llm', 'LLM wrapper', 'ch04', 'core', 110, 265, 'Wraps LiteLLM: chat or Responses API, retries, prompt caching, per-usage metrics, profiles and fallbacks.'],
+    ['step', 'Agent.step()', 'ch05', 'core', 290, 265, 'One step: pending actions, blocked message, prepare messages or condense, call the model, classify the reply, confirm, execute.'],
+    ['tools', 'Tools', 'ch07', 'store', 490, 265, 'Typed action and observation schemas plus an executor. Terminal, file editor, task tracker, browser, MCP, client tools.'],
+    ['condense', 'Condenser & View', 'ch11', 'loop', 690, 265, 'Forgets by appending a <code>Condensation<\/code> event; the View applies it. Summarize the middle, keep head and tail.'],
+    ['prompt', 'Prompts & skills', 'ch12', 'loop', 90, 385, 'System prompt in a static and a dynamic tier; skills by keyword, task, or path trigger; MEMORY.md; plugins.'],
+    ['security', 'Risk & confirmation', 'ch09', 'loop', 270, 385, 'Analyzer labels each action LOW/MEDIUM/HIGH/UNKNOWN; the policy decides whether a person confirms; hooks can block.'],
+    ['secrets', 'Secrets', 'ch10', 'loop', 470, 385, 'Values injected as env vars only when a command names them; every known value masked in output.'],
+    ['workspace', 'Workspace', 'ch08', 'store', 670, 385, 'Local host filesystem, or a remote Agent Server in Docker, Apptainer, a runtime API, Cloud, or a Kubernetes warm pool.'],
+    ['events', 'Event log', 'ch02', 'store', 230, 490, 'Everything is an event: actions, observations, messages, condensations. Append-only, one JSON file per event.'],
+    ['state', 'State & persistence', 'ch03', 'store', 560, 490, '<code>ConversationState<\/code>: <code>base_state.json<\/code> plus the event files; secrets encrypted or redacted; resumable.']
+  ];
+  var EDGES = [
+    ['canvas', 'server', 'REST + WebSocket'], ['sdk', 'conv', 'in-process'], ['sdk', 'server', 'RemoteConversation'],
+    ['server', 'acp', 'stdio JSON-RPC'], ['server', 'conv', 'EventService'], ['sub', 'conv', 'child'],
+    ['conv', 'step', 'step()'], ['step', 'llm', 'generate()'], ['step', 'tools', 'actions'], ['step', 'condense', 'view'],
+    ['step', 'prompt', 'system prompt'], ['step', 'security', 'risk · confirm'], ['tools', 'workspace', 'execute'],
+    ['tools', 'secrets', 'inject · mask'], ['conv', 'events', 'append'], ['events', 'state', 'persist'],
+    ['condense', 'events', 'Condensation'], ['tools', 'sub', 'task tool']
+  ];
+  var W = 160, H = 42, VW = 800, VH = 530;
+
+  function arch(root) {
+    head(root, 'Interactive', 'Architecture Explorer — from UI to sandbox',
+      'Hover or focus a box for a one-line summary. Click (or tap twice) to jump to its chapter. Drag boxes to rearrange. On a narrow screen, swipe the map sideways.');
+    var legend = el('div', { 'class': 'hw-legend' },
+      '<span><i style="border-color:var(--blue)"><\/i>Client<\/span>' +
+      '<span><i style="border-color:var(--amber)"><\/i>Core loop<\/span>' +
+      '<span><i style="border-color:#A89BFF"><\/i>Context &amp; policy<\/span>' +
+      '<span><i style="border-color:var(--green)"><\/i>State &amp; execution<\/span>');
+    var wrap = el('div', { 'class': 'hw-arch-wrap' });
+    var svg = sv('svg', { viewBox: '0 0 ' + VW + ' ' + VH, role: 'group', 'aria-label': 'OpenHands architecture map' });
+    var defs = sv('defs', {}, svg);
+    [['oha', '#3a4a68'], ['ohah', '#FFB454']].forEach(function (m) {
+      var mk = sv('marker', { id: m[0], viewBox: '0 -5 10 10', refX: 9, refY: 0, markerWidth: 7, markerHeight: 7, orient: 'auto' }, defs);
+      sv('path', { d: 'M0,-4L10,0L0,4', fill: m[1] }, mk);
+    });
+    var gE = sv('g', {}, svg), gN = sv('g', {}, svg);
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' },
+      '<b>Start in the middle.<\/b> Every client ends up at one conversation loop calling <code>Agent.step()<\/code>; everything else feeds that step or records what it did.');
+    var bar = el('div', { 'class': 'hw-bar', style: 'margin:10px 0 0' });
+    var reset = btn('Reset layout');
+    bar.appendChild(reset);
+    wrap.appendChild(svg);
+    root.appendChild(legend); root.appendChild(wrap); root.appendChild(panel); root.appendChild(bar);
+
+    var pos = {}, nodeEl = {}, edgeEls = [], selected = null;
+    NODES.forEach(function (n) { pos[n[0]] = { x: n[4], y: n[5] }; });
+    EDGES.forEach(function (e) {
+      var g = sv('g', { 'class': 'e' }, gE);
+      var ln = sv('line', { 'marker-end': 'url(#oha)' }, g);
+      var tx = sv('text', { 'text-anchor': 'middle', dy: -4 }, g);
+      tx.textContent = e[2];
+      edgeEls.push({ e: e, g: g, ln: ln, tx: tx });
+    });
+    function clip(ax, ay, bx, by) {
+      var dx = bx - ax, dy = by - ay;
+      var t = Math.min((W / 2 + 3) / (Math.abs(dx) || 1e-6), (H / 2 + 3) / (Math.abs(dy) || 1e-6));
+      t = Math.min(t, 0.5);
+      return [ax + dx * t, ay + dy * t, bx - dx * t, by - dy * t];
+    }
+    function drawEdges() {
+      edgeEls.forEach(function (o) {
+        var a = pos[o.e[0]], b = pos[o.e[1]], c = clip(a.x, a.y, b.x, b.y);
+        o.ln.setAttribute('x1', c[0]); o.ln.setAttribute('y1', c[1]);
+        o.ln.setAttribute('x2', c[2]); o.ln.setAttribute('y2', c[3]);
+        o.tx.setAttribute('x', (c[0] + c[2]) / 2); o.tx.setAttribute('y', (c[1] + c[3]) / 2);
+      });
+    }
+    function place(id) { nodeEl[id].setAttribute('transform', 'translate(' + (pos[id].x - W / 2) + ',' + (pos[id].y - H / 2) + ')'); }
+    function focusNode(id) {
+      var near = {}; if (id) near[id] = 1;
+      edgeEls.forEach(function (o) {
+        var hot = id && (o.e[0] === id || o.e[1] === id);
+        o.g.classList.toggle('hot', !!hot);
+        o.g.classList.toggle('dim', !!id && !hot);
+        o.ln.setAttribute('marker-end', hot ? 'url(#ohah)' : 'url(#oha)');
+        if (hot) { near[o.e[0]] = 1; near[o.e[1]] = 1; }
+      });
+      NODES.forEach(function (n) {
+        nodeEl[n[0]].classList.toggle('dim', !!id && !near[n[0]]);
+        nodeEl[n[0]].classList.toggle('sel', n[0] === id);
+      });
+      if (id) {
+        var n = NODES.filter(function (x) { return x[0] === id; })[0];
+        panel.innerHTML = '<b>' + n[1] + '<\/b> — ' + n[6] + ' <a href="#' + n[2] + '" data-go="' + n[2] + '">Chapter ' + parseInt(n[2].slice(2), 10) + ' →<\/a>';
+        root.setAttribute('data-focus', id);
+      }
+    }
+    panel.addEventListener('click', function (ev) {
+      var a = ev.target.closest && ev.target.closest('[data-go]');
+      if (a) { ev.preventDefault(); go(a.getAttribute('data-go')); }
+    });
+    function svgPt(ev) {
+      var p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+      var m = svg.getScreenCTM(); return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
+    }
+    NODES.forEach(function (n) {
+      var id = n[0];
+      var g = sv('g', { 'class': 'n k-' + n[3], tabindex: 0, role: 'link', 'data-node': id, 'data-ch': n[2],
+        'aria-label': n[1] + ', chapter ' + parseInt(n[2].slice(2), 10) }, gN);
+      sv('rect', { width: W, height: H, rx: 9 }, g);
+      var t1 = sv('text', { 'class': 'lb', x: W / 2, y: 18, 'text-anchor': 'middle' }, g); t1.textContent = n[1];
+      var t2 = sv('text', { 'class': 'cn', x: W / 2, y: 33, 'text-anchor': 'middle' }, g); t2.textContent = 'CH ' + n[2].slice(2);
+      nodeEl[id] = g; place(id);
+      var drag = null;
+      g.addEventListener('pointerenter', function (ev) { if (ev.pointerType !== 'touch' && !drag) focusNode(id); });
+      g.addEventListener('pointerleave', function (ev) { if (ev.pointerType !== 'touch' && !drag) focusNode(selected); });
+      g.addEventListener('focus', function () { focusNode(id); });
+      g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(n[2]); } });
+      g.addEventListener('pointerdown', function (ev) {
+        var p = svgPt(ev);
+        drag = { dx: p.x - pos[id].x, dy: p.y - pos[id].y, sx: p.x, sy: p.y, moved: false, type: ev.pointerType };
+        try { g.setPointerCapture(ev.pointerId); } catch (e) {}
+        gN.appendChild(g);
+      });
+      g.addEventListener('pointermove', function (ev) {
+        if (!drag) return;
+        var p = svgPt(ev);
+        if (!drag.moved && Math.abs(p.x - drag.sx) + Math.abs(p.y - drag.sy) < 6) return;
+        drag.moved = true;
+        pos[id].x = Math.max(W / 2, Math.min(VW - W / 2, p.x - drag.dx));
+        pos[id].y = Math.max(H / 2, Math.min(VH - H / 2, p.y - drag.dy));
+        place(id); drawEdges();
+      });
+      function end() {
+        if (!drag) return;
+        var d = drag; drag = null;
+        if (d.moved) { focusNode(id); return; }
+        if (d.type === 'touch' && selected !== id) { selected = id; focusNode(id); return; }
+        selected = id; go(n[2]);
+      }
+      g.addEventListener('pointerup', end);
+      g.addEventListener('pointercancel', function () { drag = null; });
+    });
+    reset.addEventListener('click', function () {
+      NODES.forEach(function (n) { pos[n[0]] = { x: n[4], y: n[5] }; place(n[0]); });
+      drawEdges(); selected = null; focusNode(null);
+    });
+    drawEdges();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Shared: a scenario stepper (phases strip + event log + panel)       */
+  /* ------------------------------------------------------------------ */
+  /* cfg: {phases:[[id,label,sub]], scen:{key:{label, steps:[[phase, text, [[cls,text]...]|null, status, bad]]}}, logTitle, sideTitle} */
+  function tracer(root, cfg) {
+    var bar = el('div', { 'class': 'hw-bar', role: 'group', 'aria-label': 'Scenario' });
+    var keys = Object.keys(cfg.scen), sbtn = {};
+    keys.forEach(function (k) {
+      var b = btn(cfg.scen[k].label, { 'data-scen': k, 'aria-pressed': 'false' });
+      b.addEventListener('click', function () { load(k); });
+      sbtn[k] = b; bar.appendChild(b);
+    });
+    var strip = el('div', { 'class': 'hw-phases', style: 'grid-template-columns:repeat(' + Math.min(cfg.phases.length, 4) + ',minmax(0,1fr))' });
+    var phEl = {};
+    cfg.phases.forEach(function (p) {
+      var d = el('div', { 'class': 'hw-ph', 'data-phase': p[0] }, p[1] + '<small>' + p[2] + '<\/small>');
+      phEl[p[0]] = d; strip.appendChild(d);
+    });
+    var stepN = el('div', { 'class': 'hw-step-n', 'aria-live': 'polite' });
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' });
+    var cols = el('div', { 'class': 'hw-cols' });
+    var log = el('div', { 'class': 'hw-tx' }, '<div class="h">' + cfg.logTitle + '<\/div>');
+    var side = el('div', { 'class': 'hw-tx' }, '<div class="h">' + cfg.sideTitle + '<\/div>');
+    var sideV = el('div', { 'class': 'hw-status-v' }); side.appendChild(sideV);
+    cols.appendChild(log); cols.appendChild(side);
+    var ctl = el('div', { 'class': 'hw-bar', style: 'margin:12px 0 0' });
+    var bPrev = btn('◀ Back'), bNext = btn('Next step ▶', { 'data-act': 'next' }), bReset = btn('Restart');
+    ctl.appendChild(bPrev); ctl.appendChild(bNext); ctl.appendChild(bReset);
+    root.appendChild(bar); root.appendChild(strip); root.appendChild(stepN); root.appendChild(panel);
+    root.appendChild(cols); root.appendChild(ctl); root.appendChild(el('p', { 'class': 'hw-hint' }, ILLUS));
+    var cur = keys[0], idx = 0;
+    function render() {
+      var s = cfg.scen[cur].steps, st = s[idx];
+      keys.forEach(function (k) { sbtn[k].setAttribute('aria-pressed', k === cur ? 'true' : 'false'); });
+      var seen = {};
+      for (var i = 0; i < idx; i++) seen[s[i][0]] = 1;
+      cfg.phases.forEach(function (p) {
+        var d = phEl[p[0]];
+        d.className = 'hw-ph' + (p[0] === st[0] ? ' cur' + (st[4] ? ' bad' : '') : seen[p[0]] ? ' seen' : '');
+      });
+      stepN.textContent = 'STEP ' + (idx + 1) + ' / ' + s.length;
+      panel.innerHTML = st[1];
+      log.querySelectorAll('.hw-msg').forEach(function (m) { m.remove(); });
+      for (var j = 0; j <= idx; j++) {
+        (s[j][2] || []).forEach(function (m) {
+          var d = el('div', { 'class': 'hw-msg r-' + m[0] + (j === idx ? ' new' : '') }, m[1]);
+          log.appendChild(d);
+        });
+      }
+      var status = 'IDLE';
+      for (var q = 0; q <= idx; q++) if (s[q][3]) status = s[q][3];
+      sideV.innerHTML = '<span class="hw-stat s-' + status.toLowerCase() + '">' + status + '<\/span>';
+      root.setAttribute('data-step', String(idx));
+      root.setAttribute('data-scenario', cur);
+      root.setAttribute('data-status', status);
+      bPrev.disabled = idx === 0; bNext.disabled = idx === s.length - 1;
+    }
+    function load(k) { cur = k; idx = 0; render(); }
+    bNext.addEventListener('click', function () { if (idx < cfg.scen[cur].steps.length - 1) { idx++; render(); } });
+    bPrev.addEventListener('click', function () { if (idx > 0) { idx--; render(); } });
+    bReset.addEventListener('click', function () { idx = 0; render(); });
+    render();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 2. Agent.step() stepper (ch05)                                      */
+  /* ------------------------------------------------------------------ */
+  var U = ['user', 'MessageEvent · user: “make the failing test pass”'];
+  function stepper(root) {
+    head(root, 'Interactive', 'Agent.step() stepper — one step, many exits',
+      'Pick a scenario, then press Next. The strip shows where the step is; the log shows the events it appends; the box on the right is the conversation status.');
+    tracer(root, {
+      logTitle: 'Event log (appended)', sideTitle: 'Conversation status',
+      phases: [['pending', 'Pending?', 'unanswered actions'], ['blocked', 'Blocked?', 'hook on user msg'],
+        ['prepare', 'Prepare', 'view → messages'], ['call', 'Call LLM', 'generate()'],
+        ['classify', 'Classify', 'pure function'], ['confirm', 'Confirm?', 'whole batch'],
+        ['execute', 'Execute', 'parallel executor'], ['emit', 'Emit', 'in call order']],
+      scen: {
+        tool: { label: 'Tool calls', steps: [
+          ['pending', 'The step starts by asking: are there actions on this branch without an answer? <b>No<\/b> — so there is no leftover work.', [U], 'RUNNING'],
+          ['blocked', 'Was the latest user message blocked by a <code>UserPromptSubmit<\/code> hook? <b>No.<\/b>', null],
+          ['prepare', '<code>prepare_llm_messages()<\/code> turns the cached View into messages. The condenser looks and decides not to condense.', null],
+          ['call', '<code>llm.generate()<\/code> with the messages and every tool in <code>tools_map<\/code>. The reply contains two tool calls.', null],
+          ['classify', '<code>classify_response()<\/code>: the reply has tool calls, so the type is <b>TOOL_CALLS<\/b>. Each call becomes an <code>ActionEvent<\/code>; the first carries the thought.', [['assistant', 'ActionEvent · terminal: run the tests'], ['assistant', 'ActionEvent · file_editor: view the test file']]],
+          ['confirm', 'The confirmation policy is asked about the <b>whole batch<\/b>. Here nothing needs approval.', null],
+          ['execute', 'The parallel executor runs the tools (one at a time unless <code>tool_concurrency_limit<\/code> &gt; 1).', null],
+          ['emit', 'Results are emitted in the <b>model’s order<\/b>, so every action has exactly one answer. The step returns; the run loop decides whether to step again.', [['tool', 'ObservationEvent · terminal output'], ['tool', 'ObservationEvent · file contents']]]
+        ] },
+        answer: { label: 'Plain answer', steps: [
+          ['pending', 'No unanswered actions.', [U], 'RUNNING'],
+          ['blocked', 'Not blocked.', null],
+          ['prepare', 'Messages ready, no condensation.', null],
+          ['call', 'The model replies with text only.', null],
+          ['classify', 'Non-blank text and no tool calls: <b>CONTENT<\/b>. The step emits an agent <code>MessageEvent<\/code> and sets <b>FINISHED<\/b>. Talking to the user is how the agent says “your turn”.', [['assistant', 'MessageEvent · agent: “Done — the test passes now.”']], 'FINISHED']
+        ] },
+        confirm: { label: 'Needs confirmation', steps: [
+          ['pending', 'No unanswered actions.', [U], 'RUNNING'],
+          ['prepare', 'Messages ready.', null],
+          ['call', 'The model asks for a shell command.', null],
+          ['classify', '<b>TOOL_CALLS<\/b> → one <code>ActionEvent<\/code>.', [['assistant', 'ActionEvent · terminal: a command the analyzer rates HIGH']]],
+          ['confirm', 'The analyzer labels the action and the policy says “confirm”. The status becomes <b>WAITING_FOR_CONFIRMATION<\/b> and the step returns <b>without running anything<\/b>.', null, 'WAITING_FOR_CONFIRMATION', true],
+          ['pending', 'The user approves by calling <code>run()<\/code> again. The next step finds the <b>unanswered action<\/b> first and executes it — implicit confirmation.', null, 'RUNNING'],
+          ['emit', 'The observation is appended. Rejecting instead would have written a <code>UserRejectObservation<\/code>.', [['tool', 'ObservationEvent · command output']]]
+        ] },
+        ctx: { label: 'Context too long', steps: [
+          ['pending', 'No unanswered actions.', [U], 'RUNNING'],
+          ['prepare', 'Messages ready; the condenser did not trigger on this step.', null],
+          ['call', 'The provider rejects the request: <b>context window exceeded<\/b>.', null, null, true],
+          ['call', 'The step catches the typed error. Because the condenser handles requests, it emits a <code>CondensationRequest<\/code> instead of failing. (Without such a condenser, the run would end in ERROR.)', [['note', 'CondensationRequest']]],
+          ['prepare', 'Next step: the condenser sees the request (a <b>hard<\/b> trigger), forgets part of the middle, and emits a <code>Condensation<\/code>. The step returns again.', [['note', 'Condensation · forgotten ids + summary']]],
+          ['call', 'The following step calls the model with the shorter View and carries on.', null]
+        ] },
+        empty: { label: 'Empty reply', steps: [
+          ['pending', 'No unanswered actions.', [U], 'RUNNING'],
+          ['call', 'The model returns reasoning but nothing visible.', null],
+          ['classify', '<b>REASONING_ONLY<\/b> (or <b>EMPTY<\/b> if there is nothing at all). The step emits what it got, then a <b>nudge<\/b>: an environment-sourced message saying the last reply had neither a tool call nor a message.', [['assistant', 'MessageEvent · reasoning only'], ['note', 'MessageEvent · source=environment · nudge']]],
+          ['call', 'Next step: the model sees the nudge as a user-role message and tries again; the log records that the framework, not the human, sent it.', null]
+        ] },
+        finish: { label: 'Finish mid-batch', steps: [
+          ['pending', 'No unanswered actions.', [U], 'RUNNING'],
+          ['call', 'The model returns three calls: edit, <code>finish<\/code>, then another command.', null],
+          ['classify', '<b>TOOL_CALLS<\/b>. The batch contains <code>finish<\/code>, so every call <b>after<\/b> it is dropped with a warning.', [['assistant', 'ActionEvent · file_editor'], ['assistant', 'ActionEvent · finish']]],
+          ['execute', 'The edit runs; <code>finish<\/code> carries the final message.', null],
+          ['emit', 'Observations are emitted in order. Finish executed → <b>FINISHED<\/b>, unless a critic with iterative refinement scores it too low and injects a follow-up.', [['tool', 'ObservationEvent · edit result'], ['tool', 'ObservationEvent · finish']], 'FINISHED']
+        ] }
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 3. Run-loop status machine (ch06)                                   */
+  /* ------------------------------------------------------------------ */
+  var STATUSES = ['IDLE', 'RUNNING', 'WAITING_FOR_CONFIRMATION', 'PAUSED', 'FINISHED', 'ERROR', 'STUCK'];
+  /* event -> {from: [to, explanation]} ; '*' for any running-ish */
+  var TRANS = [
+    ['run', 'run()', { IDLE: 'RUNNING', PAUSED: 'RUNNING', ERROR: 'RUNNING', STUCK: 'RUNNING', WAITING_FOR_CONFIRMATION: 'RUNNING' },
+      'run() sets RUNNING from IDLE, PAUSED, ERROR, or STUCK. From WAITING_FOR_CONFIRMATION, calling run() again <b>is<\/b> the approval: the next step executes the pending actions.'],
+    ['tools', 'step: tool calls', { RUNNING: 'RUNNING' }, 'A normal step: actions ran, observations appended. The loop checks budget and the iteration cap (default 500), then steps again.'],
+    ['text', 'step: text reply / finish', { RUNNING: 'FINISHED' }, 'A plain text reply or the finish tool sets FINISHED. Stop hooks run next; if one refuses, its feedback is sent back and the status returns to RUNNING.'],
+    ['stophook', 'stop hook refuses', { FINISHED: 'RUNNING' }, 'A Stop hook objected to finishing: its feedback becomes an environment message and the loop continues.'],
+    ['risky', 'step: risky action', { RUNNING: 'WAITING_FOR_CONFIRMATION' }, 'The policy wants a person to confirm. Nothing in the batch runs; the loop breaks.'],
+    ['reject', 'reject_pending_actions()', { WAITING_FOR_CONFIRMATION: 'IDLE' }, 'Each pending action gets a UserRejectObservation with the reason, so the model learns it was refused.'],
+    ['pause', 'pause()', { RUNNING: 'PAUSED' }, 'pause() takes effect between steps: an in-flight model call finishes first.'],
+    ['interrupt', 'interrupt()', { RUNNING: 'PAUSED' }, 'interrupt() cancels the running task now (async path). Status PAUSED, an InterruptEvent, and a synthetic AgentErrorEvent for each action left without an answer.'],
+    ['stuck', 'stuck detector fires', { RUNNING: 'STUCK' }, 'The StuckDetector saw a repeating pattern since the last user message (for example the same action and observation 4 times).'],
+    ['cap', 'iteration cap / budget', { RUNNING: 'ERROR' }, 'MaxIterationsReached (default 500 per run) or MaxBudgetReached. ERROR is terminal for this run; run() can start again.'],
+    ['exc', 'exception', { RUNNING: 'ERROR' }, 'Any exception sets ERROR, emits a ConversationErrorEvent, and re-raises as ConversationRunError.'],
+    ['msg', 'send_message()', { FINISHED: 'IDLE', STUCK: 'IDLE', IDLE: 'IDLE', RUNNING: 'RUNNING', PAUSED: 'PAUSED', ERROR: 'ERROR', WAITING_FOR_CONFIRMATION: 'WAITING_FOR_CONFIRMATION' },
+      'send_message() takes the same lock. From FINISHED or STUCK it resets to IDLE; otherwise the message is simply appended. The loop deliberately does not check FINISHED right after a step, so a waiting message is not lost.']
+  ];
+  function status(root) {
+    head(root, 'Interactive', 'Run-loop status machine',
+      'Fire events at the conversation. Buttons that do nothing in the current status are disabled. Every transition here follows LocalConversation.run() and send_message().');
+    var pills = el('div', { 'class': 'hw-pills' }), pEl = {};
+    STATUSES.forEach(function (s) { var p = el('span', { 'class': 'hw-stat s-' + s.toLowerCase(), 'data-st': s }, s); pEl[s] = p; pills.appendChild(p); });
+    var bar = el('div', { 'class': 'hw-bar', style: 'margin-top:12px' }), bEl = {};
+    TRANS.forEach(function (t) { var b = btn(t[1], { 'data-ev': t[0] }); bEl[t[0]] = b; bar.appendChild(b); });
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' });
+    var hist = el('div', { 'class': 'hw-meter' });
+    var ctl = el('div', { 'class': 'hw-bar', style: 'margin:10px 0 0' }); var rs = btn('Reset to IDLE'); ctl.appendChild(rs);
+    root.appendChild(pills); root.appendChild(bar); root.appendChild(panel); root.appendChild(hist); root.appendChild(ctl);
+    var cur = 'IDLE', trail = ['IDLE'];
+    function render(msg) {
+      STATUSES.forEach(function (s) { pEl[s].classList.toggle('on', s === cur); });
+      TRANS.forEach(function (t) { bEl[t[0]].disabled = !(cur in t[2]); });
+      panel.innerHTML = msg || '<b>IDLE.<\/b> A new conversation. IDLE is not terminal: a WebSocket reports it on connect, and clients must not read it as “run ended”.';
+      var term = cur === 'FINISHED' || cur === 'ERROR' || cur === 'STUCK';
+      hist.innerHTML = 'Path: ' + trail.slice(-8).join(' → ') + (term ? ' &nbsp;<b>terminal for this run<\/b>' : '');
+      root.setAttribute('data-status', cur);
+    }
+    TRANS.forEach(function (t) {
+      bEl[t[0]].addEventListener('click', function () {
+        if (!(cur in t[2])) return;
+        var from = cur; cur = t[2][cur]; if (cur !== from || trail[trail.length - 1] !== cur) trail.push(cur);
+        render('<b>' + from + ' → ' + cur + '.<\/b> ' + t[3]);
+      });
+    });
+    rs.addEventListener('click', function () { cur = 'IDLE'; trail = ['IDLE']; render(); });
+    render();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 4. Workspace action → observation flow (ch08)                      */
+  /* ------------------------------------------------------------------ */
+  function workspace(root) {
+    head(root, 'Interactive', 'Where an action runs — local vs remote',
+      'Choose a setup and step through one tool call. The lanes light up as the action travels and the observation comes back.');
+    var LANES = { local: ['Your process', 'Agent + tools', 'Host files'], remote: ['Your process', 'Agent Server', 'Agent + tools', 'Sandbox files'], percv: ['Canvas', 'Outer server', 'Container: this conversation', 'Its mounts only'] };
+    var SC = {
+      local: { label: 'LocalWorkspace', steps: [
+        [0, 'You call <code>Conversation(agent, workspace=LocalWorkspace(...))<\/code>: the factory returns a <b>LocalConversation<\/b>. The loop runs in your process.'],
+        [1, 'The agent emits an <code>ActionEvent<\/code> for the terminal tool.'],
+        [2, 'The tool executor runs the command directly on the <b>host<\/b>. A local workspace is no sandbox: the agent sees what you see.'],
+        [1, 'The <code>ObservationEvent<\/code> is appended to the log in your persistence directory. Done — no network involved.']
+      ] },
+      remote: { label: 'Remote (e.g. Docker)', steps: [
+        [0, 'With a remote workspace (here a <code>DockerWorkspace<\/code>) the factory returns a <b>RemoteConversation<\/b>. Your process only holds a mirror.'],
+        [1, 'Your <code>send_message()<\/code> and <code>run()<\/code> become HTTP calls to the Agent Server inside the container.'],
+        [2, 'There the same SDK runs <code>LocalConversation.run()<\/code>; the agent emits the action and its tools execute it.'],
+        [3, 'The command touches only the <b>sandbox’s<\/b> files.'],
+        [1, 'The observation is written to the server’s log and published over the WebSocket.'],
+        [0, '<code>RemoteEventsList<\/code> appends it; <code>RemoteState<\/code> updates from state-update events. <code>reconcile()<\/code> exists because sockets drop.']
+      ] },
+      percv: { label: 'Per-conversation container', steps: [
+        [0, 'Canvas talks to the outer Agent Server on the host (runtime <code>docker<\/code>).'],
+        [1, 'The outer server starts <b>one hardened container per conversation<\/b> and proxies HTTP and WebSocket traffic to it.'],
+        [2, 'The container runs as your uid:gid, <code>--cap-drop ALL<\/code>, <code>no-new-privileges<\/code>, no core dumps, port published on 127.0.0.1 only.'],
+        [3, 'It mounts only this conversation’s workspace and state, so history and files survive a container replacement.'],
+        [1, 'Events flow back through the proxy to Canvas.']
+      ] }
+    };
+    var bar = el('div', { 'class': 'hw-bar' }), sb = {};
+    Object.keys(SC).forEach(function (k) { var b = btn(SC[k].label, { 'data-scen': k }); b.addEventListener('click', function () { load(k); }); sb[k] = b; bar.appendChild(b); });
+    var lanes = el('div', { 'class': 'hw-lanes' });
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' });
+    var ctl = el('div', { 'class': 'hw-bar', style: 'margin:10px 0 0' });
+    var bp = btn('◀ Back'), bn = btn('Next ▶', { 'data-act': 'next' }), br = btn('Restart');
+    ctl.appendChild(bp); ctl.appendChild(bn); ctl.appendChild(br);
+    var cnt = el('div', { 'class': 'hw-step-n' });
+    root.appendChild(bar); root.appendChild(lanes); root.appendChild(cnt); root.appendChild(panel); root.appendChild(ctl);
+    var cur = 'local', i = 0;
+    function render() {
+      var L = LANES[cur], s = SC[cur].steps;
+      Object.keys(sb).forEach(function (k) { sb[k].setAttribute('aria-pressed', k === cur ? 'true' : 'false'); });
+      lanes.innerHTML = '';
+      lanes.style.gridTemplateColumns = 'repeat(' + L.length + ', minmax(0,1fr))';
+      L.forEach(function (n, j) {
+        var c = 'hw-lane' + (j === s[i][0] ? ' cur' : '');
+        for (var q = 0; q < i; q++) if (s[q][0] === j && j !== s[i][0]) c += ' seen';
+        lanes.appendChild(el('div', { 'class': c, 'data-lane': j }, n));
+      });
+      panel.innerHTML = s[i][1];
+      cnt.textContent = 'STEP ' + (i + 1) + ' / ' + s.length;
+      bp.disabled = i === 0; bn.disabled = i === s.length - 1;
+      root.setAttribute('data-step', String(i)); root.setAttribute('data-scenario', cur);
+    }
+    function load(k) { cur = k; i = 0; render(); }
+    bn.addEventListener('click', function () { if (i < SC[cur].steps.length - 1) { i++; render(); } });
+    bp.addEventListener('click', function () { if (i > 0) { i--; render(); } });
+    br.addEventListener('click', function () { i = 0; render(); });
+    render();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 5. Confirmation gate (ch09)                                         */
+  /* ------------------------------------------------------------------ */
+  var RISKS = ['LOW', 'MEDIUM', 'HIGH', 'UNKNOWN'];
+  function gate(root) {
+    head(root, 'Interactive', 'Confirmation gate — analyzer × policy × risk',
+      'Choose an action, whether an analyzer is configured, the risk it would assign, and the policy. The trace follows the rules in Chapter 9.');
+    function group(label, opts, key) {
+      var w = el('div', { 'class': 'hw-grp' }, '<span class="hw-grp-l">' + label + '<\/span>');
+      var bs = {};
+      opts.forEach(function (o) {
+        var b = btn(o[1], { 'data-k': key, 'data-v': o[0] });
+        b.addEventListener('click', function () { S[key] = o[0]; render(); });
+        bs[o[0]] = b; w.appendChild(b);
+      });
+      G[key] = bs; return w;
+    }
+    var S = { act: 'cmd', an: 'yes', risk: 'HIGH', pol: 'risky', cu: 'yes' }, G = {};
+    var box = el('div', { 'class': 'hw-gate' });
+    box.appendChild(group('Action', [['cmd', 'terminal command'], ['ro', 'read-only tool'], ['finish', 'lone finish / think']], 'act'));
+    box.appendChild(group('Analyzer', [['yes', 'configured'], ['no', 'none']], 'an'));
+    box.appendChild(group('Analyzer says', RISKS.map(function (r) { return [r, r]; }), 'risk'));
+    box.appendChild(group('Policy', [['never', 'NeverConfirm'], ['always', 'AlwaysConfirm'], ['risky', 'ConfirmRisky (HIGH)']], 'pol'));
+    box.appendChild(group('confirm_unknown', [['yes', 'true (default)'], ['no', 'false']], 'cu'));
+    var pipe = el('ol', { 'class': 'hw-pipe' });
+    var verdict = el('div', { 'class': 'hw-panel hw-verdict', 'aria-live': 'polite' });
+    root.appendChild(box); root.appendChild(pipe); root.appendChild(verdict);
+    function li(cls, t, v) { pipe.appendChild(el('li', { 'class': cls }, '<span class="t">' + t + '<\/span><span class="v">' + v + '<\/span>')); }
+    function render() {
+      Object.keys(G).forEach(function (k) { Object.keys(G[k]).forEach(function (v) { G[k][v].setAttribute('aria-pressed', S[k] === v ? 'true' : 'false'); }); });
+      var disRisk = S.an === 'no' || S.act !== 'cmd';
+      Object.keys(G.risk).forEach(function (v) { G.risk[v].disabled = disRisk; });
+      Object.keys(G.cu).forEach(function (v) { G.cu[v].disabled = S.pol !== 'risky'; });
+      pipe.innerHTML = '';
+      var confirm, risk;
+      if (S.act === 'finish') {
+        li('pass', 'Only finish or think?', 'Yes — a lone finish or think never needs confirmation, whatever the policy.');
+        li('skip', 'Analyzer', 'Not consulted.'); li('skip', 'Policy', 'Not consulted.');
+        confirm = false; risk = '—';
+      } else {
+        li('pass', 'Only finish or think?', 'No — continue.');
+        if (S.an === 'no') { risk = 'UNKNOWN'; li('ask', 'Analyzer', 'None configured → every action is <b>UNKNOWN<\/b>. Any risk label the model attached is ignored.'); }
+        else if (S.act === 'ro') { risk = 'UNKNOWN'; li('ask', 'Analyzer', 'Tool annotated read-only → its risk is not evaluated: <b>UNKNOWN<\/b>.'); }
+        else { risk = S.risk; li(risk === 'HIGH' ? 'deny' : risk === 'UNKNOWN' ? 'ask' : 'pass', 'Analyzer', '<code>analyze_actions()<\/code> → <b>' + risk + '<\/b> (recorded as a SecurityAnalysisEvent).'); }
+        if (S.pol === 'never') { confirm = false; li('pass', 'NeverConfirm', 'Never asks.'); }
+        else if (S.pol === 'always') { confirm = true; li('ask', 'AlwaysConfirm', 'Always asks.'); }
+        else {
+          if (risk === 'UNKNOWN') { confirm = S.cu === 'yes'; li(confirm ? 'ask' : 'pass', 'ConfirmRisky', 'Risk UNKNOWN and confirm_unknown=' + (S.cu === 'yes' ? 'true → ask. An action nobody could assess is treated as risky.' : 'false → do not ask.')); }
+          else { confirm = risk === 'HIGH'; li(confirm ? 'ask' : 'pass', 'ConfirmRisky', risk + (confirm ? ' ≥ threshold HIGH (reflexive) → ask.' : ' &lt; threshold HIGH → do not ask.')); }
+        }
+      }
+      verdict.className = 'hw-panel hw-verdict ' + (confirm ? 'no' : 'ok');
+      verdict.innerHTML = confirm
+        ? '<b>WAITING_FOR_CONFIRMATION.<\/b> Nothing in the batch runs. Approve = <code>run()<\/code> again; reject = a <code>UserRejectObservation<\/code> per action. A PreToolUse hook (exit 2) could still block it later.'
+        : '<b>Runs.<\/b> Unless a PreToolUse hook blocks it (exit code 2), which turns it into a UserRejectObservation with source “hook”.';
+      root.setAttribute('data-confirm', confirm ? '1' : '0');
+      root.setAttribute('data-risk', risk);
+    }
+    render();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 6. Condenser (ch11)                                                 */
+  /* ------------------------------------------------------------------ */
+  function condense(root) {
+    head(root, 'Interactive', 'Condenser — forget the middle, at safe boundaries',
+      'Defaults of default_condenser(): max_size 80, keep_first 4. Add events until the view passes 80 (a soft EVENTS trigger), or press “Context error” for a hard REQUEST trigger. Batches of tool calls are drawn as linked blocks and are never split.');
+    var MAX = 80, KEEP = 4;
+    var track = el('div', { 'class': 'hw-ctrack' });
+    var meter = el('div', { 'class': 'hw-meter' });
+    var panel = el('div', { 'class': 'hw-panel', 'aria-live': 'polite' });
+    var ctl = el('div', { 'class': 'hw-bar', style: 'margin-top:10px' });
+    var b1 = btn('+1 step (2 events)', { 'data-act': 'add' }), b5 = btn('+ batch of 3 tool calls (6)', { 'data-act': 'batch' }),
+      b10 = btn('+10 steps', { 'data-act': 'add10' }), bReq = btn('Context error → REQUEST', { 'data-act': 'req' }), bR = btn('Reset');
+    [b1, b5, b10, bReq, bR].forEach(function (b) { ctl.appendChild(b); });
+    root.appendChild(meter); root.appendChild(track); root.appendChild(ctl); root.appendChild(panel);
+    root.appendChild(el('p', { 'class': 'hw-hint' }, 'Illustrative: event counts are simulated; the thresholds, halving rule, and boundary rule are from LLMSummarizingCondenser.'));
+    var V, nCond, nextBatch;
+    function reset() {
+      V = [{ k: 'sys' }, { k: 'user' }, { k: 'act', b: 0 }, { k: 'obs', b: 0 }];
+      for (var i = 0; i < 20; i++) addStep();
+      nCond = 0;
+    }
+    nextBatch = 1;
+    function addStep() { var b = nextBatch++; V.push({ k: 'act', b: b }); V.push({ k: 'obs', b: b }); }
+    function addBatch() { var b = nextBatch++; V.push({ k: 'act', b: b }); V.push({ k: 'act', b: b }); V.push({ k: 'act', b: b }); V.push({ k: 'obs', b: b }); V.push({ k: 'obs', b: b }); V.push({ k: 'obs', b: b }); }
+    function safe(i) { /* index i is a safe cut point if it does not split a batch */
+      if (i <= 0 || i >= V.length) return true;
+      var a = V[i - 1], c = V[i];
+      return !(a.b != null && c.b != null && a.b === c.b);
+    }
+    function doCondense(reason) {
+      var target = reason === 'REQUEST' ? Math.floor(V.length / 2) : Math.floor(MAX / 2);
+      var head = Math.max(KEEP, 1); /* system prompt is always kept */
+      if (V[0].k === 'sys' && head < 1) head = 1;
+      var start = head; while (!safe(start)) start++;
+      var tailKeep = target - head - 1; if (tailKeep < 0) tailKeep = 0;
+      var end = V.length - tailKeep; while (!safe(end)) end++;
+      var forgotten = end - start;
+      if (forgotten < V.length * 0.1) {
+        panel.innerHTML = '<b>No condensation.<\/b> It would forget less than 10% of the view (minimum_progress). ' + (reason === 'EVENTS' ? 'Soft trigger: skip and try next step.' : 'Hard trigger: fall back to a hard context reset.');
+        return;
+      }
+      var shifted = (start !== head) || (end !== V.length - tailKeep);
+      V = V.slice(0, start).concat([{ k: 'sum' }]).concat(V.slice(end));
+      nCond++;
+      panel.innerHTML = '<b>' + reason + ' → Condensation #' + nCond + '.<\/b> Kept the first ' + start + ' events (the system prompt is never forgotten), forgot ' + forgotten +
+        ', inserted one summary, kept the recent tail. View is now ' + V.length + ' events (target about ' + target + ').' +
+        (shifted ? ' The cut was <b>moved forward<\/b> so no tool-call batch was split.' : '') +
+        ' The log still has every event; a <code>Condensation<\/code> event records what the View hides.';
+      root.setAttribute('data-condensations', String(nCond));
+    }
+    function after(trig) {
+      if (V.length > MAX) doCondense('EVENTS'); else if (!trig) panel.innerHTML = 'View has ' + V.length + ' events. Soft trigger at more than ' + MAX + '.';
+      render();
+    }
+    function render() {
+      track.innerHTML = '';
+      var lastB = null;
+      V.forEach(function (e, i) {
+        var c = 'hw-ev k-' + e.k;
+        if (e.b != null && e.b === lastB) c += ' link';
+        if (i < KEEP) c += ' head';
+        lastB = e.b != null ? e.b : null;
+        track.appendChild(el('span', { 'class': c, title: e.k }));
+      });
+      var pct = Math.min(100, Math.round(V.length / MAX * 100));
+      meter.innerHTML = 'View: <b>' + V.length + '<\/b> / ' + MAX + ' events · condensations: <b>' + nCond + '<\/b>' +
+        '<span class="hw-cbar"><i style="width:' + pct + '%"><\/i><\/span>' +
+        '<span class="hw-ckey"><i class="k-sys"><\/i>system <i class="k-user"><\/i>user <i class="k-act"><\/i>action <i class="k-obs"><\/i>observation <i class="k-sum"><\/i>summary<\/span>';
+      root.setAttribute('data-view', String(V.length));
+    }
+    b1.addEventListener('click', function () { addStep(); after(); });
+    b5.addEventListener('click', function () { addBatch(); after(); });
+    b10.addEventListener('click', function () { for (var i = 0; i < 10; i++) addStep(); after(); });
+    bReq.addEventListener('click', function () { doCondense('REQUEST'); render(); });
+    bR.addEventListener('click', function () { reset(); root.setAttribute('data-condensations', '0'); panel.innerHTML = 'Reset: 44 events.'; render(); });
+    reset(); root.setAttribute('data-condensations', '0');
+    panel.innerHTML = 'The view starts with ' + V.length + ' events: system prompt, user message, and tool steps. Add more.';
+    render();
+  }
+
+  var REG = { arch: arch, stepper: stepper, status: status, workspace: workspace, gate: gate, condense: condense };
+  function boot() {
+    var list = document.querySelectorAll('[data-oh-widget]');
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i], f = REG[r.getAttribute('data-oh-widget')];
+      if (!f) continue;
+      try { f(r); r.setAttribute('data-ready', '1'); } catch (e) { if (window.console) console.error('oh widget', e); }
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  if (!window.mermaid) {
+    var mm = document.querySelectorAll('.mermaid');
+    for (var mi = 0; mi < mm.length; mi++) {
+      mm[mi].classList.add('mmd-off');
+      var note = document.createElement('p');
+      note.className = 'mmd-note';
+      note.textContent = 'Diagram source shown as text: the Mermaid renderer could not load (offline?).';
+      mm[mi].parentNode.insertBefore(note, mm[mi].nextSibling);
+    }
+  }
+  if (window.mermaid) mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    securityLevel: 'loose',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+  });
+  (function () {
+    var root = document.documentElement;
+    var btns = document.querySelectorAll('.fontctl [data-font]');
+    function apply(mode) {
+      root.classList.toggle('fs-large', mode === 'large');
+      for (var i = 0; i < btns.length; i++)
+        btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-font') === mode ? 'true' : 'false');
+    }
+    apply(root.classList.contains('fs-large') ? 'large' : 'default');
+    for (var i = 0; i < btns.length; i++) btns[i].addEventListener('click', function () {
+      var mode = this.getAttribute('data-font');
+      try { localStorage.setItem('oh-font', mode); } catch (e) {}
+      apply(mode);
+    });
+  })();
+  (function () {
+    var bar = document.getElementById('progress');
+    var ticking = false;
+    function update() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+      ticking = false;
+    }
+    window.addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; requestAnimationFrame(update); }
+    }, { passive: true });
+    update();
+  })();
+</script>
+</body>
+</html>
