@@ -5,6 +5,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
+| [The Reversible Harness: Inside DeepSeek Harness](books/the-reversible-harness.html) | English | 1.0 MB |
 | [Inside DeepSeek Harness](books/inside-deepseek-harness.html) | English | 381 KB |
 | [DeepInfer from source](books/deepinfer-from-source.html) | English | 534 KB |
 | [Codex from Source](books/codex-source-book.html) | English | 4.8 MB |
@@ -46,3 +47,12 @@ An English source study of DeepInfer commit `774ce244b87cc0eb8d4b94ab9f5de2ab220
 A visual field guide to DeepSeek Harness commit `687f282e8625c6b8d11ff58211a90524be2e4317` (`0.2.1-rc.2`). Twelve compact chapters follow one CSV fix through runtime composition, model calls, tools, context, persistence, delegation, and interfaces. Includes 36 diagrams, 12 labs with 36 scenarios, 24 pseudocode examples, a downloadable runnable miniature, and 152 immutable source references.
 
 [Read online](https://chendi0x7c00.github.io/ebooks/books/inside-deepseek-harness.html). The HTML is self-contained and readable without JavaScript. Search, themes, diagram zoom, and a visual reading route work offline. Chromium, Firefox, and Playwright WebKit were checked at 320–1920 px; this is automated-engine coverage, not a physical-device certification. Research date: 2026-10-21. The existing Chinese architecture book remains available separately.
+
+
+## The Reversible Harness
+
+An English source study of DeepSeek Harness commit `687f282e8625c6b8d11ff58211a90524be2e4317` (`0.2.1-rc.2`). Eleven chapters follow one failing-test request through composition, turns and steps, the append-only session log, context placement, the tool pipeline, approval and sandboxing, crash recovery, delegation, and the browser surface.
+
+The self-contained reader includes 38 drawn SVG diagrams, 11 interactive mechanism labs with resets and no-JavaScript summaries, full-text search, light/dark themes, diagram zoom, keyboard navigation, and a source audit covering 348 citations to 291 unique ranges. It has no network dependencies and opens directly from disk.
+
+[Read online](https://chendi0x7c00.github.io/ebooks/books/the-reversible-harness.html). Research date: 2026-10-21. The runtime did not expose the requested `4.1-Flash-1017` model; planning, drafting, review, and integration ran on `deepseek-flash`. Chromium, Firefox, and Playwright WebKit layouts were checked at 320–1920 px; this is automated engine coverage, not physical-device certification.
