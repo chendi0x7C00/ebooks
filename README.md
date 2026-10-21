@@ -62,6 +62,6 @@ The self-contained reader includes 38 drawn SVG diagrams, 11 interactive mechani
 
 A one-hour condensation of Krishnendu Chaudhury’s *Math and Architectures of Deep Learning* (Manning, 2024), following the mathematical argument across all 14 chapters. Twelve sections connect linear algebra, probability, backpropagation, optimization, convolutional architectures, Bayesian inference, and variational autoencoders through worked derivations, 16 figures, and six interactive experiments.
 
-The single HTML file works offline, with light/dark themes, keyboard controls, and readable no-JavaScript content. Layouts were checked in Chromium, Firefox, and WebKit at 320–1440 CSS pixels; all 64 numerical lab cases passed independent checks. The included PyTorch training example was executed successfully.
+The single HTML file works offline, with light/dark themes, keyboard controls, and readable no-JavaScript content. The wider reader defaults to larger sans-serif text, with persistent Default/Large sizing, Sans serif/Serif choices, and a compact contents dropdown. Layouts were checked in Chromium, Firefox, and WebKit at 320–1440 CSS pixels; all 64 numerical lab cases passed independent checks. The included PyTorch training example was executed successfully.
 
 [Read online](https://chendi0x7c00.github.io/ebooks/books/math-and-architectures-of-deep-learning.html).
