@@ -5,6 +5,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
+| [nano-vLLM 架构与源码导读](books/nano-vllm-architecture.html) | 中文 / English | 340 KB |
 | [The Reversible Harness: Inside DeepSeek Harness](books/the-reversible-harness.html) | English | 1.0 MB |
 | [Inside DeepSeek Harness](books/inside-deepseek-harness.html) | English | 381 KB |
 | [DeepInfer from source](books/deepinfer-from-source.html) | English | 534 KB |
@@ -56,3 +57,11 @@ An English source study of DeepSeek Harness commit `687f282e8625c6b8d11ff58211a9
 The self-contained reader includes 38 drawn SVG diagrams, 11 interactive mechanism labs with resets and no-JavaScript summaries, full-text search, light/dark themes, diagram zoom, keyboard navigation, and a source audit covering 348 citations to 291 unique ranges. It has no network dependencies and opens directly from disk.
 
 [Read online](https://chendi0x7c00.github.io/ebooks/books/the-reversible-harness.html). Research date: 2026-10-21. The runtime did not expose the requested `4.1-Flash-1017` model; planning, drafting, review, and integration ran on `deepseek-flash`. Chromium, Firefox, and Playwright WebKit layouts were checked at 320–1920 px; this is automated engine coverage, not physical-device certification.
+
+## nano-vLLM 架构与源码导读
+
+基于 nano-vLLM 提交 bb823b3e06983d71485a8e1f23715ebd87d98ef8，先看架构总览，再沿一个 8,000-token 请求阅读调度、KV 缓存、模型执行与张量并行。报告包含 15 幅图、3 类负载的数据流，以及内嵌源码浏览器和逐行引用。
+
+同一个 HTML 内切换中文和 English，记住语言选择；支持离线阅读、深浅主题和打印。源码保留原文。报告中的数量示例用于讲解机制，未运行 GPU 性能基准。
+
+[在线阅读](https://chendi0x7c00.github.io/ebooks/books/nano-vllm-architecture.html) · [中文](https://chendi0x7c00.github.io/ebooks/books/nano-vllm-architecture.html?lang=zh) · [English](https://chendi0x7c00.github.io/ebooks/books/nano-vllm-architecture.html?lang=en)
