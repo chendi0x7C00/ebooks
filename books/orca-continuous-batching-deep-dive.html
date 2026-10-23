@@ -299,7 +299,7 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
   </button>
 </header>
 <nav class="toc-chips" aria-label="目录">
-  <a href="#problem">问题</a><a href="#arch">架构</a><a href="#flow">流程</a><a href="#scenarios">负载场景</a><a href="#decisions">设计决策</a><a href="#eval">实验</a><a href="#critique">批判性阅读</a>
+  <a href="#problem">问题</a><a href="#arch">架构</a><a href="#flow">流程</a><a href="#scenarios">负载场景</a><a href="#decisions">设计决策</a><a href="#eval">实验</a><a href="#critique">批判性阅读</a><a href="#opensource">开源对照</a>
 </nav>
 <div class="shell">
   <aside class="rail">
@@ -313,6 +313,7 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
       <a href="#decisions">05 · 关键设计决策</a>
       <a href="#eval">06 · 实验数据</a>
       <a href="#critique">07 · 批判性阅读</a>
+      <a href="#opensource">08 · 开源对照</a>
     </nav>
   </aside>
   <main>
@@ -852,6 +853,64 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
       <li><b>控制面绝不碰 GPU 通道。</b>CPU 要读的消息走 CPU 网络（gRPC），GPU 通道（NCCL）只搬 GPU 数据——消除隐藏同步点，对任何分布式推理/训练系统都成立。</li>
       <li><b>「放行即保证够用」的资源记账。</b>调度器在准入时就预留全部所需资源（n_rsrv ≤ n_slots），把死锁从运行时风险变成编译期（准入口）不可能事件。</li>
     </ul>
+  </section>
+
+  <!-- ================= 08 OPEN SOURCE ================= -->
+  <section id="opensource">
+    <p class="kicker">08 · Open-source Mirror</p>
+    <h2>开源对照：tinyorca 逐机制符合度评估 + 实测</h2>
+    <p class="lede">Orca 本体从未开源（FriendliAI 将其商业化为 PeriFlow / Friendli Engine），但 GitHub 上出现了按论文复刻的最小实现 <a href="https://github.com/junuxyz/tinyorca" target="_blank" rel="noopener">junuxyz/tinyorca</a>（Python，约 800 行核心代码，HF 模型即插即用）。本节逐机制对照论文原文评估其符合度，并在本机（Apple Silicon MPS，Qwen3-0.6B，fp32，max_bs=2）实测 static batching vs 迭代级调度。</p>
+
+    <h3>符合度清单（逐条对到论文出处）</h3>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>论文机制</th><th>出处</th><th>tinyorca 对应实现</th><th>评级</th></tr></thead>
+        <tbody>
+          <tr><td>迭代级调度主循环</td><td>Algorithm 1 line 3-15</td><td><code>OrcaScheduler.schedule()</code>：select → engine.run_iter → 逐 token 检查完成 → 更新池，循环往复</td><td style="color:var(--good)">忠实</td></tr>
+          <tr><td>Select() 准入控制</td><td>Algorithm 1 line 17-27</td><td>到达序扫描、max_bs 截断、<code>n_rsrv + max_tokens &gt; n_slots</code> 即 break、首次调度才预留、完成归还——几乎逐行对应</td><td style="color:var(--good)">忠实</td></tr>
+          <tr><td>迭代级 FCFS</td><td>§4.2</td><td><code>RequestPool</code> 按到达序保存，Select 从头扫</td><td style="color:var(--good)">忠实</td></tr>
+          <tr><td>Selective batching 结构</td><td>§3 S2 / Figure 5</td><td>拍平 <code>[ΣL, H]</code>（FlatBatch）→ LayerNorm/QKV 投影批处理 → 按 span Split → 逐请求 Attention → Merge 回平铺 → MLP 批处理</td><td style="color:var(--good)">结构忠实</td></tr>
+          <tr><td>Prefill/Decode 同批混合</td><td>Figure 5 的 (x1,x2,x3,x4)</td><td>同一迭代内 initiation 请求吃全部 prompt、increment 请求吃 1 token</td><td style="color:var(--good)">忠实</td></tr>
+          <tr><td>Attention K/V Manager</td><td>§3 S2 / §4.2</td><td>每请求一个独立 HF DynamicCache，完成即删——「按请求持有」精神一致，但动态增长、不做物理预分配，n_slots 只是账面记账</td><td style="color:var(--accent)">逻辑等价 · 物理简化</td></tr>
+          <tr><td>多批 in-flight 流水线</td><td>Algorithm 1 line 9-10 / Figure 8a</td><td>无 RUNNING 状态、无 n_workers 等待逻辑：单进程同步执行，in-flight 批数恒为 1</td><td style="color:var(--bad)">未覆盖</td></tr>
+          <tr><td>分布式架构</td><td>§4.1 / Figure 6-7</td><td>无 worker / engine master / intra-/inter-layer 并行，单卡单进程</td><td style="color:var(--bad)">未覆盖</td></tr>
+          <tr><td>控制面/数据面分离</td><td>§4.1（gRPC vs NCCL）</td><td>单进程内无通信通道可言</td><td style="color:var(--bad)">未覆盖</td></tr>
+          <tr><td>Attention 融合 kernel</td><td>§5（拼接各请求 thread block）</td><td>Python 循环逐请求调 HF attention，无融合</td><td style="color:var(--bad)">未覆盖</td></tr>
+          <tr><td>n_slots 由运维手调</td><td>§4.2「use the largest possible n_slots」</td><td>扩展：warmup 一次实测激活峰值，按剩余显存自动换算 n_slots（论文之外的工程改进）</td><td style="color:var(--ctrl)">超越论文</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>结论：调度层高保真，系统层不在射程内。</b>论文的两大核心机制（D1 迭代级调度、D2 selective batching）和 D3 的准入记账被近乎逐行复刻；而论文另一半的分布式设计（D4 控制/数据面分离、D5 整批流水、并行策略）是单机最小实现天然不覆盖的部分。读代码的价值也在这里：<code>scheduler.py</code> 仅 96 行，可以和 Algorithm 1 并排读。</p>
+
+    <h3>本机实测：static batching vs tinyorca（2026-10-23，示例值环境）</h3>
+    <p>自写对照脚本（仓库自带 bench.py 只测 tinyorca 不测基线）：static 基线 = 请求级调度，固定批冻结直到批内最长请求结束，禁 EOS——复刻论文 §6 的「never emit &lt;EOS&gt;」评测假设。两种负载各 8 请求，max_bs=2。</p>
+    <div class="bars" role="img" aria-label="输出吞吐对比：混合负载 static 25.8 vs tinyorca 51.1 token/s；等长负载 72.8 vs 76.3">
+      <div class="barrow"><span class="lbl">混合 · static</span><div class="bartrack"><div class="barfill dim" style="width:50.5%"></div></div><span class="val">25.8 tok/s</span></div>
+      <div class="barrow"><span class="lbl">混合 · tinyorca</span><div class="bartrack"><div class="barfill" style="width:100%"></div></div><span class="val">51.1 tok/s</span></div>
+      <div class="barrow"><span class="lbl">等长 · static</span><div class="bartrack"><div class="barfill dim" style="width:95.4%"></div></div><span class="val">72.8 tok/s</span></div>
+      <div class="barrow"><span class="lbl">等长 · tinyorca</span><div class="bartrack"><div class="barfill" style="width:100%"></div></div><span class="val">76.3 tok/s</span></div>
+    </div>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>负载（8 请求）</th><th>static 总耗时</th><th>tinyorca 总耗时</th><th>吞吐比</th><th>短请求 e2e p50</th></tr></thead>
+        <tbody>
+          <tr class="hi"><td>short_long_mix（短 32+32 / 长 512+128 交错）</td><td>24.9 s</td><td>12.5 s</td><td><strong>1.99×</strong></td><td>17.14 s → <strong>4.09 s</strong>（4.2×）</td></tr>
+          <tr><td>equal_size（全部 128+128）</td><td>14.1 s</td><td>13.4 s</td><td>1.05×</td><td>—（无短请求）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="runbox">
+      <div class="rb-head">▶ 跑一遍 · 混合负载的迭代数账（为什么恰好约 2×）</div>
+      <ol>
+        <li>负载：4 短（32 in / 32 out）+ 4 长（512 in / 128 out），交错到达，max_bs = <span class="num">2</span>。</li>
+        <li>static：4 个冻结批，每批都是 1 短 + 1 长，每批必须跑满 <span class="num">128</span> 步 decode → 共 4 × 128 = <span class="num">512</span> 次迭代。</li>
+        <li>tinyorca：短请求 32 步就走人、槽位立刻让给排队者，decode 步数 ≈ 总输出 token ÷ 2 = 640 ÷ 2 = <span class="num">320</span> 次迭代。</li>
+        <li>迭代数比 512/320 = 1.6×；实测总耗时比 24.9/12.5 = <span class="num">1.99</span>×——多出来的收益来自 static 的 prefill 还要 padding 对齐、且批间有调度空隙。</li>
+        <li>等长负载两边都是 512 步，实测 1.05× 打平——与论文 Figure 11「同质 trace 下优势消失」的结论在小模型上同样成立。</li>
+      </ol>
+      <p class="src">实测环境为示例值（MPS / Qwen3-0.6B / fp32）；负载结构与结论形态对应论文 §6.2 与 Figure 11。</p>
+    </div>
+    <p class="fig-cap">tinyorca 仓库：<a href="https://github.com/junuxyz/tinyorca" target="_blank" rel="noopener">github.com/junuxyz/tinyorca</a>。另一个复现：<a href="https://github.com/ankitpanda226/690AB-project" target="_blank" rel="noopener">ankitpanda226/690AB-project</a>（UMass CS690 课程项目，GPT-2 Medium + Colab T4，报告吞吐最高 +9%）。本节实测脚本为本次分析自写，未修改上游仓库。</p>
   </section>
 
   <footer>
