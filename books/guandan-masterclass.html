@@ -238,7 +238,7 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
   <a href="#ch5"><span class="no">五</span>炸弹：节奏武器</a>
   <a href="#ch6"><span class="no">六</span>算牌：信息就是牌力</a>
   <a href="#ch7"><span class="no">七</span>残局：倒推与喂牌</a>
-  <a href="#ch8"><span class="no">八</span>队友语言</a>
+  <a href="#ch8"><span class="no">八</span>队友语言与喂牌</a>
   <a href="#ch9"><span class="no">九</span>实战技巧 · 场景手册</a>
   <a href="#ch10"><span class="no">十</span>新手村十坑</a>
   <a href="#ch11"><span class="no">十一</span>出村训练计划 + 自测</a>
@@ -254,7 +254,7 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
   <p class="lede">你已经懂规则，也打过不少局，但每手牌还是凭感觉出。这本教程不堆技巧，给你一套每手牌都用得上的<b>决策系统</b>：三个问题、两条主线、一张座位图。</p>
   <div class="chips">
     <span class="chip">适读：已懂规则的初中级玩家</span>
-    <span class="chip">16 幅图解</span>
+    <span class="chip">18 幅图解</span>
     <span class="chip">10 题出村自测</span>
     <span class="chip">约 40 分钟读完</span>
   </div>
@@ -1127,8 +1127,103 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
     <tr><td>出牌明显变慢</td><td>在组同花顺 / 在算炸</td><td>别催，稳住节奏等他成型</td></tr>
     <tr><td>中局放着敌方小牌不压</td><td>在保节点牌或憋炸</td><td>别替他「着急」乱顶，他有安排</td></tr>
     <tr><td>死顶下家、放过上家</td><td>「我要冲头游」</td><td>全力控住另两个对手</td></tr>
+    <tr><td>打上家、放下家（炸上家、放过下家）</td><td>「我在给你护航」</td><td>放心主攻，别分他的神</td></tr>
     <tr><td>报双后你喂对，他不要</td><td>他剩的不是对</td><td>立刻改喂单，别按旧剧本硬塞</td></tr>
   </table>
+
+  <h3>喂牌手册：把牌送到队友手里</h3>
+  <p>第七章讲的是残局喂法（从大到小、要单留对），这里补全程的送法。喂牌的总纲只有一条：<strong>送队友接得住的牌。</strong>接得住与否，先看张数。</p>
+  <div class="key">
+    <span class="blabel">张数对表（民间流传的投送口诀）</span>
+    <p><strong>队友剩 14 / 9 / 5 张 → 送五张型</strong>（三带二、顺子）。这几个张数恰好拆得开：14 = 5+5+4、9 = 5+4，5 本身就是一手结构——五张型送过去接得上、不卡壳。</p>
+    <p><strong>队友剩 3 / 2 / 1 张 → 按张数送</strong>单、对、单。<strong>其余张数 → 只送单和对。</strong>张数对不上就硬塞大结构，队友接不住，还白送对手一圈截胡。对手剩这些张数时反过来封堵，那就是第七章的张数应对表。</p>
+  </div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 330" role="img" aria-label="喂牌的两条通道示意图">
+      <text class="st st-s" x="20" y="24">出牌顺序固定：你 → 下家 → 对家（队友）→ 上家，你的牌永远要先过下家这道闸</text>
+      <rect class="sn-dark" x="20" y="38" width="80" height="34" rx="6"/><text class="st st-b st-w" x="60" y="60" text-anchor="middle">你</text>
+      <line class="sv-line" x1="100" y1="55" x2="132" y2="55" marker-end="url(#ar8)"/>
+      <rect class="sn-red" x="138" y="38" width="104" height="34" rx="6"/><text class="st st-b st-r" x="190" y="60" text-anchor="middle">下家 · 对手</text>
+      <line class="sv-line" x1="242" y1="55" x2="274" y2="55" marker-end="url(#ar8)"/>
+      <rect class="sn" x="280" y="38" width="104" height="34" rx="6"/><text class="st st-b st-g" x="332" y="60" text-anchor="middle">对家 · 队友</text>
+      <line class="sv-line" x1="384" y1="55" x2="416" y2="55" marker-end="url(#ar8)"/>
+      <rect class="sn-red" x="422" y="38" width="104" height="34" rx="6"/><text class="st st-b st-r" x="474" y="60" text-anchor="middle">上家 · 对手</text>
+      <!-- 通道 A -->
+      <text class="st st-b st-g" x="20" y="112">通道 A · 你领出喂牌：牌要过下家这道闸 —— 大先小后</text>
+      <rect x="24" y="128" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="39" y="155" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">J</text>
+      <text class="st st-s" x="62" y="153">先出 J：下家接走要花大单，不接你白走</text>
+      <rect x="300" y="128" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="315" y="155" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">8</text>
+      <text class="st st-s" x="338" y="153">他火力花掉后，8 才安全到队友手里</text>
+      <text class="st st-s" x="20" y="192">手里单 8、单 J：先扔 J 再视情况出 8，顺序反了，两张都半路被截</text>
+      <!-- 通道 B -->
+      <text class="st st-b st-g" x="20" y="232">通道 B · 对家领小牌被上家压：你小跟，别抬梯子</text>
+      <rect x="24" y="248" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="39" y="275" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#b23a30">9</text>
+      <text class="st st-s" x="62" y="273">上家用 9 压住对家的小单</text>
+      <rect x="300" y="248" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="315" y="275" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">10</text>
+      <text class="st st-s" x="338" y="273">你小跟 10（高 1~3 个点）</text>
+      <text class="st st-s" x="20" y="312">对手再压就得花真货；放行，你用一张中张接回牌权——下一手直接喂对家</text>
+      <defs><marker id="ar8" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 14 · 喂牌的两条通道。</b>通道 A 解决「怎么把牌送过去」：喂牌先出下家难受的那张，用大张开路、小张到家。通道 B 解决「接不接、怎么接」：对家的小牌被压，宁跟三不跟四——小跟 1~3 个点，要么白走一手，要么用中张接回牌权；千万别拿 A、王去硬抬，烧掉节点牌还把单张梯子抬到队友够不着的高度。两条合起来，就是「上家让、下家顶、对家送」里「送」的全部几何学。</figcaption>
+  </figure>
+
+  <h4>喂什么型：三个口径</h4>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>他展示过什么，就送什么。</strong>对家打过对子→送对；对家首出小单（说明有王）→送单。他亮过的牌型就是他的订单。</li>
+    <li style="margin:8px 0"><strong>张数对不上，别送大结构。</strong>三带二、双飞、长顺这些五张型，只有张数对表对得上时才送（见上方 key 框），否则就是给对手递刀。</li>
+    <li style="margin:8px 0"><strong>残局喂之前先「打明」。</strong>你剩一条顺加一张单，先出顺子、把单张留到最后——队友一眼就知道该送单，不用猜。</li>
+  </ul>
+
+  <h4>垫牌四则</h4>
+  <p>队友主攻、你跟不了只能垫的时候，垫牌本身就是半个喂牌动作：</p>
+  <ol class="steps">
+    <li><span class="stt">不接 ≠ 不垫</span><div class="stx">接是抢牌权，垫是顺牌，两回事。垫牌照垫，唯一前提是不挡对家的路。</div></li>
+    <li><span class="stt">小对别顺手套掉</span><div class="stx">队友在对子路上时，你手里的小对是以后的喂牌弹药，现在套掉就没了。</div></li>
+    <li><span class="stt">跟小不跟大</span><div class="stx">队友出小对，你只跟自己的小对。大对收着，那是关键圈的进手张。</div></li>
+    <li><span class="stt">垫枪即逼炸</span><div class="stx">手里多出的小炸，垫出去清牌兼逼对手表态，一举两得。</div></li>
+  </ol>
+
+  <h4>喂还是冲：两把尺子</h4>
+  <p>自己也快走完时，喂牌和自走开始打架，按两把尺子判：</p>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>让牌定律：</strong>队友明显更快，就让。该让不让，两头落空——你堵了他的路，自己的路又不够短。</li>
+    <li style="margin:8px 0"><strong>八成把握：</strong>接队友回头的牌，八成以上把握走完才接；接不住就继续喂，把手数优势留在队里。</li>
+  </ul>
+  <p>参照系是统计数字：头游平均 9.6 手走完，二游 10.6 手。起手数完两边手数（第三章），你的手数不占优，喂就是最优解。冲不动的时候还有第三条路：<strong>保平争胜</strong>——放一个对手先走，合队友之力抓另一个，输 1 分好过输 3 分。</p>
+
+  <figure class="fig">
+    <p style="font-size:14px;margin:4px 0 10px"><strong>投怀送抱：用不要的型，换要的型。</strong>你是助攻，剩 7 张：</p>
+    <div class="hand">
+      <div class="pc blk"><span class="r">3</span><span class="s">♠</span></div><div class="pc red"><span class="r">3</span><span class="s">♥</span></div><div class="pc blk"><span class="r">3</span><span class="s">♣</span></div>
+      <div class="pc red"><span class="r">5</span><span class="s">♥</span></div><div class="pc red"><span class="r">5</span><span class="s">♦</span></div>
+      <div class="pc blk"><span class="r">7</span><span class="s">♠</span></div><div class="pc blk"><span class="r">7</span><span class="s">♣</span></div>
+    </div>
+    <p class="handlab">全场最小的三同张 333，加两副小对。手里全是「喂牌弹药」，缺的是把对子送出去的通道。</p>
+    <ol class="steps">
+      <li><span class="stt">主动打出 333</span><div class="stx">三不带不是你要的型，主动送出去。这手几乎没人跟你抢小，被压了也不心疼。</div></li>
+      <li><span class="stt">两条路都通向对子主导权</span><div class="stx">没人压 333，你继续领出——直接领对子喂队友；被对手压走，他领牌后一旦出对子（你剩的全是对，顺接成本最低），你随手就接回来。</div></li>
+      <li><span class="stt">对子权到手，开喂</span><div class="stx">按张数对表和收官时的从大到小顺序送。对手偏不出对子也不亏：小对留作尾牌，等队友的送圈，别拆。你弃的是一手 3，换的是整条对子通道。</div></li>
+    </ol>
+    <figcaption><b>图 15 · 投怀送抱。</b>喂牌不畅时，别死等队友要的型落到你手里——主动把自己不要的型送出去，把牌局引到你要的牌型上。「敌人不要的都是我们喜欢的」反过来读，就是这句话。</figcaption>
+  </figure>
+
+  <h3>配合的四个崩盘现场</h3>
+  <table class="t">
+    <tr><th style="width:14%">现场</th><th style="width:38%">症状</th><th>正解</th></tr>
+    <tr><td><b>互相等</b></td><td>两人都放小牌，谁也不冲，头游白白落空</td><td>弱牌方坚决转助攻，炸弹留着送友走——两人都要脸，就是双输</td></tr>
+    <tr><td><b>抢一路</b></td><td>助攻中途接权变主攻，原主攻还在压，两人平行出牌露出空当</td><td>最新的信息视为更准确：原主攻立刻让位。一冲一守，永远</td></tr>
+    <tr><td><b>挡路</b></td><td>跟牌比被压方高出一大截，对家回收空间被堵死</td><td>宁跟三不跟四（图 14 通道 B）；「妨碍对家不急套，配合对家绝不套」</td></tr>
+    <tr><td><b>双弱牌</b></td><td>两人手数都长，硬冲必被双下</td><td>组大炸残局反打，或集中抓一家、放走另一家保小分</td></tr>
+  </table>
+  <p>崩盘现场还有一个通用纠错开关：<strong>对家连续放过两种牌型，他的需求就锁定了</strong>——果断开炸夺权，把他要的那型送过去。等他来适应你，不如你去适配他。</p>
+
+  <div class="key">
+    <span class="blabel">头游的遗产（双下冲刺专用）</span>
+    <p><strong>最后一手打大。</strong>走完前的最后一手用你最大的牌出。对手接不住，接风权归队友，他自由领出冲二游——头游走人前能给的最后一样东西，就是队友的领出权。</p>
+    <p><strong>空枪原则。</strong>别急着空手走人。太早头游等于把队友留在敌方两人包围里；哪怕多留一手威慑牌护送到二游，团队收益也更高。</p>
+    <p><strong>谁守谁冲，中局可换。</strong>第三章起手判的是静态角色，中局按实际战况重判：最有希望头游的那位专心冲，最走不动的那位留下来搏斗——顶牌、喂牌、留炸弹送人，全是他的活。</p>
+  </div>
 
   <h3>固定搭档要约定的三件事</h3>
   <ol class="steps">
@@ -1145,7 +1240,7 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
 
   <details class="check">
     <summary>自检：队友接了你的牌权又回传对子，你手里一对 4、一对 K，送哪对？</summary>
-    <div class="ans">先送 <b>对 4</b>。他回传对子说明正在走对子路，你先用小的探——对手若压，K 对还在你手里当进手张；对手若不压，他白走一手，你的对 K 留着收尾。「喂牌从大到小」的反面就是「自留从大到小」。</div>
+      <div class="ans">先送 <b>对 4</b>。他回传对子说明正在走对子路，你先用小的探——对手若压，K 对还在你手里当进手张；对手若不压，他白走一手，你的对 K 留着收尾。「喂牌从大到小」的反面就是「自留从大到小」。（和第七章的「从大到小」不矛盾：那是队友报牌后的收官喂法，喂的牌要顶住拦截；这里是中局走牌，队友在帮你压阵，小对先走正合适。）</div>
   </details>
 </section>
 <!-- ═══════════ 第九章 实战技巧 ═══════════ -->
@@ -1183,7 +1278,7 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
       <li><span class="stt">第二手：出对 6</span><div class="stx">下家此刻只剩炸能压。为一对 6 开炸，亏到肉疼；不开，你对 6 又走一圈。</div></li>
       <li><span class="stt">第三手：出对 3</span><div class="stx">这是你的最后两张——出完即走，哪怕被压，你也已经头游。下家火力见底，队友的对 5 随后收官，二游到手。</div></li>
     </ol>
-    <figcaption><b>图 14 · 送对三部曲。</b>喂队友的本质是钓鱼：用你的对子把对手的封锁牌一张张钓出来。从小喂是白送：对 3 先出去，对手的对子和炸原封不动，正好留着收你队友的 55。前提是上家已无对子。两个分支都是赢：下家逐圈硬压，火力被钓空，你头游加队友二游，双下；下家全程让路，你三对连走出完，同样头游，队友保二游。若他赢圈后改出单张，别急——递对子的机会随后就到，三部曲讲的是递牌顺序，不必连着三圈。</figcaption>
+    <figcaption><b>图 16 · 送对三部曲。</b>喂队友的本质是钓鱼：用你的对子把对手的封锁牌一张张钓出来。从小喂是白送：对 3 先出去，对手的对子和炸原封不动，正好留着收你队友的 55。前提是上家已无对子。两个分支都是赢：下家逐圈硬压，火力被钓空，你头游加队友二游，双下；下家全程让路，你三对连走出完，同样头游，队友保二游。若他赢圈后改出单张，别急——递对子的机会随后就到，三部曲讲的是递牌顺序，不必连着三圈。</figcaption>
   </figure>
 
   <h3>牌例二 · 强牌弱打，弱牌强打</h3>
@@ -1241,7 +1336,7 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
         <p style="font-size:13px;color:var(--ink-soft)">反过来用就是防找炸：单张圈被王反复顶，就是有人在钓你的炸——坐住，别白给。</p>
       </div>
     </div>
-    <figcaption><b>图 15 · 骗炸与找炸。</b>例一的前提是你有兑现能力：一颗更大的炸接得住。没有兑现能力的虚张声势叫送。剩 5 张是冲刺嫌疑最大的报牌数，对手的炸最容易在这个时刻被钓出来；例二的次序反过来读，就是防找炸的纪律。</figcaption>
+    <figcaption><b>图 17 · 骗炸与找炸。</b>例一的前提是你有兑现能力：一颗更大的炸接得住。没有兑现能力的虚张声势叫送。剩 5 张是冲刺嫌疑最大的报牌数，对手的炸最容易在这个时刻被钓出来；例二的次序反过来读，就是防找炸的纪律。</figcaption>
   </figure>
 
   <h3>炸弹对位与多炸管理</h3>
@@ -1306,7 +1401,7 @@ footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-si
         <p>Q 早早把压制力泄掉。轮到 2 收官时，对手手里随便一张中张都能把你按住。</p>
       </div>
     </div>
-    <figcaption><b>图 16 · 尾牌原理。</b>尾牌的任务是「最后一手压住全场」，所以永远留最大的那张；小单先走，还能顺手把对手的大单骗下来。对子局同理：先出小对，留大对收官。</figcaption>
+    <figcaption><b>图 18 · 尾牌原理。</b>尾牌的任务是「最后一手压住全场」，所以永远留最大的那张；小单先走，还能顺手把对手的大单骗下来。对子局同理：先出小对，留大对收官。</figcaption>
   </figure>
 
   <h3>九张当五张打：算杀</h3>
