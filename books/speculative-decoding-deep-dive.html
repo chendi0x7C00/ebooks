@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="面向工程师的 Speculative Decoding 论文交互式深度解读：架构、算法、分布守恒证明、负载 dataflow 与实验权衡。">
+<title>Speculative Decoding · 论文深度解读</title>
+<script>
+(function () {
+  var root = document.documentElement;
+  var preset = root.getAttribute('data-theme');
+  var stored = null;
+  try { stored = localStorage.getItem('specdec-theme'); } catch (e) {}
+  var system = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  root.setAttribute('data-theme', preset || stored || system);
+})();
+</script>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #101820;
+  --surface: #17252e;
+  --surface-raised: #1d3039;
+  --surface-inset: #0d141b;
+  --ink: #e7efec;
+  --muted: #a0b2b7;
+  --faint: #789099;
+  --line: #354a53;
+  --draft: #5cc9d8;
+  --target: #b39bfa;
+  --accept: #7bd7a4;
+  --reject: #f18d88;
+  --correction: #8db9f5;
+  --example: #e5b86e;
+  --control: #a7b8ee;
+  --shadow: 0 18px 46px color-mix(in srgb, var(--surface-inset) 42%, transparent);
+  --max-width: 1180px;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f2f6f4;
+    --surface: #ffffff;
+    --surface-raised: #e9f0ee;
+    --surface-inset: #e6eeeb;
+    --ink: #1c2b32;
+    --muted: #53676f;
+    --faint: #71858b;
+    --line: #c8d6d4;
+    --draft: #087f95;
+    --target: #6548a5;
+    --accept: #167c56;
+    --reject: #b74c4e;
+    --correction: #3b67ae;
+    --example: #946316;
+    --control: #4b60a4;
+    --shadow: 0 18px 46px color-mix(in srgb, var(--line) 30%, transparent);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101820;
+  --surface: #17252e;
+  --surface-raised: #1d3039;
+  --surface-inset: #0d141b;
+  --ink: #e7efec;
+  --muted: #a0b2b7;
+  --faint: #789099;
+  --line: #354a53;
+  --draft: #5cc9d8;
+  --target: #b39bfa;
+  --accept: #7bd7a4;
+  --reject: #f18d88;
+  --correction: #8db9f5;
+  --example: #e5b86e;
+  --control: #a7b8ee;
+  --shadow: 0 18px 46px color-mix(in srgb, var(--surface-inset) 42%, transparent);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f2f6f4;
+  --surface: #ffffff;
+  --surface-raised: #e9f0ee;
+  --surface-inset: #e6eeeb;
+  --ink: #1c2b32;
+  --muted: #53676f;
+  --faint: #71858b;
+  --line: #c8d6d4;
+  --draft: #087f95;
+  --target: #6548a5;
+  --accept: #167c56;
+  --reject: #b74c4e;
+  --correction: #3b67ae;
+  --example: #946316;
+  --control: #4b60a4;
+  --shadow: 0 18px 46px color-mix(in srgb, var(--line) 30%, transparent);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  font-size: 15px;
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .22;
+  background-image: linear-gradient(color-mix(in srgb, var(--line) 17%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--line) 17%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, black, transparent 72%);
+}
+a { color: var(--draft); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+button, select, input { font: inherit; }
+button, select { color: var(--ink); }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--example);
+  outline-offset: 3px;
+}
+::selection { background: color-mix(in srgb, var(--draft) 35%, transparent); }
+.skip-link {
+  position: fixed;
+  z-index: 20;
+  left: 16px;
+  top: -60px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.skip-link:focus { top: 12px; }
+.topbar {
+  position: sticky;
+  z-index: 10;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 64px;
+  padding: 12px 32px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 91%, transparent);
+  backdrop-filter: blur(16px);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid var(--draft);
+  color: var(--draft);
+  font-size: 14px;
+  transform: rotate(-6deg);
+}
+.brand-text { overflow: hidden; text-overflow: ellipsis; }
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.topbar-note { color: var(--faint); font: 11px/1.2 "SFMono-Regular", Consolas, monospace; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.theme-toggle:hover { border-color: var(--draft); }
+.theme-icon { color: var(--example); font-size: 16px; line-height: 1; }
+.page-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 178px minmax(0, var(--max-width));
+  gap: 42px;
+  max-width: 1460px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+.toc {
+  position: sticky;
+  top: 92px;
+  align-self: start;
+  padding-top: 48px;
+}
+.toc-title {
+  margin: 0 0 14px;
+  color: var(--faint);
+  font: 10px/1.2 "SFMono-Regular", Consolas, monospace;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.toc nav { display: grid; gap: 3px; }
+.toc a {
+  display: grid;
+  grid-template-columns: 25px 1fr;
+  gap: 6px;
+  padding: 7px 7px;
+  border-left: 1px solid transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-decoration: none;
+}
+.toc a span { color: var(--faint); font: 10px/1.7 "SFMono-Regular", Consolas, monospace; }
+.toc a:hover, .toc a.is-active { border-left-color: var(--draft); color: var(--ink); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.toc a.is-active span { color: var(--draft); }
+main { min-width: 0; }
+section { position: relative; padding: 74px 0 0; scroll-margin-top: 82px; }
+.hero { padding-top: 58px; }
+.eyebrow, .section-kicker {
+  color: var(--draft);
+  font: 10px/1.4 "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+.hero-eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accept); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accept) 14%, transparent); }
+h1, h2, h3, h4, p { margin: 0; }
+h1, h2, h3 { font-family: "Avenir Next Condensed", "Arial Narrow", "PingFang SC", sans-serif; font-weight: 650; letter-spacing: -.035em; text-wrap: balance; }
+h1 { max-width: none; margin-top: 20px; font-size: clamp(38px, 4.2vw, 58px); line-height: 1.08; }
+h1 em { color: var(--draft); font-style: normal; }
+h2 { margin-top: 9px; font-size: clamp(29px, 3.5vw, 44px); line-height: 1.15; }
+h3 { font-size: 22px; line-height: 1.25; }
+h4 { font-size: 15px; line-height: 1.35; }
+.hero-thesis { max-width: 65ch; margin-top: 22px; color: var(--muted); font-size: 17px; line-height: 1.75; }
+.hero-thesis strong { color: var(--ink); font-weight: 600; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.02fr) minmax(360px, .98fr); gap: 38px; align-items: end; }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+.hero-meta a { white-space: nowrap; }
+.hero-console {
+  position: relative;
+  padding: 19px 20px 17px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.hero-console::before { content: ""; position: absolute; top: -1px; left: 19px; width: 76px; height: 2px; background: var(--draft); }
+.console-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; }
+.console-live { color: var(--accept); }
+.console-big { display: flex; align-items: baseline; gap: 12px; margin: 18px 0 16px; }
+.console-big strong { font: 650 42px/1 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -.04em; }
+.console-big span { color: var(--muted); font-size: 12px; }
+.trace { display: grid; gap: 12px; }
+.trace-row { display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: center; }
+.trace-label { color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; }
+.trace-track { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+.trace-track .arrow { color: var(--faint); font-family: monospace; }
+.trace-chip, .token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 27px;
+  height: 25px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: 11px/1 "SFMono-Regular", Consolas, monospace;
+}
+.trace-chip { color: var(--target); border-color: color-mix(in srgb, var(--target) 55%, var(--line)); }
+.trace-chip.draft { color: var(--draft); border-color: color-mix(in srgb, var(--draft) 55%, var(--line)); }
+.token.accept { color: var(--accept); border-color: color-mix(in srgb, var(--accept) 60%, var(--line)); background: color-mix(in srgb, var(--accept) 9%, transparent); }
+.token.reject { color: var(--reject); border-color: color-mix(in srgb, var(--reject) 60%, var(--line)); background: color-mix(in srgb, var(--reject) 9%, transparent); }
+.token.correct { color: var(--correction); border-color: color-mix(in srgb, var(--correction) 60%, var(--line)); background: color-mix(in srgb, var(--correction) 9%, transparent); }
+.console-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 17px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.legend-inline { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin-top: 43px; border: 1px solid var(--line); background: var(--line); }
+.metric { min-width: 0; padding: 17px 18px 15px; background: var(--surface); }
+.metric-value { display: block; color: var(--ink); font: 650 27px/1.1 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.metric-label { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.section-heading { max-width: 760px; }
+.section-lede { margin-top: 13px; color: var(--muted); font-size: 15px; line-height: 1.75; }
+.section-rule { width: 100%; height: 1px; margin-top: 24px; background: var(--line); }
+.paper-tag, .engineer-tag, .example-tag {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: 10px/1.5 "SFMono-Regular", Consolas, monospace;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.paper-tag { color: var(--target); border-color: color-mix(in srgb, var(--target) 48%, var(--line)); }
+.engineer-tag { color: var(--draft); border-color: color-mix(in srgb, var(--draft) 48%, var(--line)); }
+.example-tag { color: var(--example); border-color: color-mix(in srgb, var(--example) 55%, var(--line)); }
+.source-note { color: var(--faint); font-size: 11px; line-height: 1.6; }
+.body-copy { max-width: 68ch; color: var(--muted); }
+.body-copy strong { color: var(--ink); font-weight: 600; }
+.body-copy + .body-copy { margin-top: 12px; }
+.two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.mt-1 { margin-top: 16px; }
+.mt-2 { margin-top: 24px; }
+.mt-3 { margin-top: 34px; }
+.panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 15px; }
+.panel-header h3, .panel-header h4 { margin-top: 3px; }
+.panel p { color: var(--muted); }
+.formula {
+  display: block;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-inset);
+  color: var(--ink);
+  font: 14px/1.75 "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.formula .accent { color: var(--draft); }
+.formula .target { color: var(--target); }
+.formula .good { color: var(--accept); }
+.formula .bad { color: var(--reject); }
+.code-label { margin-bottom: 8px; color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; }
+pre.code-block {
+  margin: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-inset);
+  color: var(--muted);
+  font: 12px/1.8 "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+  overflow-x: auto;
+  white-space: pre;
+}
+pre.code-block .kw { color: var(--target); }
+pre.code-block .fn { color: var(--draft); }
+pre.code-block .cm { color: var(--faint); }
+.run-example {
+  margin-top: 25px;
+  padding: 18px 20px;
+  border: 1px dashed var(--example);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--example) 5%, var(--surface));
+}
+.run-title { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; color: var(--example); font-weight: 600; }
+.run-example ol { margin: 12px 0 0; padding-left: 23px; color: var(--muted); }
+.run-example li { padding-left: 4px; margin-top: 5px; }
+.run-example li::marker { color: var(--example); font-family: monospace; }
+.run-example strong { color: var(--ink); font-weight: 600; }
+.run-example .formula { margin-top: 12px; }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.mini-table th, .mini-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.mini-table th { color: var(--faint); font: 10px/1.4 "SFMono-Regular", Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; }
+.mini-table td { color: var(--muted); }
+.mini-table td strong { color: var(--ink); }
+.mini-table tr:last-child td { border-bottom: 0; }
+.mini-table .is-highlight td { background: color-mix(in srgb, var(--accept) 8%, transparent); color: var(--ink); }
+.table-wrap { max-width: 100%; overflow-x: auto; }
+.table-wrap table { min-width: 620px; }
+.comparison-table { margin-top: 20px; }
+.comparison-table th, .comparison-table td { padding: 12px 13px; }
+.comparison-table td:first-child { color: var(--ink); font-weight: 600; }
+.comparison-table .good { color: var(--accept); }
+.comparison-table .bad { color: var(--reject); }
+.architecture-frame {
+  max-width: 100%;
+  margin-top: 24px;
+  padding: 10px 10px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow-x: auto;
+}
+.arch-svg { display: block; width: 100%; min-width: 720px; height: auto; }
+.arch-svg text { fill: var(--ink); font-family: "Avenir Next", "Segoe UI", "PingFang SC", sans-serif; }
+.arch-svg .mono { font-family: "SFMono-Regular", Consolas, monospace; }
+.arch-svg .boundary { fill: none; stroke: var(--line); stroke-dasharray: 2 8; }
+.arch-svg .boundary-label { fill: var(--faint); font-size: 11px; letter-spacing: 1.4px; }
+.arch-svg .node { fill: var(--surface-raised); stroke: var(--line); stroke-width: 1.5; }
+.arch-svg .node-prefix { fill: color-mix(in srgb, var(--surface-raised) 80%, var(--draft)); stroke: var(--draft); }
+.arch-svg .node-draft { fill: color-mix(in srgb, var(--draft) 11%, var(--surface)); stroke: var(--draft); }
+.arch-svg .node-target { fill: color-mix(in srgb, var(--target) 11%, var(--surface)); stroke: var(--target); }
+.arch-svg .node-verify { fill: color-mix(in srgb, var(--example) 10%, var(--surface)); stroke: var(--example); }
+.arch-svg .node-commit { fill: color-mix(in srgb, var(--accept) 10%, var(--surface)); stroke: var(--accept); }
+.arch-svg .node-output { fill: var(--surface-inset); stroke: var(--control); }
+.arch-svg .node-title { font-size: 16px; font-weight: 650; }
+.arch-svg .node-sub { fill: var(--muted); font-size: 12px; }
+.arch-svg .node-small { fill: var(--faint); font-size: 11px; }
+.arch-svg .edge { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.arch-svg .edge-draft { stroke: var(--draft); }
+.arch-svg .edge-target { stroke: var(--target); }
+.arch-svg .edge-neutral { stroke: var(--line); }
+.arch-svg .edge-control { stroke: var(--control); stroke-dasharray: 7 7; }
+.arch-svg .prefix-fold { fill: none; stroke: var(--draft); stroke-width: 1.5; }
+.arch-svg .edge-label { fill: var(--muted); font-size: 12px; }
+.arch-svg .edge-label.draft { fill: var(--draft); }
+.arch-svg .edge-label.target { fill: var(--target); }
+.arch-svg .edge-label.control { fill: var(--control); }
+.arch-svg .arrow { fill: var(--line); }
+.arch-svg .arrow-draft { fill: var(--draft); }
+.arch-svg .arrow-target { fill: var(--target); }
+.arch-svg .arrow-control { fill: var(--control); }
+.arch-svg .badge-circle { fill: var(--surface); stroke: var(--example); stroke-width: 1.5; }
+.arch-svg .badge-text { fill: var(--example); font-size: 14px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+.arch-svg .scenario-note { font-size: 12px; font-weight: 600; }
+.arch-svg .scenario-note.translation { fill: var(--draft); }
+.arch-svg .scenario-note.summarization { fill: var(--target); }
+.arch-svg .scenario-note.dialog { fill: var(--control); }
+.arch-caption { margin-top: 9px; }
+.resource-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 15px; }
+.resource {
+  padding: 13px 15px;
+  border-top: 2px solid var(--line);
+  background: var(--surface);
+}
+.resource.draft { border-top-color: var(--draft); }
+.resource.target { border-top-color: var(--target); }
+.resource.accept { border-top-color: var(--accept); }
+.resource-label { color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.resource strong { display: block; margin-top: 5px; font-size: 14px; }
+.resource p { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.stepper-layout { display: grid; grid-template-columns: 235px minmax(0, 1fr); gap: 18px; margin-top: 25px; }
+.step-tabs { display: grid; align-content: start; gap: 5px; }
+.step-tab {
+  display: grid;
+  grid-template-columns: 29px 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.step-tab .step-num { color: var(--faint); font: 11px/1 "SFMono-Regular", Consolas, monospace; }
+.step-tab:hover { border-color: var(--draft); }
+.step-tab[aria-selected="true"] { border-color: var(--draft); background: color-mix(in srgb, var(--draft) 10%, var(--surface)); color: var(--ink); }
+.step-tab[aria-selected="true"] .step-num { color: var(--draft); }
+.step-panel { min-height: 285px; padding: 23px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.step-panel-kicker { color: var(--draft); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.step-panel h3 { margin-top: 7px; }
+.step-panel p { margin-top: 11px; color: var(--muted); }
+.step-panel .formula { margin-top: 17px; }
+.step-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+.step-detail > div { padding: 11px 13px; background: var(--surface-inset); }
+.step-detail dt { color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; text-transform: uppercase; }
+.step-detail dd { margin: 5px 0 0; color: var(--ink); font-size: 12px; line-height: 1.55; }
+.step-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 18px; color: var(--faint); font: 10px/1.4 "SFMono-Regular", Consolas, monospace; }
+.text-button { padding: 0; border: 0; background: transparent; color: var(--draft); font-size: 12px; }
+.text-button:hover { text-decoration: underline; }
+.sampling-lab { margin-top: 25px; }
+.lab-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 15px; }
+.token-picker { display: inline-flex; gap: 5px; }
+.token-button { min-width: 42px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font: 12px/1 "SFMono-Regular", Consolas, monospace; }
+.token-button[aria-pressed="true"] { border-color: var(--draft); color: var(--draft); background: color-mix(in srgb, var(--draft) 10%, var(--surface)); }
+.range-control { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 12px; }
+input[type="range"] { width: 160px; accent-color: var(--draft); }
+.range-value { min-width: 37px; color: var(--ink); font: 12px/1 "SFMono-Regular", Consolas, monospace; font-variant-numeric: tabular-nums; }
+.lab-result { display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .7fr); gap: 17px; margin-top: 18px; }
+.lab-outcome { padding: 16px; border: 1px solid var(--line); background: var(--surface-inset); }
+.lab-outcome.accept { border-color: color-mix(in srgb, var(--accept) 65%, var(--line)); }
+.lab-outcome.reject { border-color: color-mix(in srgb, var(--reject) 65%, var(--line)); }
+.outcome-kicker { color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.outcome-main { margin-top: 6px; font-size: 20px; font-weight: 650; }
+.outcome-main.accept { color: var(--accept); }
+.outcome-main.reject { color: var(--reject); }
+.outcome-copy { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.lab-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.lab-metric { padding: 12px; background: var(--surface); }
+.lab-metric span { display: block; color: var(--faint); font-size: 10px; }
+.lab-metric strong { display: block; margin-top: 4px; font: 17px/1.2 "SFMono-Regular", Consolas, monospace; font-variant-numeric: tabular-nums; }
+.proof { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.proof summary { cursor: pointer; color: var(--ink); font-weight: 600; }
+.proof p { margin-top: 10px; color: var(--muted); font-size: 13px; }
+.proof .formula { margin-top: 10px; font-size: 12px; }
+.scenario-controls { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 24px; }
+.scenario-button, .segment-button {
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  font-size: 12px;
+}
+.scenario-button:hover, .segment-button:hover { border-color: var(--draft); }
+.scenario-button[aria-pressed="true"], .segment-button[aria-pressed="true"] { border-color: var(--draft); background: color-mix(in srgb, var(--draft) 10%, var(--surface)); color: var(--draft); }
+.scenario-stage { margin-top: 15px; }
+.scenario-stage .architecture-frame { margin-top: 0; }
+.scenario-stage[data-scenario="translation"] [data-s]:not([data-s~="translation"]),
+.scenario-stage[data-scenario="summarization"] [data-s]:not([data-s~="summarization"]),
+.scenario-stage[data-scenario="dialog"] [data-s]:not([data-s~="dialog"]) { opacity: .13; }
+.scenario-stage [data-s] { transition: opacity .22s ease; }
+.scenario-stage[data-scenario="translation"] .flow[data-s~="translation"],
+.scenario-stage[data-scenario="summarization"] .flow[data-s~="summarization"],
+.scenario-stage[data-scenario="dialog"] .flow[data-s~="dialog"] { stroke-dasharray: 9 7; animation: flow-dash 1.4s linear infinite; }
+@keyframes flow-dash { to { stroke-dashoffset: -32; } }
+.scenario-summary { display: grid; grid-template-columns: 1.25fr repeat(3, 1fr); gap: 1px; margin-top: 15px; border: 1px solid var(--line); background: var(--line); }
+.scenario-summary > div { min-width: 0; padding: 14px 15px; background: var(--surface); }
+.scenario-summary .scenario-name { color: var(--ink); font-size: 16px; font-weight: 650; }
+.scenario-summary .scenario-sub { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.scenario-stat-label { display: block; color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; text-transform: uppercase; }
+.scenario-stat-value { display: block; margin-top: 5px; color: var(--ink); font: 17px/1.25 "SFMono-Regular", Consolas, monospace; font-variant-numeric: tabular-nums; }
+.scenario-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+.scenario-step { min-width: 0; padding: 14px; border: 1px solid var(--line); background: var(--surface); }
+.scenario-step-num { color: var(--example); font: 17px/1 "SFMono-Regular", Consolas, monospace; }
+.scenario-step h4 { margin-top: 9px; }
+.scenario-step p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.decision-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; margin-top: 26px; }
+.decision-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.decision-card:nth-child(3n) { border-top-color: var(--draft); }
+.decision-card:nth-child(3n+1) { border-top-color: var(--target); }
+.decision-card:nth-child(3n+2) { border-top-color: var(--example); }
+.decision-head { display: flex; gap: 12px; align-items: flex-start; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.decision-index { color: var(--faint); font: 12px/1.4 "SFMono-Regular", Consolas, monospace; }
+.decision-head h3 { font-size: 20px; }
+.decision-head p { margin-top: 4px; color: var(--faint); font-size: 11px; }
+.decision-parts { display: grid; gap: 13px; margin-top: 16px; }
+.decision-part { display: grid; grid-template-columns: 82px 1fr; gap: 11px; }
+.decision-part-label { color: var(--faint); font: 10px/1.55 "SFMono-Regular", Consolas, monospace; letter-spacing: .04em; text-transform: uppercase; }
+.decision-part p { color: var(--muted); font-size: 12px; line-height: 1.62; }
+.decision-part p strong { color: var(--ink); font-weight: 600; }
+.calculator { margin-top: 26px; }
+.calc-grid { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 22px; align-items: start; }
+.calc-inputs { display: grid; gap: 15px; }
+.calc-input { display: grid; grid-template-columns: 92px 1fr 53px; gap: 10px; align-items: center; }
+.calc-input label { color: var(--muted); font: 12px/1.3 "SFMono-Regular", Consolas, monospace; }
+.calc-input output { color: var(--ink); font: 12px/1.3 "SFMono-Regular", Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+.calc-input input { width: 100%; }
+.calc-note { margin-top: 16px; color: var(--faint); font-size: 11px; line-height: 1.6; }
+.calc-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 17px; }
+.primary-button { padding: 8px 12px; border: 1px solid var(--draft); border-radius: 4px; background: color-mix(in srgb, var(--draft) 12%, var(--surface)); color: var(--draft); font-size: 12px; }
+.primary-button:hover { background: color-mix(in srgb, var(--draft) 22%, var(--surface)); }
+.calc-optimum { color: var(--example); font: 11px/1.4 "SFMono-Regular", Consolas, monospace; }
+.calc-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
+.calc-result { padding: 17px; background: var(--surface-inset); }
+.calc-result-label { color: var(--faint); font-size: 11px; line-height: 1.4; }
+.calc-result-value { display: block; margin-top: 8px; color: var(--ink); font: 650 28px/1 "Avenir Next Condensed", "Arial Narrow", sans-serif; font-variant-numeric: tabular-nums; }
+.calc-result-value.good { color: var(--accept); }
+.calc-result-value.warn { color: var(--reject); }
+.calc-result small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.experiment-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 13px; margin-top: 24px; }
+.select-control { display: grid; gap: 5px; }
+.select-control label { color: var(--faint); font: 10px/1.2 "SFMono-Regular", Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.select-control select { min-width: 135px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font-size: 12px; }
+.segmented { display: flex; flex-wrap: wrap; gap: 5px; }
+.chart-panel { margin-top: 17px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.chart-head { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+.chart-head h3 { font-size: 19px; }
+.chart-head span { color: var(--faint); font: 10px/1.4 "SFMono-Regular", Consolas, monospace; }
+.chart-list { display: grid; gap: 15px; margin-top: 19px; }
+.chart-row { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 16px; align-items: center; }
+.chart-label { color: var(--ink); font-size: 12px; line-height: 1.4; }
+.chart-label small { display: block; color: var(--faint); font: 10px/1.5 "SFMono-Regular", Consolas, monospace; }
+.chart-bars { display: grid; gap: 5px; min-width: 0; }
+.bar-line { display: grid; grid-template-columns: 32px minmax(0, 1fr) 43px; gap: 7px; align-items: center; }
+.bar-line > span { color: var(--faint); font: 9px/1 "SFMono-Regular", Consolas, monospace; }
+.bar-line > strong { color: var(--ink); font: 11px/1 "SFMono-Regular", Consolas, monospace; text-align: right; font-variant-numeric: tabular-nums; }
+.bar-track { height: 10px; background: var(--surface-inset); overflow: hidden; }
+.bar-fill { width: var(--bar-size); height: 100%; }
+.bar-fill.exp { background: var(--target); }
+.bar-fill.emp { background: var(--draft); }
+.chart-empty { padding: 22px 0; color: var(--muted); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 17px; color: var(--muted); font-size: 11px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 18px; height: 5px; background: var(--draft); }
+.legend-swatch.exp { background: var(--target); }
+.data-panel { margin-top: 20px; padding: 0; overflow: hidden; }
+.data-panel .panel-header { padding: 19px 20px 0; }
+.data-panel .table-wrap { padding: 0 10px 10px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.data-table th, .data-table td { padding: 10px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.data-table th:first-child, .data-table td:first-child, .data-table th:nth-child(2), .data-table td:nth-child(2) { text-align: left; }
+.data-table th { color: var(--faint); font: 10px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: .05em; }
+.data-table td { color: var(--muted); }
+.data-table td strong { color: var(--ink); }
+.data-table tr:last-child td { border-bottom: 0; }
+.data-table tr.best td { background: color-mix(in srgb, var(--accept) 7%, transparent); }
+.data-table tr.best td:last-child { color: var(--accept); font-weight: 700; }
+.tradeoff-panel { margin-top: 21px; }
+.critique-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 26px; }
+.critique-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.critique-list li { position: relative; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.critique-list li::before { content: ""; position: absolute; left: 1px; top: .72em; width: 7px; height: 7px; border: 1px solid var(--draft); transform: rotate(45deg); }
+.critique-list li strong { color: var(--ink); font-weight: 600; }
+.steal-list { display: grid; gap: 10px; margin-top: 17px; padding: 0; list-style: none; }
+.steal-list li { position: relative; display: block; padding-left: 30px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.steal-list li::before { content: "↗"; position: absolute; left: 0; top: 0; color: var(--accept); font-family: monospace; }
+.final-takeaway { margin-top: 28px; padding: 23px 25px; border: 1px solid var(--draft); background: color-mix(in srgb, var(--draft) 7%, var(--surface)); }
+.final-takeaway p { max-width: 68ch; margin-top: 8px; color: var(--muted); }
+.footer { max-width: 1460px; margin: 75px auto 0; padding: 25px 32px 45px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; }
+.footer-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 25px; }
+.footer p { max-width: 75ch; }
+@media (max-width: 1180px) {
+  .page-shell { grid-template-columns: 150px minmax(0, 1fr); gap: 27px; padding: 0 24px; }
+  .hero-grid { grid-template-columns: 1fr; gap: 27px; }
+  .hero-console { max-width: 720px; }
+  .topbar { padding: 12px 24px; }
+}
+@media (max-width: 900px) {
+  .page-shell { display: block; padding: 0 20px; }
+  .toc { position: sticky; z-index: 5; top: 64px; padding: 10px 0; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 94%, transparent); }
+  .toc-title { display: none; }
+  .toc nav { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; }
+  .toc a { display: flex; flex: 0 0 auto; gap: 5px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 4px; font-size: 11px; white-space: nowrap; }
+  .toc a.is-active { border-color: var(--draft); }
+  .toc a span { line-height: 1.5; }
+  section { padding-top: 57px; scroll-margin-top: 122px; }
+  .hero { padding-top: 39px; }
+  .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scenario-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .scenario-summary > div:first-child { grid-column: 1 / -1; }
+  .scenario-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .decision-stack { grid-template-columns: 1fr; }
+  .footer { padding-left: 20px; padding-right: 20px; }
+}
+@media (max-width: 620px) {
+  body { font-size: 14px; }
+  .topbar { padding: 10px 15px; }
+  .topbar-note { display: none; }
+  .brand { font-size: 10px; }
+  .page-shell { padding: 0 15px; }
+  h1 { font-size: clamp(32px, 10vw, 48px); }
+  .hero-thesis { font-size: 15px; }
+  .metric { padding: 14px 13px; }
+  .metric-value { font-size: 23px; }
+  .two-col, .three-col, .calc-grid, .critique-grid, .lab-result { grid-template-columns: 1fr; }
+  .panel { padding: 17px; }
+  .stepper-layout { grid-template-columns: 1fr; }
+  .step-tabs { display: flex; overflow-x: auto; padding-bottom: 4px; }
+  .step-tab { flex: 0 0 150px; min-height: 56px; }
+  .step-panel { min-height: 0; padding: 18px; }
+  .step-detail { grid-template-columns: 1fr; }
+  .resource-grid { grid-template-columns: 1fr; }
+  .scenario-steps { grid-template-columns: 1fr; }
+  .scenario-summary { grid-template-columns: 1fr 1fr; }
+  .scenario-summary > div:first-child { grid-column: 1 / -1; }
+  .scenario-summary > div:last-child { grid-column: 1 / -1; }
+  .chart-row { grid-template-columns: 1fr; gap: 7px; }
+  .chart-label small { display: inline; margin-left: 5px; }
+  .calc-input { grid-template-columns: 72px 1fr 46px; gap: 7px; }
+  .decision-part { grid-template-columns: 72px 1fr; gap: 8px; }
+  .hero-console { padding: 16px 14px; }
+  .trace-row { grid-template-columns: 67px 1fr; gap: 7px; }
+  .trace-chip, .token { min-width: 23px; padding: 0 4px; font-size: 10px; }
+  .run-example { padding: 15px; }
+  .formula { font-size: 12px; }
+  .footer { padding-left: 15px; padding-right: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+@media print {
+  body::before, .topbar, .toc, .scenario-controls, .experiment-controls, .calc-actions, .theme-toggle { display: none !important; }
+  .page-shell { display: block; max-width: none; padding: 0; }
+  section, .hero { padding-top: 30px; }
+  .panel, .decision-card, .hero-console, .chart-panel { box-shadow: none; break-inside: avoid; }
+  .architecture-frame { overflow: visible; }
+  .arch-svg { min-width: 0; }
+  a { color: inherit; }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到正文</a>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">↗</span><span class="brand-text">PAPER DEEP-DIVE / INFERENCE SYSTEMS</span></div>
+  <div class="topbar-right"><span class="topbar-note">13 PP · ICML 2023 · EXACT SAMPLING</span><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换深浅主题" aria-pressed="false"><span class="theme-icon" id="theme-icon">◐</span><span id="theme-label">浅色</span></button></div>
+</header>
+<div class="page-shell">
+  <aside class="toc" aria-label="报告目录">
+    <p class="toc-title">Reading path</p>
+    <nav>
+      <a href="#hero" class="is-active"><span>00</span>总览</a>
+      <a href="#problem"><span>01</span>问题定义</a>
+      <a href="#architecture"><span>02</span>架构总览</a>
+      <a href="#algorithm"><span>03</span>核心流程</a>
+      <a href="#workloads"><span>04</span>典型负载</a>
+      <a href="#decisions"><span>05</span>设计决策</a>
+      <a href="#experiments"><span>06</span>实验数据</a>
+      <a href="#critique"><span>07</span>批判性阅读</a>
+    </nav>
+  </aside>
+  <main id="main">
+    <section class="hero" id="hero">
+      <div class="hero-grid">
+        <div>
+          <div class="hero-eyebrow eyebrow"><span class="status-dot"></span><span>ARXIV 2211.17192 / V2 / 18 MAY 2023</span></div>
+          <h1>让大模型少走几步，<br><em>但不改变它说什么。</em></h1>
+          <p class="hero-thesis"><strong>Speculative Decoding 的核心不是“用小模型替代大模型”，而是用小模型提出候选，用大模型并行验证，再用一个修正分布把随机采样的概率质量精确拼回去。</strong>它把自回归解码的串行瓶颈，转换成可并行验证的计算问题。</p>
+          <div class="hero-meta"><span>Yaniv Leviathan · Matan Kalman · Yossi Matias</span><span>Google Research · ICML 2023</span><a href="https://arxiv.org/abs/2211.17192" target="_blank" rel="noreferrer">arXiv:2211.17192 ↗</a></div>
+        </div>
+        <div class="hero-console" aria-label="论文 Figure 1 的机制示意">
+          <div class="console-head"><span>TRACE / UNCONDITIONAL LM</span><span class="console-live">● EXACT DISTRIBUTION</span></div>
+          <div class="console-big"><strong>38 → 9</strong><span>tokens → target model serial runs</span></div>
+          <div class="trace">
+            <div class="trace-row"><span class="trace-label">BASELINE</span><div class="trace-track"><span class="trace-chip">Mp</span><span class="arrow">→</span><span class="trace-chip">Mp</span><span class="arrow">→</span><span class="trace-chip">Mp</span><span class="arrow">→</span><span class="trace-chip">Mp</span><span class="arrow">→ …</span></div></div>
+            <div class="trace-row"><span class="trace-label">DRAFT</span><div class="trace-track"><span class="trace-chip draft">Mq</span><span class="token accept">x₁</span><span class="token accept">x₂</span><span class="token accept">x₃</span><span class="token reject">x₄</span><span class="arrow">⇢</span><span class="trace-chip draft">Mq</span><span class="token accept">x₅</span></div></div>
+            <div class="trace-row"><span class="trace-label">VERIFY</span><div class="trace-track"><span class="trace-chip">Mp ∥ p₁…pγ+1</span><span class="arrow">→</span><span class="token accept">accept</span><span class="token correct">p′ fix</span></div></div>
+          </div>
+          <div class="console-foot"><span class="legend-inline" style="color:var(--accept)"><i class="legend-dot"></i>accepted draft</span><span class="legend-inline" style="color:var(--reject)"><i class="legend-dot"></i>rejected</span><span class="legend-inline" style="color:var(--correction)"><i class="legend-dot"></i>correction</span></div>
+          <p class="source-note arch-caption">依据论文 Figure 1 重绘／示意；token 颜色语义沿用原图，排列不是逐 token 复刻。</p>
+        </div>
+      </div>
+      <div class="metric-strip" aria-label="论文关键数字">
+        <div class="metric"><span class="metric-value">2–3×</span><span class="metric-label">T5-XXL 相对 T5X 的论文实测加速范围</span></div>
+        <div class="metric"><span class="metric-value">38 / 9</span><span class="metric-label">Figure 1：生成 token 数／Mp 串行运行数</span></div>
+        <div class="metric"><span class="metric-value">1 → γ+1</span><span class="metric-label">一次 Algorithm 1 迭代可提交的 token 范围</span></div>
+        <div class="metric"><span class="metric-value">0.5–0.9</span><span class="metric-label">小约两个数量级的 draft 模型常见 α 区间</span></div>
+      </div>
+      <p class="source-note mt-1">阅读标记：<span class="paper-tag">论文结论</span> 可在原文找到；<span class="engineer-tag">工程师视角</span> 是本报告的推断或落地解读；<span class="example-tag">示例值</span> 是为演算而自设的数字。</p>
+    </section>
+
+    <section id="problem">
+      <div class="section-heading"><div class="section-kicker">01 / Problem</div><h2>真正的瓶颈，是串行调用次数</h2><p class="section-lede">大模型自回归生成 K 个 token，通常要做 K 次串行解码。论文的切入点不是让每一次矩阵乘都更小，而是让一次大模型调用同时“覆盖”更多未来 token。</p></div>
+      <div class="section-rule"></div>
+      <div class="two-col mt-3">
+        <div class="panel"><div class="panel-header"><div><div class="code-label">Baseline / serial dependency</div><h3>标准解码的时间形状</h3></div><span class="paper-tag">论文 §1</span></div><span class="formula">x₁ → x₂ → x₃ → … → xK<br><span class="target">K tokens = K serial runs of Mp</span></span><p class="mt-2">第 t 步依赖前面的 prefix，不能简单把 K 次调用全部并行化。论文进一步观察到：在常见配置里，推理可能受<strong>内存带宽与通信</strong>而非算术运算限制，因此“多算一点”有机会换来“少等几轮”。</p></div>
+        <div class="panel"><div class="panel-header"><div><div class="code-label">Design constraints</div><h3>加速不能牺牲什么？</h3></div><span class="engineer-tag">工程师视角</span></div><ul class="critique-list"><li><strong>输出分布不变：</strong>不是让小模型的近似分布蒙混过关，而是仍然从目标模型 Mp 的分布采样。</li><li><strong>模型不重训：</strong>使用已有 checkpoint，不改架构、不改训练流程。</li><li><strong>并行资源要够：</strong>γ+1 个目标分布的验证被假设能并行完成；没有空闲算力时，方法可能没有收益。</li></ul></div>
+      </div>
+      <div class="panel mt-3"><div class="panel-header"><div><div class="code-label">Where it splits from prior work</div><h3>分水岭：并行候选 + 随机采样的严格验收</h3></div><span class="paper-tag">论文 §5</span></div><div class="table-wrap comparison-table"><table class="mini-table"><thead><tr><th>路线</th><th>具体工作</th><th>它解决了什么</th><th>与本文的差异</th></tr></thead><tbody><tr><td>自适应计算</td><td>Wisdom of Committees（Schwartz et al., 2020）；early exits</td><td>简单步骤少花计算</td><td>通常靠启发式停止，可能改变输出；常需定制训练或架构。</td></tr><tr><td>块级并行</td><td>Blockwise Parallel Decoding（Stern et al., 2018）</td><td>一次生成多个 token</td><td>只支持 greedy，需要额外训练自定义模型，目标是任务质量而非分布严格相同。</td></tr><tr><td>输入复制</td><td>Shallow Aggressive Decoding（Sun et al., 2021）</td><td>输入输出相似时并行复制</td><td>只支持复制输入，不支持一般的近似模型，也不支持一般随机采样。</td></tr><tr class="is-highlight"><td>本文</td><td>Speculative Sampling + Speculative Decoding</td><td>通用 draft 提案，target 并行验证</td><td><span class="good">标准采样／argmax 都可纳入；分布保证不依赖 draft 好坏。</span></td></tr></tbody></table></div></div>
+      <div class="run-example"><div class="run-title">▶ 跑一遍 · 为什么“猜错”也不一定慢 <span class="example-tag">示例值</span></div><ol><li>设一轮 draft 长度 <strong>γ = 3</strong>，Mq 依次提出 x₁、x₂、x₃；Mp 并行计算 p₁、p₂、p₃、p₄。</li><li>若前两个候选接受、第三个拒绝，则本轮提交 <strong>x₁、x₂、t</strong>，其中 t 从修正分布 p′ 采样：一共 <strong>3 个 token</strong>。</li><li>即使第三个候选被丢弃，本轮也只增加 <strong>1 次 Mp 串行迭代</strong>；最坏情况下仍至少提交 1 个 token，不会比标准解码增加 Mp 的串行调用数。</li></ol><p class="source-note mt-1">机制依据：论文 §2.1、Algorithm 1。γ=3 与接受轨迹是帮助理解的示例，不是某条实验 trace。</p></div>
+    </section>
+
+    <section id="architecture">
+      <div class="section-heading"><div class="section-kicker">02 / HLD</div><h2>把一次迭代拆成两条轨</h2><p class="section-lede">上轨是便宜的提案器 Mq，下轨是昂贵但权威的目标模型 Mp；验证器是唯一决定哪些候选能进入输出的控制点。实线是数据面，虚线是控制面。</p></div>
+      <div class="section-rule"></div>
+      <div id="hld-diagram" class="architecture-frame" role="region" aria-label="Speculative Decoding 高层架构图" tabindex="0"></div>
+      <p class="source-note arch-caption">依据论文 Algorithm 1 与 Figure 5 重绘／示意。Mp 的 γ+1 个分布评估在算法上并行；实际 kernel 的批量实现属于工程落地细节。</p>
+      <div class="resource-grid"><div class="resource draft"><div class="resource-label">Serial time / optimize down</div><strong>减少 Mp 串行迭代</strong><p>每轮至少产出 1 个 token，最多 γ+1 个。</p></div><div class="resource target"><div class="resource-label">Parallel compute / spend</div><strong>增加并发算术运算</strong><p>目标模型要同时验证 γ+1 个 prefix；拒绝的候选会浪费计算。</p></div><div class="resource accept"><div class="resource-label">Memory reads / potentially down</div><strong>权重与 KV 读取可摊薄</strong><p>论文指出它们可在一次 Algorithm 1 执行中读取一次；这不等于所有内存流量都下降。</p></div></div>
+      <div class="run-example"><div class="run-title">▶ 跑一遍 · 一次 HLD 往返 <span class="example-tag">γ=3 的示例轨迹</span></div><ol><li>prefix 同时进入 Mq 与 Mp：Mq 负责“猜”，Mp 负责“给每个位置一个权威分布”。</li><li>Mq 的三次自回归调用是串行的；Mp 的四个 prefix 评估是并行的。<strong>并行的是验证，不是 draft 提案。</strong></li><li>验证器沿候选顺序找到第一个拒绝位置，只保留它之前的连续前缀；后面的并行结果全部丢弃。</li><li>commit 把 n 个已接受 draft token 与 1 个 target token 拼接，再更新 prefix，进入下一轮。</li></ol></div>
+    </section>
+
+    <section id="algorithm">
+      <div class="section-heading"><div class="section-kicker">03 / Algorithm</div><h2>核心流程：接受概率只是半场，修正分布才补上另一半</h2><p class="section-lede">如果只做“按 p/q 接受”，拒绝后的处理就会改变分布。论文的关键补丁是：拒绝时从 p 与 q 的正差值重新归一化采样。</p></div>
+      <div class="section-rule"></div>
+      <div class="stepper-layout">
+        <div class="step-tabs" id="step-tabs" role="tablist" aria-label="Speculative Decoding 步骤">
+          <button class="step-tab" role="tab" aria-selected="true" aria-controls="step-panel" data-step="0"><span class="step-num">01</span><span>draft γ 个候选</span></button>
+          <button class="step-tab" role="tab" aria-selected="false" aria-controls="step-panel" data-step="1" tabindex="-1"><span class="step-num">02</span><span>并行计算 target 分布</span></button>
+          <button class="step-tab" role="tab" aria-selected="false" aria-controls="step-panel" data-step="2" tabindex="-1"><span class="step-num">03</span><span>按 p/q 逐个验收</span></button>
+          <button class="step-tab" role="tab" aria-selected="false" aria-controls="step-panel" data-step="3" tabindex="-1"><span class="step-num">04</span><span>第一个拒绝处修正</span></button>
+          <button class="step-tab" role="tab" aria-selected="false" aria-controls="step-panel" data-step="4" tabindex="-1"><span class="step-num">05</span><span>全接受则多采一个</span></button>
+          <button class="step-tab" role="tab" aria-selected="false" aria-controls="step-panel" data-step="5" tabindex="-1"><span class="step-num">06</span><span>提交并更新 prefix</span></button>
+        </div>
+        <div class="step-panel" id="step-panel" role="tabpanel" aria-live="polite"></div>
+      </div>
+      <div class="mt-3"><div class="code-label">Algorithm 1 / readable pseudocode</div><pre class="code-block"><span class="cm"># p and q are already standardized for the desired sampler</span>
+<span class="kw">for</span> i = 1 … γ:
+    qᵢ = <span class="fn">Mq</span>(prefix + x₁…xᵢ₋₁)
+    xᵢ ~ qᵢ
+
+p₁…pγ+1 = <span class="fn">Mp</span>(prefix), …, <span class="fn">Mp</span>(prefix + x₁…xγ)  <span class="cm"># parallel</span>
+r₁…rγ ~ U(0, 1)
+n = first index where rᵢ &gt; pᵢ(xᵢ) / qᵢ(xᵢ), minus 1
+    <span class="cm"># if no rejection: n = γ</span>
+
+p′ = pₙ₊₁
+<span class="kw">if</span> n &lt; γ:
+    p′ = norm(max(0, pₙ₊₁ − qₙ₊₁))
+t ~ p′
+<span class="kw">return</span> prefix + [x₁ … xₙ, t]</pre></div>
+      <div class="run-example sampling-lab" id="sampling-lab"><div class="run-title">▶ 跑一遍 · 三个 token 的采样修正实验室 <span class="example-tag">p、q 为示例值</span></div><p class="body-copy mt-1">选一个由 q 提出的 token，再拖动随机数 r。接受规则是 <strong>r ≤ min(1, p(x)/q(x))</strong>；若拒绝，就从正差值 p′ 采样。这个例子里，β = Σ min(p,q) = <strong>0.70</strong>。</p><div class="lab-controls"><div><span class="code-label">Draft token x ~ q</span><div class="token-picker" role="group" aria-label="选择 draft token"><button class="token-button" type="button" data-token="A" aria-pressed="false">A</button><button class="token-button" type="button" data-token="B" aria-pressed="true">B</button><button class="token-button" type="button" data-token="C" aria-pressed="false">C</button></div></div><label class="range-control">r <input id="random-r" type="range" min="0.01" max="0.99" step="0.01" value="0.65"><output class="range-value" id="random-r-value" for="random-r">0.65</output></label></div><div class="table-wrap mt-2"><table class="mini-table"><thead><tr><th>token</th><th>p(x) / target</th><th>q(x) / draft</th><th>min(p,q)</th><th>max(0,p−q)</th><th>p′ / normalized</th></tr></thead><tbody id="lab-table"></tbody></table></div><div class="lab-result"><div class="lab-outcome reject" id="lab-outcome"><div class="outcome-kicker">Verifier outcome</div><div class="outcome-main reject" id="outcome-main">拒绝 B</div><p class="outcome-copy" id="outcome-copy"></p></div><div class="lab-metrics"><div class="lab-metric"><span>p(x)/q(x)</span><strong id="lab-ratio">0.60</strong></div><div class="lab-metric"><span>accept cap</span><strong id="lab-cap">0.60</strong></div><div class="lab-metric"><span>β = overlap</span><strong>0.70</strong></div></div></div><details class="proof" open><summary>为什么最后仍然是 p(x)？</summary><p>对任意 token x′，接受路径贡献 min(p,q)，拒绝路径贡献 (1−β)p′ = p−min(p,q)。两项相加恰好是 p。这里的 β 是当前 prefix 的接受概率；论文的 α 是对 prefix 取期望后的平均接受率。</p><span class="formula">P(x = x′) = min(p,q) + [p − min(p,q)] = <span class="good">p(x′)</span><br>p′(x) = [p(x) − min(p(x),q(x))] / (1 − β)</span><p class="source-note">依据论文 Appendix A.1。示例分布：p=(0.5,0.3,0.2)，q=(0.2,0.5,0.3)。</p></details></div>
+    </section>
+
+    <section id="workloads">
+      <div class="section-heading"><div class="section-kicker">04 / Workloads</div><h2>同一套 dataflow，在不同任务上换的是“命中率”</h2><p class="section-lede">切换任务，观察同一架构中的 draft、target、验证与提交路径。①②③④ 与下方步骤一一对应；LaMDA 只报告 α 测量，没有把延迟加速混写成实测。</p></div>
+      <div class="section-rule"></div>
+      <div class="scenario-controls" role="group" aria-label="选择典型负载"><button class="scenario-button" type="button" data-scenario-choice="translation" aria-pressed="true">EnDe 翻译</button><button class="scenario-button" type="button" data-scenario-choice="summarization" aria-pressed="false">CNN/DM 摘要</button><button class="scenario-button" type="button" data-scenario-choice="dialog" aria-pressed="false">LaMDA 对话</button></div>
+      <div class="scenario-stage" id="scenario-stage" data-scenario="translation"><div id="workload-diagram" class="architecture-frame" role="region" aria-label="典型负载 dataflow 架构图" tabindex="0"></div><div class="scenario-summary" id="scenario-summary"></div><div class="scenario-steps" id="scenario-steps"></div><p class="source-note arch-caption">依据论文 Algorithm 1 重绘／示意；场景参数来自 Tables 2–3。动画只表示数据流方向，不代表论文的 wall-clock 比例。</p></div>
+      <div class="run-example"><div class="run-title">▶ 跑一遍 · 为什么摘要任务更吃“上下文复制” <span class="engineer-tag">工程师视角</span></div><ol><li>论文观察到：在会长序列重复的任务里，甚至“发现匹配 prefix 就复制上下文 token”的无参数 draft，也可能得到较高 α。</li><li>这与 CNN/DM 摘要的结构相吻合：摘要常复用原文片段，draft 不必是一个很大的神经模型。</li><li>但这只是可迁移的设计启发，不是论文对“复制 draft 一定优于 T5-small”的实验结论；实际选择仍要同时测 α 与 c。</li></ol></div>
+    </section>
+
+    <section id="decisions">
+      <div class="section-heading"><div class="section-kicker">05 / Design decisions</div><h2>五个决定，换来“快而且仍然正确”</h2><p class="section-lede">这部分按“问题 → 被否决的备选 → 选择理由 → 代价”拆开。注意：论文的严格保证来自采样规则，不是来自 draft 模型足够聪明。</p></div>
+      <div class="section-rule"></div>
+      <div class="decision-stack">
+        <article class="decision-card"><div class="decision-head"><span class="decision-index">D1</span><div><h3>先猜，再验收</h3><p>把串行依赖改成可验证的并行工作</p></div></div><div class="decision-parts"><div class="decision-part"><span class="decision-part-label">决策问题</span><p>如何减少 Mp 的串行调用，而不直接相信一个较小的近似模型？</p></div><div class="decision-part"><span class="decision-part-label">被否决的备选</span><p>直接采用自适应早退或 <strong>Wisdom of Committees</strong> 式的启发式停止：计算可能更少，但输出保证不再是本文的严格目标。</p></div><div class="decision-part"><span class="decision-part-label">为什么这样选</span><p>Mq 只负责提出可能需要的 prefix，Mp 仍然对每个位置做权威验证；猜得准就能一次提交多个 token。</p></div><div class="decision-part"><span class="decision-part-label">代价／权衡</span><p>并行验证需要额外算力，拒绝候选会浪费已经完成的计算；内存带宽成为瓶颈时更有吸引力。</p></div></div></article>
+        <article class="decision-card"><div class="decision-head"><span class="decision-index">D2</span><div><h3>接受 + 残差修正</h3><p>Speculative Sampling 的分布守恒核心</p></div></div><div class="decision-parts"><div class="decision-part"><span class="decision-part-label">决策问题</span><p>如何从 q 采样，却让最终 token 严格服从 p？</p></div><div class="decision-part"><span class="decision-part-label">被否决的备选</span><p>经典 rejection sampling，或拒绝后直接从原始 p 重采。Appendix A.2 指出后者的接受概率可能明显更低。</p></div><div class="decision-part"><span class="decision-part-label">为什么这样选</span><p>以 <strong>min(1,p/q)</strong> 接受，再以 <strong>norm(max(0,p−q))</strong> 修正；接受质量与拒绝质量拼回 p，且不需要迭代重试。</p></div><div class="decision-part"><span class="decision-part-label">代价／权衡</span><p>必须拿到同一 prefix 下的 p、q 两个完整分布，并在拒绝位置做正差值归一化；实现不能省略 q 的保存。</p></div></div></article>
+        <article class="decision-card"><div class="decision-head"><span class="decision-index">D3</span><div><h3>先标准化采样，再谈算法</h3><p>把 argmax、top-k、nucleus、temperature 统一到 p/q</p></div></div><div class="decision-parts"><div class="decision-part"><span class="decision-part-label">决策问题</span><p>如何证明一个算法适用于不同采样器，而不是只适用于 multinomial sampling？</p></div><div class="decision-part"><span class="decision-part-label">被否决的备选</span><p>在 logits 层为每种采样策略分别写一套 speculative 逻辑；Blockwise Parallel Decoding 的 greedy-only 路线也不覆盖一般随机设置。</p></div><div class="decision-part"><span class="decision-part-label">为什么这样选</span><p>论文把各种采样先视为“从调整后的概率分布标准采样”。argmax 也可表示为非最大项置零再归一化，于是同一个验收规则复用。</p></div><div class="decision-part"><span class="decision-part-label">代价／权衡</span><p>Mp 与 Mq 必须使用一致的概率标准化；论文实验中 LaMDA 还固定经过 Top 40 filter，细节不能被 Logits 原始值掩盖。</p></div></div></article>
+        <article class="decision-card"><div class="decision-head"><span class="decision-index">D4</span><div><h3>draft 不必越大越好</h3><p>在 α 与成本系数 c 之间找平衡</p></div></div><div class="decision-parts"><div class="decision-part"><span class="decision-part-label">决策问题</span><p>更强的 draft 能提高接受率，但是否一定带来更低延迟？</p></div><div class="decision-part"><span class="decision-part-label">被否决的备选</span><p>盲目选最大的 T5-large，或立刻投入定制蒸馏、early-exit、架构修改等路线。</p></div><div class="decision-part"><span class="decision-part-label">为什么这样选</span><p>论文发现小约两个数量级的现成模型通常最划算。EnDe、T=0、γ=7 时，T5-small 的 α=.75 却跑出 3.4×，高于 T5-large 的 α=.82、1.7×。</p></div><div class="decision-part"><span class="decision-part-label">代价／权衡</span><p>draft 太小会 α 低、浪费验证；draft 太大会 c 高、吃掉并行收益。α 是模型／任务属性，c 还依赖硬件与实现。</p></div></div></article>
+        <article class="decision-card"><div class="decision-head"><span class="decision-index">D5</span><div><h3>先固定 γ，再把动态化留作下一步</h3><p>一个可部署的整数旋钮</p></div></div><div class="decision-parts"><div class="decision-part"><span class="decision-part-label">决策问题</span><p>每轮猜多少 token，才能在长候选的收益与 draft／验证成本之间取得最大速度？</p></div><div class="decision-part"><span class="decision-part-label">被否决的备选</span><p>固定凭直觉取 γ，或假设有一个能预知每个 prefix 接受率的 oracle 来动态改变 γ。</p></div><div class="decision-part"><span class="decision-part-label">为什么这样选</span><p>给定 α、c，直接数值搜索整数 γ 即可优化 Theorem 3.8；不引入额外预测器，便于复现与部署。</p></div><div class="decision-part"><span class="decision-part-label">代价／权衡</span><p>真实 β 会随 prefix 变化，固定 γ 不是理论上最优。论文估计 oracle 上界在典型设置下最多再带来约 60% 改善，但留作未来工作。</p></div></div></article>
+        <article class="decision-card"><div class="decision-head"><span class="decision-index">D6</span><div><h3>默认严格，lenience 显式另算</h3><p>速度旋钮不能偷偷改写正确性目标</p></div></div><div class="decision-parts"><div class="decision-part"><span class="decision-part-label">决策问题</span><p>如果愿意放宽输出分布，能否继续提高接受率？</p></div><div class="decision-part"><span class="decision-part-label">被否决的备选</span><p>把 Appendix A.5 的 lenience 当成主算法的免费加速；那会让“分布不变”这个核心承诺失效。</p></div><div class="decision-part"><span class="decision-part-label">为什么这样选</span><p>主结果全部使用最严格的 Algorithm 1；lenience 单独给出概率上界，例如 l=.1 时，任何 token 的概率不会超过真实 p 的 10 倍。</p></div><div class="decision-part"><span class="decision-part-label">代价／权衡</span><p>放宽后速度可更高，但不保证最低概率，可能损害样本多样性；argmax 还需要另一种 lenience 定义。</p></div></div></article>
+      </div>
+      <div class="run-example"><div class="run-title">▶ 跑一遍 · 用同一任务比较 draft 大小 <span class="paper-tag">Table 2 · EnDe · T=0 · γ=7</span></div><div class="table-wrap mt-1"><table class="mini-table"><thead><tr><th>Mq</th><th>α</th><th>实测 speed</th><th>读法</th></tr></thead><tbody><tr class="is-highlight"><td><strong>T5-small · 77M</strong></td><td>0.75</td><td><strong>3.4×</strong></td><td>接受率较低，但 draft 成本足够小。</td></tr><tr><td>T5-base · 250M</td><td>0.80</td><td>2.8×</td><td>α 上升，c 也上升。</td></tr><tr><td>T5-large · 800M</td><td>0.82</td><td>1.7×</td><td>最高 α 没有转化成最高速度。</td></tr></tbody></table></div><p class="source-note mt-1"><span class="engineer-tag">工程师视角</span> 这张表是“α 不是唯一 KPI”的最直接证据；c 来自 Appendix Table 4 的 profiler trace 估计。</p></div>
+      <div class="panel calculator"><div class="panel-header"><div><div class="code-label">Interactive model / Theorem 3.8 + 3.11</div><h3>自己调一次 γ：速度、算力、内存读取</h3></div><span class="example-tag">公式计算，不是新实验</span></div><div class="calc-grid"><div><div class="calc-inputs"><div class="calc-input"><label for="alpha-input">α · 接受率</label><input id="alpha-input" type="range" min="0.05" max="0.95" step="0.01" value="0.75"><output id="alpha-output" for="alpha-input">0.75</output></div><div class="calc-input"><label for="gamma-input">γ · 候选数</label><input id="gamma-input" type="range" min="1" max="12" step="1" value="7"><output id="gamma-output" for="gamma-input">7</output></div><div class="calc-input"><label for="cost-input">c · 时间成本</label><input id="cost-input" type="range" min="0" max="0.20" step="0.005" value="0.02"><output id="cost-output" for="cost-input">0.020</output></div><div class="calc-input"><label for="ops-input">ĉ · 算力成本</label><input id="ops-input" type="range" min="0" max="0.20" step="0.005" value="0"><output id="ops-output" for="ops-input">0.000</output></div></div><p class="calc-note">默认 α=.75、γ=7、c=.02 来自 EnDe／T5-small／T=0 的 Table 4；ĉ=0 是 Table 1 的简化假设。模型假设 β 独立同分布，且 γ+1 个 Mp 评估可并行而不增加该步 walltime。</p><div class="calc-actions"><button class="primary-button" id="opt-gamma" type="button">按当前 α、c 搜索最优 γ</button><span class="calc-optimum" id="calc-optimum" aria-live="polite"></span></div></div><div class="calc-results"><div class="calc-result"><span class="calc-result-label">期望新增 token／迭代</span><strong class="calc-result-value" id="calc-tokens">3.60</strong><small>(1−α^(γ+1))/(1−α)</small></div><div class="calc-result"><span class="calc-result-label">理论 walltime speedup</span><strong class="calc-result-value good" id="calc-speed">3.16×</strong><small>期望 token 数 ÷ (γc+1)</small></div><div class="calc-result"><span class="calc-result-label">总算术运算倍数</span><strong class="calc-result-value" id="calc-ops">2.22×</strong><small>相对标准解码；拒绝会留下浪费</small></div><div class="calc-result"><span class="calc-result-label">Mp 权重／KV 读取减少因子</span><strong class="calc-result-value" id="calc-memory">3.60×</strong><small>论文的理想化分析，不是所有内存流量</small></div></div></div></div>
+    </section>
+
+    <section id="experiments">
+      <div class="section-heading"><div class="section-kicker">06 / Evidence</div><h2>实验真正支持的是“2–3× 的现实收益”，不是无条件加速</h2><p class="section-lede">T5-XXL 11B 在 batch size=1、单张 TPU-v4 上，对比 T5X 实现；同时看实测 EMP 与理论 EXP，可以看到模型假设和实现差异落在哪里。</p></div>
+      <div class="section-rule"></div>
+      <div class="experiment-controls"><div class="select-control"><label for="exp-task">Task</label><select id="exp-task"><option value="all">全部任务</option><option value="ENDE">EnDe 翻译</option><option value="CNNDM">CNN/DM 摘要</option></select></div><div class="select-control"><label for="exp-temp">Sampling</label><select id="exp-temp"><option value="all">T=0 + T=1</option><option value="0">T=0 · argmax</option><option value="1">T=1 · standard</option></select></div><div class="select-control"><label>Chart values</label><div class="segmented" role="group" aria-label="选择图表数值"><button class="segment-button" type="button" data-chart-mode="both" aria-pressed="true">EXP + EMP</button><button class="segment-button" type="button" data-chart-mode="emp" aria-pressed="false">实测 EMP</button><button class="segment-button" type="button" data-chart-mode="exp" aria-pressed="false">理论 EXP</button></div></div></div>
+      <div class="chart-panel"><div class="chart-head"><h3 id="chart-title">理论预测与实测速度</h3><span>横轴：speedup × · 越长越快</span></div><div class="chart-list" id="chart-list"></div><div class="chart-legend"><span><i class="legend-swatch exp"></i>EXP · Theorem 3.8 理论预测</span><span><i class="legend-swatch"></i>EMP · 论文实测</span></div><p class="source-note mt-1">数据：Tables 2、4。EXP 使用 α、γ、c 的模型计算；EMP 是 walltime 测量。表中参数已四舍五入，个别 EXP 复算末位可能略有差异。每行单位均为“相对标准 T5X 解码的倍数”。</p></div>
+      <div class="panel data-panel"><div class="panel-header"><div><div class="code-label">Raw evidence / 12 configurations</div><h3>完整实验配置</h3></div><span class="paper-tag">Tables 2 + 4</span></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Task</th><th>Mq</th><th>T</th><th>γ</th><th>α</th><th>c</th><th>EXP</th><th>EMP</th></tr></thead><tbody id="experiment-table"></tbody></table></div></div>
+      <div class="panel tradeoff-panel"><div class="panel-header"><div><div class="code-label">Speed versus arithmetic / Table 1</div><h3>多猜几个 token，速度上升但总算术量也上升</h3></div><span class="paper-tag">假设 c = ĉ = 0</span></div><div class="table-wrap"><table class="mini-table"><thead><tr><th>α</th><th>γ</th><th>总运算倍数</th><th>理论速度</th></tr></thead><tbody><tr><td>0.6</td><td>2</td><td>1.53×</td><td>1.96×</td></tr><tr><td>0.7</td><td>3</td><td>1.58×</td><td>2.53×</td></tr><tr><td>0.8</td><td>2</td><td>1.23×</td><td>2.44×</td></tr><tr><td>0.8</td><td>5</td><td>1.63×</td><td>3.69×</td></tr><tr><td>0.9</td><td>2</td><td>1.11×</td><td>2.71×</td></tr><tr><td>0.9</td><td>10</td><td>1.60×</td><td>6.86×</td></tr></tbody></table></div><p class="source-note mt-1">这些是理论表中的配置，不应与上面的 T5 实测行混读；它们用于展示 α、γ 与总算术运算之间的形状。</p></div>
+      <div class="run-example"><div class="run-title">▶ 跑一遍 · 把 Table 4 的一个格子复算出来</div><ol><li>取 EnDe／T5-small／T=0：论文给出 <strong>α=.75、γ=7、c=.02</strong>。</li><li>期望 token 数 = (1−.75⁸)/(1−.75) = <strong>3.5995</strong>。</li><li>理论速度 = 3.5995/(7×.02+1) = <strong>3.1575× ≈ 3.2×</strong>，对应 EXP。</li><li>同格 EMP 是 <strong>3.4×</strong>。差异并不自动说明公式错误：论文指出实现优化差异与 β 的 i.i.d. 简化都会带来偏差。</li></ol></div>
+    </section>
+
+    <section id="critique">
+      <div class="section-heading"><div class="section-kicker">07 / Critical reading</div><h2>它改变的是时间形状，不是计算守恒律</h2><p class="section-lede">最值得带走的不是“给所有模型加一个小模型”，而是一种系统分解：把便宜的猜测、昂贵的验证和严格的纠偏放在同一条可观测的流水线上。</p></div>
+      <div class="section-rule"></div>
+      <div class="critique-grid"><div class="panel"><div class="panel-header"><div><div class="code-label">What the paper itself bounds</div><h3>论文自认的局限</h3></div><span class="paper-tag">§3、§6、Appendix</span></div><ul class="critique-list"><li><strong>需要空闲并行资源：</strong>如果系统已经算力 bound，增加并发不会带来同样的 walltime 收益。</li><li><strong>总算术运算可能上升：</strong>被拒绝的猜测是浪费；论文的加速建立在用并发换串行时间。</li><li><strong>i.i.d. 只是分析假设：</strong>不同 prefix 的 β 会变化，理论预测与实测存在偏差。</li><li><strong>实验范围有限：</strong>实际 walltime 实现主要针对 T5；GPT-like 与 LaMDA 部分主要是 α 测量，论文也只测试文本模态。</li><li><strong>还有未完成的扩展：</strong>beam search 的组合条件更复杂；动态 Mq／γ、层级 draft、其他模态都留作后续方向。</li></ul></div><div class="panel"><div class="panel-header"><div><div class="code-label">Questions an engineer should ask</div><h3>读者应该继续追问</h3></div><span class="engineer-tag">工程师视角</span></div><ul class="critique-list"><li><strong>吞吐还是单请求延迟？</strong>论文的关键实测是 batch=1；大 batch 已经吃满硬件时，额外验证是否仍有空位，需要重新测量。</li><li><strong>“同分布”不等于“同随机种子同序列”：</strong>随机采样保证的是分布守恒；不要把它误读为每次运行都逐 token 重现同一随机轨迹。</li><li><strong>c 在你的部署里是多少？</strong>它依赖硬件、kernel、通信与实现，不能照搬 TPU-v4 的估计。</li><li><strong>验证的并行是否真的没有墙钟代价？</strong>这是 Theorem 3.8 的简化假设；长 prefix、KV cache 与调度开销需要在目标系统上复核。</li><li><strong>采样标准化是否一致？</strong>top-k、nucleus、temperature、Top 40 等变换必须对 p/q 以相同语义处理。</li></ul></div></div>
+      <div class="panel mt-3"><div class="panel-header"><div><div class="code-label">Transferable ideas</div><h3>可以直接偷的思想</h3></div><span class="engineer-tag">工程师视角</span></div><ul class="steal-list"><li><strong>把“提议”和“裁决”分开：</strong>便宜的模块可以大胆猜，昂贵的模块只在权威节点验收。</li><li><strong>把正确性写进采样器：</strong>不要靠 draft 质量兜底；用接受概率与残差分布把误差闭环。</li><li><strong>先试零成本 draft：</strong>n-gram、上下文复制等无参数方法部署简单，在重复文本场景值得做 baseline。</li><li><strong>把 γ 当成可测量旋钮：</strong>用 α、c 做初始数值搜索，再用真实 trace 校准，而不是盲目增大候选长度。</li><li><strong>与其他优化叠加评估：</strong>量化、稀疏化等改善内存／算力比的技术，可能与 speculative decoding 互补，但组合后的瓶颈要重新定位。</li></ul></div>
+      <div class="run-example"><div class="run-title">▶ 跑一遍 · 构造一个“会更慢”的参数组合 <span class="example-tag">示例值，非论文实测</span></div><ol><li>取 <strong>α=.40、γ=8、c=.20</strong>，仍使用论文 Theorem 3.8 的理想化模型。</li><li>期望 token 数 = (1−.4⁹)/(1−.4) ≈ <strong>1.6661</strong>。</li><li>理论速度 = 1.6661/(8×.20+1) ≈ <strong>0.641×</strong>：不是加速，而是约 36% 的时间增加。</li><li>这正是论文限制条件的直观版本：接受率不够高、draft 又不够便宜时，额外计算会把收益吃光。</li></ol></div>
+      <div class="final-takeaway"><div class="code-label">One-sentence takeaway</div><h3>Speculative Decoding 用“多余但并行的计算”购买“更少的串行等待”，并用一个可证明的残差采样器确保你买到的仍然是 Mp 的分布。</h3><p><span class="paper-tag">论文结论</span> 在给定算力与内存带宽瓶颈的前提下，T5 实验展示了 2–3× 的实际收益；<span class="engineer-tag">工程师视角</span> 真正的部署门槛是：测出你的 α、c、并行余量，再决定这套机制是否值得上线。</p></div>
+    </section>
+  </main>
+</div>
+<footer class="footer"><div class="footer-inner"><p><strong>Source paper</strong><br>Yaniv Leviathan, Matan Kalman, Yossi Matias. <em>Fast Inference from Transformers via Speculative Decoding</em>. Proceedings of ICML 2023, PMLR 202; arXiv:2211.17192v2, 18 May 2023. 本报告基于用户提供的 13 页 PDF，所有重绘图均在图注标明。</p><p>SELF-CONTAINED HTML<br>NO NETWORK DEPENDENCIES<br>LIGHT / DARK · KEYBOARD READY</p></div></footer>
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+  var $ = function (selector, scope) { return (scope || document).querySelector(selector); };
+  var $$ = function (selector, scope) { return Array.prototype.slice.call((scope || document).querySelectorAll(selector)); };
+
+  /* Theme: an explicit preset is useful for deterministic light/dark review copies. */
+  var themeToggle = $('#theme-toggle');
+  function syncThemeButton() {
+    var dark = root.getAttribute('data-theme') === 'dark';
+    themeToggle.setAttribute('aria-pressed', String(dark));
+    $('#theme-label').textContent = dark ? '深色' : '浅色';
+    $('#theme-icon').textContent = dark ? '◑' : '◐';
+  }
+  themeToggle.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('specdec-theme', next); } catch (e) {}
+    syncThemeButton();
+  });
+  syncThemeButton();
+
+  /* Reading rail */
+  var tocLinks = $$('.toc a');
+  var sectionMap = {};
+  tocLinks.forEach(function (link) { sectionMap[link.getAttribute('href').slice(1)] = link; });
+  function activateSection(id) {
+    tocLinks.forEach(function (link) { link.classList.toggle('is-active', link === sectionMap[id]); });
+  }
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) activateSection(entry.target.id); });
+    }, { rootMargin: '-16% 0px -68% 0px', threshold: 0 });
+    $$('main section[id]').forEach(function (section) { observer.observe(section); });
+  }
+  tocLinks.forEach(function (link) { link.addEventListener('click', function () { activateSection(link.getAttribute('href').slice(1)); }); });
+
+  /* Shared, token-colored architecture drawing. The workload view reuses the same geometry. */
+  function architectureSvg(id, workload) {
+    var common = ' data-s="translation summarization dialog"';
+    var marker = function (name, cls) { return '<marker id="' + id + '-' + name + '" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" class="' + cls + '"></path></marker>'; };
+    var edge = function (cls, d, extra) {
+      var markerName = cls.indexOf('edge-draft') !== -1 ? 'arrow-draft' : cls.indexOf('edge-target') !== -1 ? 'arrow-target' : cls.indexOf('edge-control') !== -1 ? 'arrow-control' : 'arrow';
+      return '<path class="edge ' + cls + '" d="' + d + '" marker-end="url(#' + id + '-' + markerName + ')"' + common + (extra || '') + '></path>';
+    };
+    var badge = function (x, y, n) { return '<g class="flow-badge"' + common + '><circle class="badge-circle" cx="' + x + '" cy="' + y + '" r="14"></circle><text class="badge-text" x="' + x + '" y="' + y + '">' + n + '</text></g>'; };
+    var scenarioNotes = workload ? '<g data-s="translation"><text class="scenario-note translation" x="795" y="95">EnDe / γ = 7</text></g><g data-s="summarization"><text class="scenario-note summarization" x="795" y="125">CNN/DM / γ = 5</text></g><g data-s="dialog"><text class="scenario-note dialog" x="795" y="155">LaMDA / α only</text></g>' : '';
+    var dynamicLabels = workload ? '<text id="workload-draft-model" class="node-small" x="265" y="151">T5-small · 77M</text><text id="workload-target-model" class="node-small" x="265" y="408">T5-XXL · 11B</text>' : '';
+    return '<svg class="arch-svg" viewBox="0 0 1000 550" role="img" aria-labelledby="' + id + '-title ' + id + '-desc">' +
+      '<title id="' + id + '-title">Speculative Decoding architecture</title><desc id="' + id + '-desc">前缀进入 draft 与 target 两条轨，draft 提供候选，target 并行给出分布，验证器接受或修正后提交。</desc>' +
+      '<defs>' + marker('arrow', 'arrow') + marker('arrow-draft', 'arrow-draft') + marker('arrow-target', 'arrow-target') + marker('arrow-control', 'arrow-control') + '</defs>' +
+      '<rect class="boundary" x="17" y="20" width="966" height="507" rx="14"' + common + '></rect><text class="boundary-label mono" x="32" y="45"' + common + '>SPECULATIVE DECODING / ONE ITERATION</text>' + scenarioNotes +
+      '<path class="node node-prefix" d="M35 220 H163 L185 242 V302 H35 Z"' + common + '></path><path class="prefix-fold" d="M163 220 V242 H185"' + common + '></path><text class="node-title" x="51" y="253"' + common + '>prefix / KV</text><text class="node-sub" x="51" y="278"' + common + '>context state</text>' +
+      '<rect class="node node-draft" x="250" y="80" width="190" height="91" rx="9"' + common + '></rect><text class="node-title" x="265" y="108"' + common + '>Mq · approximation</text><text class="node-sub" x="265" y="132"' + common + '>γ serial guesses</text>' +
+      '<rect class="node node-target" x="250" y="330" width="190" height="99" rx="9"' + common + '></rect><text class="node-title" x="265" y="359"' + common + '>Mp · target</text><text class="node-sub" x="265" y="384"' + common + '>parallel verify</text>' +
+      '<polygon class="node node-verify" points="550,260 650,176 750,260 650,344"' + common + '></polygon><text class="node-title" x="650" y="238" text-anchor="middle"' + common + '>accept / reject</text><text class="node-sub mono" x="650" y="263" text-anchor="middle"' + common + '>min(1, p / q)</text><text class="node-small" x="650" y="288" text-anchor="middle"' + common + '>or p′ correction</text>' +
+      '<rect class="node node-commit" x="810" y="220" width="150" height="81" rx="9"' + common + '></rect><text class="node-title" x="825" y="251"' + common + '>COMMIT</text><text class="node-sub mono" x="825" y="276"' + common + '>n + 1 tokens</text>' +
+      '<rect class="node node-output" x="810" y="400" width="150" height="72" rx="9"' + common + '></rect><text class="node-title" x="825" y="431"' + common + '>prefix ↑</text><text class="node-sub" x="825" y="454"' + common + '>next iteration</text>' +
+      edge('edge-draft flow', 'M185 245 C220 245 205 125 250 125') + edge('edge-target flow', 'M185 277 C220 277 205 379 250 379') +
+      edge('edge-draft flow', 'M440 125 C510 125 505 208 555 246') + edge('edge-target flow', 'M440 379 C510 379 505 318 555 278') +
+      edge('edge-neutral flow', 'M750 260 H810') + edge('edge-control flow', 'M885 301 V400') + edge('edge-control flow', 'M810 437 C660 505 281 515 108 455 C57 437 57 333 105 302') +
+      '<text class="edge-label draft mono" x="461" y="112"' + common + '>x₁…xγ, qᵢ</text><text class="edge-label target mono" x="461" y="409"' + common + '>p₁…pγ+1</text><text class="edge-label control" x="780" y="326" text-anchor="middle"' + common + '>n + correction</text><text class="edge-label control" x="370" y="505"' + common + '>update prefix / next round</text>' +
+      dynamicLabels + (workload ? badge(470, 91, '①') + badge(474, 435, '②') + badge(773, 288, '③') + badge(918, 365, '④') : '') +
+      '</svg>';
+  }
+  $('#hld-diagram').innerHTML = architectureSvg('hld', false);
+  $('#workload-diagram').innerHTML = architectureSvg('workload', true);
+
+  /* Six-step request trace */
+  var steps = [
+    { kicker: '01 / PROPOSE', title: 'Mq 自回归地提出 γ 个候选', body: '从当前 prefix 开始，draft model 每次只看已经提出的候选，串行生成 x₁…xγ，并保留每个位置的 qᵢ 分布。γ 是候选长度，不是最终一定会提交的 token 数。', formula: 'qᵢ = Mq(prefix + [x₁ … xᵢ₋₁]);   xᵢ ~ qᵢ', left: '工程细节', right: 'Mq 小约两个数量级通常是起点，但 c 必须在目标硬件上测。', state: 'draft buffer: x₁ … xγ' },
+    { kicker: '02 / VERIFY', title: 'Mp 一次性给出 γ+1 个权威分布', body: '目标模型分别评估原 prefix 以及加上 1…γ 个候选后的 prefix。概念上是 γ+1 个并行评估，因此后面每个位置的 pᵢ 都已经准备好。', formula: 'p₁ … pγ+1 = Mp(prefix), …, Mp(prefix + [x₁ … xγ])', left: '并行边界', right: '这里增加的是并发算术运算；论文理论 walltime 假设这些评估不拉长单次迭代。', state: 'target distributions: p₁ … pγ+1' },
+    { kicker: '03 / ACCEPT', title: '沿候选顺序，找到第一个拒绝位置', body: '为每个候选抽 rᵢ ~ U(0,1)。当 rᵢ ≤ min(1,pᵢ(xᵢ)/qᵢ(xᵢ)) 时接受；一旦拒绝，后面的候选即使已经算完也不能提交。', formula: 'accept xᵢ with probability min(1, pᵢ(xᵢ) / qᵢ(xᵢ))', left: '为什么是 min', right: '当 q(x)≤p(x) 时接受概率为 1；否则只以 p/q 接受，避免高估 q 偏爱的 token。', state: 'n = accepted prefix length' },
+    { kicker: '04 / CORRECT', title: '在第一个拒绝位置，从 p′ 补一个 token', body: '如果第 n+1 个候选被拒绝，不能直接从原始 p 或 q 重采。取 target 与 draft 分布的正差值并归一化，补上被拒绝路径缺失的概率质量。', formula: 'p′ = norm(max(0, pₙ₊₁ − qₙ₊₁));   t ~ p′', left: '分布守恒', right: '接受路径贡献 min(p,q)，拒绝路径贡献 p−min(p,q)，合计正好是 p。', state: 'commit: x₁ … xₙ + t' },
+    { kicker: '05 / EXTEND', title: '如果 γ 个全部接受，再白得一个 target token', body: '没有拒绝位置时，不需要修正分布；直接从 pγ+1 采样一个额外 token。于是一轮最多提交 γ+1 个 token，最少也有 1 个。', formula: 'n = γ  ⇒  p′ = pγ+1;   t ~ pγ+1', left: '最好情况', right: '全部接受时，draft 的 γ 个 token 与 target 的额外 token 都能保留。', state: 'commit: x₁ … xγ + t' },
+    { kicker: '06 / COMMIT', title: '拼接、更新 prefix，进入下一轮', body: '返回值是 prefix + [x₁…xₙ,t]。下一轮以新的 prefix 重复上述过程；每一轮都保留 target 的分布语义，直到达到停止条件。', formula: 'prefix ← prefix + [x₁ … xₙ, t]', left: '系统观', right: '需要观测的不只是 tokens/s，还包括接受率、平均提交长度、draft 成本与验证资源占用。', state: 'next iteration →' }
+  ];
+  var stepPanel = $('#step-panel');
+  var stepTabs = $$('.step-tab');
+  var currentStep = 0;
+  function setStep(index) {
+    currentStep = (index + steps.length) % steps.length;
+    var step = steps[currentStep];
+    stepTabs.forEach(function (tab, i) { tab.setAttribute('aria-selected', String(i === currentStep)); tab.tabIndex = i === currentStep ? 0 : -1; });
+    stepPanel.innerHTML = '<div class="step-panel-kicker">' + step.kicker + '</div><h3>' + step.title + '</h3><p>' + step.body + '</p><span class="formula">' + step.formula + '</span><dl class="step-detail"><div><dt>' + step.left + '</dt><dd>' + step.right + '</dd></div><div><dt>State</dt><dd><code>' + step.state + '</code></dd></div></dl><div class="step-footer"><span>← → 切换步骤 · Tab 聚焦</span><button type="button" class="text-button" id="next-step">下一步 ↗</button></div>';
+    $('#next-step').addEventListener('click', function () { setStep(currentStep + 1); });
+  }
+  stepTabs.forEach(function (tab, index) {
+    tab.addEventListener('click', function () { setStep(index); });
+    tab.addEventListener('keydown', function (event) {
+      var next = null;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = index + 1;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = index - 1;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = steps.length - 1;
+      if (next !== null) { event.preventDefault(); setStep(next); stepTabs[currentStep].focus(); }
+    });
+  });
+  setStep(0);
+
+  /* A small, exact three-token sampling example. */
+  var labTokens = [{ name: 'A', p: .5, q: .2 }, { name: 'B', p: .3, q: .5 }, { name: 'C', p: .2, q: .3 }];
+  var selectedToken = 'B';
+  var rInput = $('#random-r');
+  function fmt(value, digits) { return Number(value).toFixed(digits); }
+  function renderLab() {
+    var token = labTokens.find(function (item) { return item.name === selectedToken; });
+    var r = Number(rInput.value);
+    var ratio = token.p / token.q;
+    var cap = Math.min(1, ratio);
+    var accepted = r <= cap;
+    $('#random-r-value').textContent = fmt(r, 2);
+    $('#lab-ratio').textContent = fmt(ratio, 2);
+    $('#lab-cap').textContent = fmt(cap, 2);
+    $$('.token-button').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.token === selectedToken)); });
+    $('#lab-table').innerHTML = labTokens.map(function (item) {
+      var positive = Math.max(0, item.p - item.q);
+      return '<tr class="' + (item.name === selectedToken ? 'is-highlight' : '') + '"><td><strong>' + item.name + '</strong></td><td>' + fmt(item.p, 2) + '</td><td>' + fmt(item.q, 2) + '</td><td>' + fmt(Math.min(item.p, item.q), 2) + '</td><td>' + fmt(positive, 2) + '</td><td>' + fmt(positive / .3, 2) + '</td></tr>';
+    }).join('');
+    var outcome = $('#lab-outcome');
+    var main = $('#outcome-main');
+    outcome.classList.toggle('accept', accepted);
+    outcome.classList.toggle('reject', !accepted);
+    main.classList.toggle('accept', accepted);
+    main.classList.toggle('reject', !accepted);
+    main.textContent = accepted ? '接受 ' + token.name : '拒绝 ' + token.name;
+    $('#outcome-copy').textContent = accepted ? 'r=' + fmt(r, 2) + ' ≤ ' + fmt(cap, 2) + '，保留 draft token ' + token.name + '。' : 'r=' + fmt(r, 2) + ' > ' + fmt(cap, 2) + '，从 p′=[1.00, 0.00, 0.00] 采样；本例必得修正 token A。';
+  }
+  $$('.token-button').forEach(function (button) { button.addEventListener('click', function () { selectedToken = button.dataset.token; renderLab(); }); });
+  rInput.addEventListener('input', renderLab);
+  renderLab();
+
+  /* Workload dataflow */
+  var scenarios = {
+    translation: { name: 'English → German translation', sub: 'T5 encoder–decoder · WMT EnDe · batch=1 · single TPU-v4', draft: 'T5-small · 77M', target: 'T5-XXL · 11B', gamma: '7', alpha: '.75 / .62', speed: '3.4× / 2.6×', note: 'T=0 / T=1 · 实测', steps: [['Mq 提案', 'T5-small 串行猜 7 个 token；同架构、同采样标准化。'], ['Mp 验证', 'T5-XXL 并行给出 8 个位置的 p 分布。'], ['按 α 验收', 'α=.75（argmax）或 .62（standard sampling）。'], ['提交结果', '论文实测 3.4×（T=0）／2.6×（T=1）。']] },
+    summarization: { name: 'CNN/DM news summarization', sub: 'T5 encoder–decoder · CNN/DM · batch=1 · single TPU-v4', draft: 'T5-small · 77M', target: 'T5-XXL · 11B', gamma: '5', alpha: '.65 / .53', speed: '3.1× / 2.3×', note: 'T=0 / T=1 · 实测', steps: [['Mq 提案', 'T5-small 串行猜 5 个 token；候选长度比 EnDe 短。'], ['Mp 验证', 'T5-XXL 并行给出 6 个位置的 p 分布。'], ['按 α 验收', 'α=.65（argmax）或 .53（standard sampling）。'], ['提交结果', '论文实测 3.1×（T=0）／2.3×（T=1）。']] },
+    dialog: { name: 'LaMDA dialog', sub: 'Decoder-only · 137B target · α measured on generated tokens', draft: 'LaMDA · 100M / 2B / 8B', target: 'LaMDA · 137B', gamma: '未报告', alpha: '.57–.75', speed: '未报告', note: '仅 Table 3 · 无 walltime', steps: [['Mq 提案', '可分别使用 LaMDA 100M、2B 或 8B 作为近似模型。'], ['Mp 验证', '目标为 LaMDA 137B；输出始终经过 Top 40 filter。'], ['按 α 验收', 'T=0：.61／.71／.75；T=1：.57／.71／.74。'], ['提交结果', '论文此处报告 α，不提供该设置的实测 speedup。']] }
+  };
+  var scenarioStage = $('#scenario-stage');
+  function setScenario(key) {
+    var data = scenarios[key];
+    scenarioStage.dataset.scenario = key;
+    $$('.scenario-button').forEach(function (button) { button.setAttribute('aria-pressed', String(button.dataset.scenarioChoice === key)); });
+    $('#workload-draft-model').textContent = data.draft;
+    $('#workload-target-model').textContent = data.target;
+    $('#scenario-summary').innerHTML = '<div><div class="scenario-name">' + data.name + '</div><div class="scenario-sub">' + data.sub + '</div></div><div><span class="scenario-stat-label">γ</span><strong class="scenario-stat-value">' + data.gamma + '</strong><span class="scenario-sub">' + data.note + '</span></div><div><span class="scenario-stat-label">α / acceptance</span><strong class="scenario-stat-value">' + data.alpha + '</strong><span class="scenario-sub">T=0 / T=1 where applicable</span></div><div><span class="scenario-stat-label">Speedup</span><strong class="scenario-stat-value">' + data.speed + '</strong><span class="scenario-sub">paper-reported scope</span></div>';
+    $('#scenario-steps').innerHTML = data.steps.map(function (step, i) { return '<article class="scenario-step"><div class="scenario-step-num">' + ['①','②','③','④'][i] + '</div><h4>' + step[0] + '</h4><p>' + step[1] + '</p></article>'; }).join('');
+  }
+  $$('.scenario-button').forEach(function (button) { button.addEventListener('click', function () { setScenario(button.dataset.scenarioChoice); }); });
+  setScenario('translation');
+
+  /* Theory calculator */
+  var calcIds = ['alpha', 'gamma', 'cost', 'ops'];
+  function calcValues() { return { a: Number($('#alpha-input').value), g: Number($('#gamma-input').value), c: Number($('#cost-input').value), chat: Number($('#ops-input').value) }; }
+  function expectedTokens(a, g) { return (1 - Math.pow(a, g + 1)) / (1 - a); }
+  function speedup(a, g, c) { return expectedTokens(a, g) / (g * c + 1); }
+  function operationFactor(a, g, chat) { return ((1 - a) * (g * chat + g + 1)) / (1 - Math.pow(a, g + 1)); }
+  function renderCalc() {
+    var v = calcValues();
+    var tokens = expectedTokens(v.a, v.g);
+    var speed = speedup(v.a, v.g, v.c);
+    $('#alpha-output').textContent = fmt(v.a, 2);
+    $('#gamma-output').textContent = String(v.g);
+    $('#cost-output').textContent = fmt(v.c, 3);
+    $('#ops-output').textContent = fmt(v.chat, 3);
+    $('#calc-tokens').textContent = fmt(tokens, 2);
+    $('#calc-speed').textContent = fmt(speed, 2) + '×';
+    $('#calc-speed').classList.toggle('good', speed >= 1);
+    $('#calc-speed').classList.toggle('warn', speed < 1);
+    $('#calc-ops').textContent = fmt(operationFactor(v.a, v.g, v.chat), 2) + '×';
+    $('#calc-memory').textContent = fmt(tokens, 2) + '×';
+  }
+  calcIds.forEach(function (id) { $('#' + id + '-input').addEventListener('input', renderCalc); });
+  $('#opt-gamma').addEventListener('click', function () {
+    var v = calcValues();
+    var bestGamma = 1;
+    var bestSpeed = -Infinity;
+    for (var g = 1; g <= 32; g += 1) { var candidate = speedup(v.a, g, v.c); if (candidate > bestSpeed) { bestSpeed = candidate; bestGamma = g; } }
+    $('#gamma-input').value = bestGamma;
+    $('#calc-optimum').textContent = 'γ* = ' + bestGamma + ' · ' + fmt(bestSpeed, 2) + '×（搜索 1…32）';
+    renderCalc();
+  });
+  renderCalc();
+
+  /* Experiment table and honest EXP/EMP chart */
+  var experiments = [
+    { task: 'ENDE', model: 'T5-small', temp: 0, gamma: 7, alpha: .75, c: .02, exp: 3.2, emp: 3.4 },
+    { task: 'ENDE', model: 'T5-base', temp: 0, gamma: 7, alpha: .80, c: .04, exp: 3.3, emp: 2.8 },
+    { task: 'ENDE', model: 'T5-large', temp: 0, gamma: 7, alpha: .82, c: .11, exp: 2.5, emp: 1.7 },
+    { task: 'ENDE', model: 'T5-small', temp: 1, gamma: 7, alpha: .62, c: .02, exp: 2.3, emp: 2.6 },
+    { task: 'ENDE', model: 'T5-base', temp: 1, gamma: 5, alpha: .68, c: .04, exp: 2.4, emp: 2.4 },
+    { task: 'ENDE', model: 'T5-large', temp: 1, gamma: 3, alpha: .71, c: .11, exp: 2.0, emp: 1.4 },
+    { task: 'CNNDM', model: 'T5-small', temp: 0, gamma: 5, alpha: .65, c: .02, exp: 2.4, emp: 3.1 },
+    { task: 'CNNDM', model: 'T5-base', temp: 0, gamma: 5, alpha: .73, c: .04, exp: 2.6, emp: 3.0 },
+    { task: 'CNNDM', model: 'T5-large', temp: 0, gamma: 3, alpha: .74, c: .11, exp: 2.0, emp: 2.2 },
+    { task: 'CNNDM', model: 'T5-small', temp: 1, gamma: 5, alpha: .53, c: .02, exp: 1.9, emp: 2.3 },
+    { task: 'CNNDM', model: 'T5-base', temp: 1, gamma: 3, alpha: .55, c: .04, exp: 1.8, emp: 2.2 },
+    { task: 'CNNDM', model: 'T5-large', temp: 1, gamma: 3, alpha: .56, c: .11, exp: 1.6, emp: 1.7 }
+  ];
+  var chartMode = 'both';
+  function filteredExperiments() {
+    var task = $('#exp-task').value;
+    var temp = $('#exp-temp').value;
+    return experiments.filter(function (row) { return (task === 'all' || row.task === task) && (temp === 'all' || String(row.temp) === temp); });
+  }
+  function barLine(kind, value, max) {
+    return '<div class="bar-line"><span>' + kind.toUpperCase() + '</span><div class="bar-track"><div class="bar-fill ' + kind + '" style="--bar-size:' + (value / max * 100).toFixed(2) + '%"></div></div><strong>' + fmt(value, 1) + '×</strong></div>';
+  }
+  function renderExperiments() {
+    var rows = filteredExperiments();
+    var max = Math.max(3.6, Math.max.apply(null, rows.map(function (row) { return Math.max(row.exp, row.emp); }).concat([0])));
+    if (!rows.length) {
+      $('#chart-list').innerHTML = '<div class="chart-empty">没有匹配的配置，请放宽任务或采样筛选。</div>';
+    } else {
+      $('#chart-list').innerHTML = rows.map(function (row) {
+        var bars = '';
+        if (chartMode === 'both' || chartMode === 'exp') bars += barLine('exp', row.exp, max);
+        if (chartMode === 'both' || chartMode === 'emp') bars += barLine('emp', row.emp, max);
+        return '<div class="chart-row"><div class="chart-label">' + row.task + ' · ' + row.model + '<small>T=' + row.temp + ' · γ=' + row.gamma + ' · α=' + fmt(row.alpha, 2) + '</small></div><div class="chart-bars">' + bars + '</div></div>';
+      }).join('');
+    }
+    $('#experiment-table').innerHTML = rows.map(function (row) {
+      var best = row.emp >= 3.1;
+      return '<tr class="' + (best ? 'best' : '') + '"><td><strong>' + row.task + '</strong></td><td>' + row.model + '</td><td>' + row.temp + '</td><td>' + row.gamma + '</td><td>' + fmt(row.alpha, 2) + '</td><td>' + fmt(row.c, 2) + '</td><td>' + fmt(row.exp, 1) + '×</td><td><strong>' + fmt(row.emp, 1) + '×</strong></td></tr>';
+    }).join('');
+    $('#chart-title').textContent = chartMode === 'both' ? '理论预测与实测速度' : chartMode === 'emp' ? '论文实测速度（EMP）' : '理论预测速度（EXP）';
+  }
+  $('#exp-task').addEventListener('change', renderExperiments);
+  $('#exp-temp').addEventListener('change', renderExperiments);
+  $$('.segment-button').forEach(function (button) { button.addEventListener('click', function () { chartMode = button.dataset.chartMode; $$('.segment-button').forEach(function (other) { other.setAttribute('aria-pressed', String(other === button)); }); renderExperiments(); }); });
+  renderExperiments();
+})();
+</script>
+</body>
+</html>
