@@ -78,7 +78,7 @@ footer a { color: #7f8794; }
       </div>
     </section>
     <section class="group">
-      <h2>AI 工程</h2>
+      <h2>AI 工程 · 论文解读</h2>
       <div class="grid">
       <a class="card" href="books/distserve-deep-dive.html">
         <span class="title">DistServe 论文深读：拆开 Prefill 与 Decoding</span>
@@ -110,11 +110,6 @@ footer a { color: #7f8794; }
         <span class="desc">Orca（OSDI '22）架构解析：iteration-level scheduling 让每个 token 边界都成为调度点，selective batching 只对非 Attention 算子组批。重绘 HLD 架构图（控制面/数据面分色）、6 步请求旅程 stepper、同一张图上 3 种负载的可切换 dataflow、5 张设计决策卡与 6 个"跑一遍"算例；附开源复刻 tinyorca 的逐机制符合度评估与本机实测对照，深浅双主题。</span>
         <span class="meta"><span>中文</span><span>9 节 · 2 图 · 7 算例</span><span>77 KB</span></span>
       </a>
-      <a class="card" href="books/nano-vllm-architecture.html">
-        <span class="title">nano-vLLM 架构与源码导读</span>
-        <span class="desc">跟随一个 8,000-token 请求，理解调度、KV 缓存和张量并行。15 幅图解释架构与 3 类负载，配有可点击的源码引用，支持中英文切换。</span>
-        <span class="meta"><span>中文 / English</span><span>15 图 · 3 类负载</span><span>340 KB</span></span>
-      </a>
       <a class="card" href="books/mooncake-kvcache-serving.html">
         <span class="title">Mooncake 论文深读：KVCache-centric 解耦架构</span>
         <span class="desc">面向程序员的 Kimi serving 平台架构解析：P/D 解耦、分布式 KVCache 池、CPP 流水线与过载早拒绝。7 幅手绘架构图、3 条可切换的典型负载 dataflow、每节配可在脑中跑一遍的具体算例，深浅双主题。</span>
@@ -124,6 +119,16 @@ footer a { color: #7f8794; }
         <span class="title">PagedAttention 论文深读：把 OS 虚拟内存搬进 GPU</span>
         <span class="desc">vLLM（SOSP '23）架构解析：逻辑/物理块分页、引用计数 + 写时复制、all-or-nothing 抢占与 recompute 恢复。手绘 HLD 架构图、7 步请求生命周期 stepper、同一张内存地图上 3 种负载的可切换 dataflow、6 张设计决策卡与 5 个"跑一遍"算例，深浅双主题。</span>
         <span class="meta"><span>中文</span><span>7 节 · 4 图 · 5 算例</span><span>76 KB</span></span>
+      </a>
+      </div>
+    </section>
+    <section class="group">
+      <h2>AI 工程 · 项目解读</h2>
+      <div class="grid">
+      <a class="card" href="books/nano-vllm-architecture.html">
+        <span class="title">nano-vLLM 架构与源码导读</span>
+        <span class="desc">跟随一个 8,000-token 请求，理解调度、KV 缓存和张量并行。15 幅图解释架构与 3 类负载，配有可点击的源码引用，支持中英文切换。</span>
+        <span class="meta"><span>中文 / English</span><span>15 图 · 3 类负载</span><span>340 KB</span></span>
       </a>
       <a class="card" href="books/the-reversible-harness.html">
         <span class="title">The Reversible Harness: Inside DeepSeek Harness</span>
