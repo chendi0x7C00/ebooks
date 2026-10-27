@@ -80,6 +80,11 @@ footer a { color: #7f8794; }
     <section class="group">
       <h2>AI 工程</h2>
       <div class="grid">
+      <a class="card" href="books/distserve-deep-dive.html">
+        <span class="title">DistServe 论文深读：拆开 Prefill 与 Decoding</span>
+        <span class="desc">DistServe（arXiv:2401.09670）架构解析：以 TTFT／TPOT 双 SLO 优化 per-GPU goodput，独立搜索两阶段资源与 TP／PP，按带宽放置并以 pull 传输 KV cache。双资源池 HLD、7 步放置／请求 stepper、3 类负载 dataflow、6 张设计决策卡与 M/D/1 排队演算器，深浅双主题。</span>
+        <span class="meta"><span>中文</span><span>7 步 · 3 负载 · 7 算例</span><span>102 KB</span></span>
+      </a>
       <a class="card" href="books/flashattention-deep-dive.html">
         <span class="title">FlashAttention 论文深读：少搬数据，而非改变注意力</span>
         <span class="desc">FlashAttention（NeurIPS '22）架构解析：以 tiling、online softmax 与 backward recomputation 避免 N×N 中间矩阵落 HBM。手绘 HLD 架构图、7 步前向／反向 stepper、3 类负载可切换 dataflow、6 张设计决策卡与 7 个"跑一遍"算例，深浅双主题。</span>
@@ -243,7 +248,7 @@ footer a { color: #7f8794; }
       </div>
     </section>
   <footer>
-    共 33 本 · 更新于 2026-10-27 ·
+    共 34 本 · 更新于 2026-10-27 ·
     <a href="https://github.com/chendi0x7C00/ebooks">GitHub 仓库</a>
   </footer>
 </body>
