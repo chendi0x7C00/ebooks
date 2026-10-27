@@ -80,6 +80,11 @@ footer a { color: #7f8794; }
     <section class="group">
       <h2>AI 工程</h2>
       <div class="grid">
+      <a class="card" href="books/flashattention-deep-dive.html">
+        <span class="title">FlashAttention 论文深读：少搬数据，而非改变注意力</span>
+        <span class="desc">FlashAttention（NeurIPS '22）架构解析：以 tiling、online softmax 与 backward recomputation 避免 N×N 中间矩阵落 HBM。手绘 HLD 架构图、7 步前向／反向 stepper、3 类负载可切换 dataflow、6 张设计决策卡与 7 个"跑一遍"算例，深浅双主题。</span>
+        <span class="meta"><span>中文</span><span>7 步 · 3 负载 · 7 算例</span><span>106 KB</span></span>
+      </a>
       <a class="card" href="books/speculative-decoding-deep-dive.html">
         <span class="title">Speculative Decoding 论文深读：猜得快，还要分布不变</span>
         <span class="desc">Speculative Decoding（ICML '23）架构解析：小模型 draft、大模型并行验证、min(1,p/q) 接受与残差分布修正。双轨 HLD 架构图、6 步算法 stepper、同一张图上 3 种任务的可切换 dataflow、6 张设计决策卡与 7 个"跑一遍"算例；附交互采样实验室和 γ–α–成本计算器，深浅双主题。</span>

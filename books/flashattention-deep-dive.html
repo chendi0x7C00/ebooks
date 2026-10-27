@@ -1,0 +1,1544 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="FlashAttention 论文深度解读：IO 感知、分块在线 softmax、反向重算、块稀疏扩展与实验边界。">
+  <title>FlashAttention 深度解读｜少搬数据，而非改变注意力</title>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var params = new URLSearchParams(window.location.search);
+      var preset = root.getAttribute('data-theme');
+      var query = params.get('theme');
+      var saved = null;
+      try { saved = window.localStorage.getItem('fa-deep-dive-theme'); } catch (error) {}
+      var system = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      var theme = preset || ((query === 'light' || query === 'dark') ? query : null) || saved || system;
+      root.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+    }());
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: hsl(216 24% 10%);
+      --bg-elev: hsl(216 22% 13%);
+      --panel: hsl(215 20% 15%);
+      --panel-strong: hsl(214 19% 18%);
+      --text: hsl(204 30% 92%);
+      --muted: hsl(207 12% 70%);
+      --faint: hsl(208 10% 53%);
+      --line: hsl(210 16% 29%);
+      --line-strong: hsl(205 18% 43%);
+      --accent: hsl(192 88% 62%);
+      --accent-soft: hsl(192 60% 20% / .38);
+      --sram: hsl(164 62% 55%);
+      --sram-soft: hsl(164 45% 20% / .36);
+      --hbm: hsl(36 88% 62%);
+      --hbm-soft: hsl(36 55% 20% / .38);
+      --data: hsl(202 85% 65%);
+      --control: hsl(275 65% 74%);
+      --run: hsl(43 86% 62%);
+      --run-soft: hsl(43 55% 20% / .30);
+      --danger: hsl(5 75% 68%);
+      --shadow: hsl(220 40% 3% / .35);
+      --selection: hsl(192 80% 40% / .45);
+      --grid: hsl(202 30% 45% / .45);
+      --overlay: hsl(216 24% 10% / .86);
+      --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-display: "Iowan Old Style", "Baskerville", "Songti SC", "STSong", serif;
+      --font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, "Liberation Mono", monospace;
+      --radius: 4px;
+      --topbar: 64px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: hsl(204 30% 97%);
+        --bg-elev: hsl(0 0% 100%);
+        --panel: hsl(204 25% 95%);
+        --panel-strong: hsl(198 22% 91%);
+        --text: hsl(215 32% 16%);
+        --muted: hsl(211 14% 38%);
+        --faint: hsl(211 10% 48%);
+        --line: hsl(205 18% 82%);
+        --line-strong: hsl(205 17% 62%);
+        --accent: hsl(192 90% 32%);
+        --accent-soft: hsl(192 60% 85% / .58);
+        --sram: hsl(164 68% 28%);
+        --sram-soft: hsl(164 45% 86% / .72);
+        --hbm: hsl(34 88% 40%);
+        --hbm-soft: hsl(38 85% 87% / .76);
+        --data: hsl(205 80% 42%);
+        --control: hsl(275 48% 48%);
+        --run: hsl(40 85% 36%);
+        --run-soft: hsl(43 85% 87% / .66);
+        --danger: hsl(5 65% 45%);
+        --shadow: hsl(210 30% 30% / .16);
+        --selection: hsl(192 70% 70% / .62);
+        --grid: hsl(202 30% 45% / .38);
+        --overlay: hsl(204 30% 97% / .88);
+      }
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: hsl(204 30% 97%);
+      --bg-elev: hsl(0 0% 100%);
+      --panel: hsl(204 25% 95%);
+      --panel-strong: hsl(198 22% 91%);
+      --text: hsl(215 32% 16%);
+      --muted: hsl(211 14% 38%);
+      --faint: hsl(211 10% 48%);
+      --line: hsl(205 18% 82%);
+      --line-strong: hsl(205 17% 62%);
+      --accent: hsl(192 90% 32%);
+      --accent-soft: hsl(192 60% 85% / .58);
+      --sram: hsl(164 68% 28%);
+      --sram-soft: hsl(164 45% 86% / .72);
+      --hbm: hsl(34 88% 40%);
+      --hbm-soft: hsl(38 85% 87% / .76);
+      --data: hsl(205 80% 42%);
+      --control: hsl(275 48% 48%);
+      --run: hsl(40 85% 36%);
+      --run-soft: hsl(43 85% 87% / .66);
+      --danger: hsl(5 65% 45%);
+      --shadow: hsl(210 30% 30% / .16);
+      --selection: hsl(192 70% 70% / .62);
+      --grid: hsl(202 30% 45% / .38);
+      --overlay: hsl(204 30% 97% / .88);
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: hsl(216 24% 10%);
+      --bg-elev: hsl(216 22% 13%);
+      --panel: hsl(215 20% 15%);
+      --panel-strong: hsl(214 19% 18%);
+      --text: hsl(204 30% 92%);
+      --muted: hsl(207 12% 70%);
+      --faint: hsl(208 10% 53%);
+      --line: hsl(210 16% 29%);
+      --line-strong: hsl(205 18% 43%);
+      --accent: hsl(192 88% 62%);
+      --accent-soft: hsl(192 60% 20% / .38);
+      --sram: hsl(164 62% 55%);
+      --sram-soft: hsl(164 45% 20% / .36);
+      --hbm: hsl(36 88% 62%);
+      --hbm-soft: hsl(36 55% 20% / .38);
+      --data: hsl(202 85% 65%);
+      --control: hsl(275 65% 74%);
+      --run: hsl(43 86% 62%);
+      --run-soft: hsl(43 55% 20% / .30);
+      --danger: hsl(5 75% 68%);
+      --shadow: hsl(220 40% 3% / .35);
+      --selection: hsl(192 80% 40% / .45);
+      --grid: hsl(202 30% 45% / .45);
+      --overlay: hsl(216 24% 10% / .86);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--selection); }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; }
+    button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 100;
+      padding: 8px 12px;
+      background: var(--bg-elev);
+      color: var(--text);
+      transform: translateY(-160%);
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      min-height: var(--topbar);
+      border-bottom: 1px solid var(--line);
+      background: var(--overlay);
+      backdrop-filter: blur(16px);
+    }
+    .topbar-inner {
+      width: min(1480px, calc(100% - 40px));
+      min-height: var(--topbar);
+      margin-inline: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      min-width: 0;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .brand-mark {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      white-space: nowrap;
+    }
+    .brand-sub {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .top-actions { display: flex; align-items: center; gap: 14px; }
+    .exact-badge {
+      color: var(--sram);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+    }
+    .theme-toggle {
+      min-height: 38px;
+      padding: 7px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .theme-toggle:hover { border-color: var(--accent); }
+    .shell {
+      width: min(1480px, calc(100% - 40px));
+      margin-inline: auto;
+      display: grid;
+      grid-template-columns: 208px minmax(0, 1fr);
+      gap: clamp(28px, 4vw, 64px);
+    }
+    .toc { min-width: 0; }
+    .toc-inner { position: sticky; top: calc(var(--topbar) + 28px); padding-block: 32px; }
+    .toc-title {
+      margin: 0 0 14px;
+      color: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+    .toc a {
+      display: grid;
+      grid-template-columns: 25px 1fr;
+      gap: 8px;
+      padding: 7px 6px;
+      border-left: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+    .toc a span:first-child { color: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+    .toc a:hover, .toc a[aria-current="true"] { border-left-color: var(--accent); color: var(--text); }
+    .toc a[aria-current="true"] { background: var(--accent-soft); }
+    .toc-note {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      line-height: 1.7;
+    }
+    .content { min-width: 0; max-width: 1120px; padding-bottom: 80px; }
+    section { scroll-margin-top: calc(var(--topbar) + 24px); }
+    .report-section { padding-block: 62px; border-top: 1px solid var(--line); }
+    .section-heading { display: grid; gap: 12px; margin-bottom: 30px; }
+    .eyebrow {
+      color: var(--accent);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, h4, p { margin: 0; }
+    h2 {
+      max-width: 830px;
+      font-size: clamp(28px, 3.3vw, 44px);
+      line-height: 1.18;
+      letter-spacing: -.035em;
+      text-wrap: balance;
+    }
+    h3 { font-size: 20px; line-height: 1.35; letter-spacing: -.015em; text-wrap: balance; }
+    h4 { font-size: 15px; line-height: 1.45; }
+    p { max-width: 72ch; }
+    .section-deck { color: var(--muted); font-size: 17px; line-height: 1.8; }
+    .prose { display: grid; gap: 18px; }
+    .prose strong { color: var(--text); }
+    .muted { color: var(--muted); }
+    .mono, code, .formula { font-family: var(--font-mono); }
+    code {
+      padding: .12em .35em;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: .88em;
+      overflow-wrap: anywhere;
+    }
+    .formula {
+      display: block;
+      max-width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: var(--bg-elev);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.9;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .source-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      align-items: center;
+      color: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 25px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      color: var(--muted);
+      background: var(--panel);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .03em;
+    }
+    .hero { padding-block: clamp(44px, 7vw, 86px) 48px; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(330px, .88fr); gap: clamp(30px, 5vw, 64px); align-items: center; }
+    .hero-copy { display: grid; gap: 24px; }
+    .hero-kicker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .paper-title {
+      font-family: var(--font-display);
+      font-size: clamp(49px, 6.8vw, 88px);
+      font-weight: 600;
+      line-height: .98;
+      letter-spacing: -.055em;
+    }
+    .hero-thesis { max-width: 64ch; font-size: clamp(18px, 2vw, 23px); line-height: 1.65; }
+    .hero-thesis strong { color: var(--accent); font-weight: 650; }
+    .hero-sub { color: var(--muted); font-size: 14px; }
+    .meta-list { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: 12px; }
+    .meta-list a { white-space: nowrap; }
+    .hero-figure {
+      margin: 0;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-elev);
+      box-shadow: 0 24px 60px var(--shadow);
+    }
+    .hero-figure figcaption, .diagram-caption {
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+    .hero-visual { display: block; width: 100%; height: auto; }
+    .metric-strip {
+      margin-top: 38px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-block: 1px solid var(--line);
+    }
+    .metric { min-width: 0; padding: 20px 18px; display: grid; gap: 5px; }
+    .metric + .metric { border-left: 1px solid var(--line); }
+    .metric strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: clamp(23px, 2.8vw, 34px);
+      line-height: 1.15;
+      letter-spacing: -.05em;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .metric small { color: var(--faint); font-family: var(--font-mono); font-size: 9px; }
+    .run-example {
+      margin-top: 28px;
+      padding: 20px 22px;
+      border: 1px dashed var(--run);
+      border-radius: var(--radius);
+      background: var(--run-soft);
+      display: grid;
+      gap: 14px;
+    }
+    .run-title { color: var(--run); font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+    .run-example p, .run-example li { max-width: 78ch; font-size: 14px; }
+    .calc-list { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+    .calc-list li::marker { color: var(--run); font-family: var(--font-mono); }
+    .calc-line {
+      display: grid;
+      grid-template-columns: minmax(120px, .7fr) minmax(0, 1.3fr);
+      gap: 14px;
+      padding-block: 7px;
+      border-bottom: 1px dotted var(--line-strong);
+      font-size: 13px;
+    }
+    .calc-line:last-child { border-bottom: 0; }
+    .calc-line strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .example-note { color: var(--muted); font-size: 11px !important; }
+    .callout {
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      display: grid;
+      gap: 8px;
+    }
+    .callout-label { color: var(--accent); font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; }
+    .callout.engineer { border-style: dotted; }
+    .callout.engineer .callout-label { color: var(--control); }
+    .callout p { font-size: 14px; }
+    .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .stack { display: grid; gap: 20px; min-width: 0; }
+    .pipeline {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+    .pipeline-node {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid var(--hbm);
+      background: var(--hbm-soft);
+      display: grid;
+      gap: 8px;
+    }
+    .pipeline-node h3 { font-family: var(--font-mono); font-size: 16px; }
+    .pipeline-node p { color: var(--muted); font-size: 12px; }
+    .pipeline-arrow { align-self: center; color: var(--hbm); font-family: var(--font-mono); }
+    .fused-node {
+      margin-top: 14px;
+      padding: 18px 20px;
+      border: 1px solid var(--sram);
+      background: var(--sram-soft);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 24px;
+    }
+    .fused-node strong { font-family: var(--font-mono); color: var(--sram); }
+    .fused-node span { color: var(--muted); font-size: 13px; }
+    .hardware-table { margin-top: 22px; }
+    .table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    thead th { background: var(--panel-strong); color: var(--muted); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--accent-soft); }
+    .row-highlight { background: var(--sram-soft); }
+    .svg-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--bg-elev); }
+    .architecture-svg, .scenario-svg { display: block; width: 100%; min-width: 860px; height: auto; }
+    .svg-panel { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.2; }
+    .svg-hbm { fill: var(--hbm-soft); stroke: var(--hbm); stroke-width: 1.4; }
+    .svg-sram { fill: var(--sram-soft); stroke: var(--sram); stroke-width: 1.4; }
+    .svg-kernel { fill: var(--panel-strong); stroke: var(--data); stroke-width: 1.3; }
+    .svg-ghost { fill: var(--panel); stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 6 6; }
+    .svg-text { fill: var(--text); font-family: var(--font-body); font-size: 14px; }
+    .svg-small { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+    .svg-mono { fill: var(--text); font-family: var(--font-mono); font-size: 12px; }
+    .svg-hbm-text { fill: var(--hbm); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .svg-sram-text { fill: var(--sram); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .svg-control-text { fill: var(--control); font-family: var(--font-mono); font-size: 11px; }
+    .svg-faint { fill: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+    .edge-data, .edge-sram, .edge-control, .edge-ghost {
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+    }
+    .edge-data { stroke: var(--data); }
+    .edge-sram { stroke: var(--sram); }
+    .edge-control { stroke: var(--control); stroke-dasharray: 6 6; }
+    .edge-ghost { stroke: var(--faint); stroke-dasharray: 4 6; }
+    .grid-line { fill: none; stroke: var(--grid); stroke-width: 1; }
+    .grid-fill { fill: var(--accent-soft); }
+    .matrix-ghost { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.2; stroke-dasharray: 5 6; }
+    .matrix-live { fill: var(--sram-soft); stroke: var(--sram); stroke-width: 2; }
+    .matrix-cross { stroke: var(--danger); stroke-width: 2; stroke-linecap: round; }
+    .badge-circle { fill: var(--bg-elev); stroke: var(--accent); stroke-width: 1.5; }
+    .badge-text { fill: var(--text); font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .marker-data { fill: var(--data); }
+    .marker-sram { fill: var(--sram); }
+    .marker-control { fill: var(--control); }
+    .overlay-label { fill: var(--overlay); }
+    .stepper { border: 1px solid var(--line); background: var(--bg-elev); }
+    .step-tabs { display: grid; grid-template-columns: repeat(7, minmax(128px, 1fr)); overflow-x: auto; border-bottom: 1px solid var(--line); }
+    .step-tab {
+      min-height: 74px;
+      padding: 12px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      display: grid;
+      gap: 5px;
+      text-align: left;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .step-tab span { color: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+    .step-tab:hover { background: var(--accent-soft); color: var(--text); }
+    .step-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 -3px 0 var(--accent); }
+    .step-panel { padding: clamp(20px, 3vw, 34px); display: grid; gap: 24px; }
+    .step-panel[hidden], .scenario-panel[hidden] { display: none; }
+    .step-heading { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 18px; align-items: start; }
+    .step-heading p { margin-top: 8px; color: var(--muted); }
+    .step-index { color: var(--accent); font-family: var(--font-mono); font-size: 32px; line-height: 1; }
+    .step-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    .step-detail-grid > div { display: grid; gap: 8px; align-content: start; }
+    .step-detail-grid h4 { color: var(--accent); font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; }
+    .step-detail-grid p { color: var(--muted); font-size: 14px; }
+    .scenario-tabs, .chart-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .scenario-tab, .chart-tabs button {
+      min-height: 40px;
+      padding: 8px 13px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .scenario-tab:hover, .chart-tabs button:hover { border-color: var(--accent); color: var(--text); }
+    .scenario-tab[aria-pressed="true"], .chart-tabs button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+    #scenario-stage [data-s] { transition: opacity .22s ease; }
+    #scenario-stage[data-scenario="dense"] [data-s]:not([data-s~="dense"]),
+    #scenario-stage[data-scenario="long"] [data-s]:not([data-s~="long"]),
+    #scenario-stage[data-scenario="sparse"] [data-s]:not([data-s~="sparse"]) { opacity: .12; }
+    .scenario-badge { display: none; }
+    #scenario-stage[data-scenario="dense"] [data-badge="dense"],
+    #scenario-stage[data-scenario="long"] [data-badge="long"],
+    #scenario-stage[data-scenario="sparse"] [data-badge="sparse"] { display: inline; }
+    @keyframes trace { to { stroke-dashoffset: -32; } }
+    #scenario-stage[data-scenario="dense"] [data-s~="dense"].flow-edge,
+    #scenario-stage[data-scenario="long"] [data-s~="long"].flow-edge,
+    #scenario-stage[data-scenario="sparse"] [data-s~="sparse"].flow-edge { stroke-dasharray: 10 6; animation: trace 1.1s linear infinite; }
+    .scenario-panel { padding: 24px 0 4px; display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 30px; }
+    .scenario-summary { display: grid; gap: 12px; align-content: start; }
+    .scenario-summary p { color: var(--muted); font-size: 14px; }
+    .scenario-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .scenario-steps li { padding-bottom: 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .scenario-steps strong { color: var(--accent); font-family: var(--font-mono); margin-right: 8px; }
+    .decision-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .decision-card { border: 1px solid var(--line); background: var(--bg-elev); display: grid; grid-template-columns: minmax(0, 1fr); }
+    .decision-title { padding: 20px; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: start; background: var(--panel-strong); }
+    .decision-title > span { color: var(--accent); font-family: var(--font-mono); font-size: 12px; padding-top: 4px; }
+    .decision-title h3 { font-size: 18px; }
+    .decision-part { padding: 16px 20px; border-top: 1px solid var(--line); display: grid; gap: 7px; }
+    .decision-part h4 { color: var(--faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; }
+    .decision-part p { color: var(--muted); font-size: 13px; }
+    .decision-part.tradeoff { background: var(--hbm-soft); }
+    .decision-part.tradeoff h4 { color: var(--hbm); }
+    .evidence-block { padding: 24px; border: 1px solid var(--line); background: var(--bg-elev); display: grid; gap: 22px; min-width: 0; }
+    .evidence-heading { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(240px, .8fr); gap: 20px; align-items: end; }
+    .evidence-heading > div { display: grid; gap: 10px; }
+    .evidence-heading > p { color: var(--muted); font-size: 12px; }
+    .mechanism-bars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+    .bar-metric { display: grid; gap: 10px; }
+    .bar-metric-title { min-height: 50px; display: grid; gap: 2px; }
+    .bar-metric-title strong { font-family: var(--font-mono); font-size: 12px; }
+    .bar-metric-title span { color: var(--faint); font-size: 10px; }
+    .bar-row { display: grid; grid-template-columns: 64px minmax(50px, 1fr) 46px; gap: 8px; align-items: center; font-size: 10px; }
+    .bar-row > span { color: var(--muted); }
+    .bar-row > strong { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .bar-track { height: 12px; background: var(--panel-strong); overflow: hidden; }
+    .bar-fill { width: var(--w); height: 100%; }
+    .bar-standard { background: var(--hbm); }
+    .bar-flash { background: var(--accent); }
+    .wide-table { min-width: 760px; }
+    .runtime-chart { border: 1px solid var(--line); padding: 18px; display: grid; gap: 18px; }
+    .runtime-chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; }
+    .runtime-chart-head h4 { font-family: var(--font-mono); font-size: 12px; }
+    .runtime-chart-head span { color: var(--faint); font-size: 10px; }
+    #runtime-bars { display: grid; gap: 12px; }
+    .runtime-row { display: grid; grid-template-columns: 150px minmax(100px, 1fr) 72px; gap: 12px; align-items: center; }
+    .runtime-label { color: var(--muted); font-size: 12px; }
+    .runtime-track { height: 20px; background: var(--panel-strong); }
+    .runtime-track.is-empty { display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 10px; }
+    .runtime-fill { width: var(--w); min-width: 2px; height: 100%; }
+    .runtime-standard { background: var(--hbm); }
+    .runtime-flash { background: var(--accent); }
+    .runtime-linformer { background: var(--control); }
+    .runtime-sparse { background: var(--sram); }
+    .runtime-value { text-align: right; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+    .chart-legend span { --legend: var(--line-strong); display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+    .chart-legend span::before { content: ""; width: 9px; height: 9px; background: var(--legend); }
+    .chart-legend .legend-standard { --legend: var(--hbm); }
+    .chart-legend .legend-flash { --legend: var(--accent); }
+    .chart-legend .legend-linformer { --legend: var(--control); }
+    .chart-legend .legend-sparse { --legend: var(--sram); }
+    .critique-group { display: grid; gap: 14px; }
+    .critique-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .critique-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .critique-card { padding: 20px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 10px; align-content: start; }
+    .critique-card h3 { font-size: 17px; }
+    .critique-card p { color: var(--muted); font-size: 13px; }
+    .engineer-card { border-style: dotted; }
+    .engineer-card h3 { color: var(--control); }
+    .steal-list { padding: 24px; border: 1px solid var(--sram); background: var(--sram-soft); display: grid; gap: 20px; }
+    .steal-list > div { display: grid; gap: 12px; }
+    .steal-list ol { margin: 0; padding-left: 24px; display: grid; gap: 12px; }
+    .steal-list li { padding-left: 5px; color: var(--muted); font-size: 14px; }
+    .steal-list li::marker { color: var(--sram); font-family: var(--font-mono); }
+    .steal-list strong { color: var(--text); }
+    .report-footer { padding: 50px 0 20px; border-top: 1px solid var(--line); display: grid; gap: 22px; }
+    .report-footer > div:first-child { display: grid; gap: 14px; }
+    .report-footer h2 { font-size: clamp(25px, 3vw, 36px); }
+    .report-footer > p { color: var(--muted); }
+    .report-footer > p strong { color: var(--text); }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 13px; }
+    #selftest-result { padding: 12px; background: var(--panel); color: var(--text); font-family: var(--font-mono); font-size: 11px; }
+    @media (max-width: 1000px) {
+      .decision-grid, .mechanism-bars, .critique-grid.three { grid-template-columns: minmax(0, 1fr); }
+      .mechanism-bars { gap: 18px; }
+      .bar-metric-title { min-height: 0; }
+    }
+    @media (max-width: 900px) {
+      .scenario-panel, .evidence-heading { grid-template-columns: minmax(0, 1fr); }
+      .critique-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 620px) {
+      .step-detail-grid { grid-template-columns: minmax(0, 1fr); }
+      .step-heading { grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+      .step-index { font-size: 25px; }
+      .scenario-tabs, .chart-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
+      .scenario-tab, .chart-tabs button { flex: 0 0 auto; }
+      .evidence-block { padding: 17px; }
+      .runtime-row { grid-template-columns: 100px minmax(70px, 1fr) 58px; gap: 8px; }
+      .runtime-label { font-size: 10px; overflow-wrap: anywhere; }
+      .runtime-value { font-size: 10px; }
+      .decision-title, .decision-part, .critique-card, .steal-list { padding: 17px; }
+    }
+    @media (max-width: 1160px) {
+      .shell { grid-template-columns: minmax(0, 1fr); width: min(1120px, calc(100% - 36px)); }
+      .toc-inner { position: sticky; top: var(--topbar); z-index: 30; padding: 10px 0; background: var(--overlay); backdrop-filter: blur(14px); }
+      .toc-title, .toc-note { display: none; }
+      .toc ol { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+      .toc li { flex: 0 0 auto; }
+      .toc a { display: flex; gap: 6px; padding: 7px 10px; border: 1px solid var(--line); white-space: nowrap; }
+      .toc a[aria-current="true"] { border-color: var(--accent); }
+      .content { max-width: none; }
+    }
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: minmax(0, 1fr); }
+      .hero-figure { max-width: 620px; }
+      .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
+      .metric:nth-child(4) { border-top: 1px solid var(--line); }
+      .two-col { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 620px) {
+      :root { --topbar: 56px; }
+      .topbar-inner, .shell { width: calc(100% - 24px); }
+      .brand-sub, .exact-badge { display: none; }
+      .theme-toggle { padding-inline: 9px; }
+      .report-section { padding-block: 44px; }
+      .hero { padding-top: 34px; }
+      .paper-title { font-size: clamp(43px, 14vw, 64px); overflow-wrap: anywhere; }
+      .hero-thesis { font-size: 17px; }
+      .metric { padding: 16px 12px; }
+      .metric strong { font-size: 24px; }
+      .pipeline { grid-template-columns: minmax(0, 1fr); }
+      .pipeline-arrow { transform: rotate(90deg); justify-self: center; }
+      .calc-line { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+      .run-example { padding: 17px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+    @media print {
+      .topbar, .toc, .theme-toggle, .step-tabs, .scenario-tabs, .chart-tabs { display: none !important; }
+      :root, :root[data-theme="dark"], :root[data-theme="light"] {
+        --bg: hsl(0 0% 100%); --bg-elev: hsl(0 0% 100%); --panel: hsl(0 0% 97%); --panel-strong: hsl(0 0% 94%);
+        --text: hsl(0 0% 8%); --muted: hsl(0 0% 28%); --line: hsl(0 0% 78%); --overlay: hsl(0 0% 100%);
+      }
+      body { background: var(--bg); color: var(--text); font-size: 11pt; }
+      .shell { display: block; width: 100%; }
+      .content { max-width: none; }
+      .report-section { break-before: page; }
+      .run-example, .callout, .decision-card, figure { break-inside: avoid; }
+      .svg-scroll, .table-wrap { overflow: visible; }
+      .architecture-svg, .scenario-svg { min-width: 0; }
+      .step-panel[hidden], .scenario-panel[hidden] { display: block !important; }
+      a { color: var(--text); }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#hero" aria-label="返回报告开头">
+        <span class="brand-mark">FA / 2205.14135</span>
+        <span class="brand-sub">Paper deep-dive · 工程师版</span>
+      </a>
+      <div class="top-actions">
+        <span class="exact-badge">EXACT ≠ APPROXIMATE</span>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换颜色主题">主题：深色</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="toc" aria-label="报告目录">
+      <div class="toc-inner">
+        <p class="toc-title">Reading trace</p>
+        <ol id="toc-list">
+          <li><a href="#hero" aria-current="true"><span>00</span><span>核心论点</span></a></li>
+          <li><a href="#problem"><span>01</span><span>问题定义</span></a></li>
+          <li><a href="#architecture"><span>02</span><span>架构总览</span></a></li>
+          <li><a href="#flow"><span>03</span><span>核心流程</span></a></li>
+          <li><a href="#workloads"><span>04</span><span>典型负载</span></a></li>
+          <li><a href="#decisions"><span>05</span><span>设计决策</span></a></li>
+          <li><a href="#experiments"><span>06</span><span>实验数据</span></a></li>
+          <li><a href="#critical"><span>07</span><span>批判性阅读</span></a></li>
+        </ol>
+        <p class="toc-note">SOLID = DATA PLANE<br>DASHED = CONTROL / GHOST<br>GOLD = WORKED EXAMPLE</p>
+      </div>
+    </aside>
+
+    <main class="content" id="main">
+      <section class="hero" id="hero" aria-labelledby="hero-title">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <div class="hero-kicker">
+              <span class="source-chip">NEURIPS 2022</span>
+              <span class="source-chip">ALGORITHM + SYSTEMS</span>
+            </div>
+            <h1 class="paper-title" id="hero-title">FlashAttention</h1>
+            <p class="hero-thesis"><strong>不改变注意力的数学定义，改变数据在 GPU 里的旅程。</strong>用片上分块、在线 softmax 与反向重算，避免把 N×N 注意力矩阵搬进搬出 HBM，以更少 IO 换来真实墙钟加速和 O(N) 额外显存。</p>
+            <p class="hero-sub">Fast and Memory-Efficient Exact Attention with IO-Awareness</p>
+            <div class="meta-list">
+              <span>Tri Dao · Daniel Y. Fu · Stefano Ermon · Atri Rudra · Christopher Ré</span>
+              <a href="https://arxiv.org/abs/2205.14135">arXiv:2205.14135</a>
+              <a href="https://github.com/HazyResearch/flash-attention">论文所附代码</a>
+              <span>论文日期：2022-06-24</span>
+            </div>
+          </div>
+          <figure class="hero-figure">
+            <svg class="hero-visual" viewBox="0 0 520 390" role="img" aria-labelledby="hero-svg-title hero-svg-desc">
+              <title id="hero-svg-title">N×N 注意力矩阵不再写入 HBM</title>
+              <desc id="hero-svg-desc">一个大型虚线注意力矩阵被标记为不落 HBM，一个小分块进入片上 SRAM，完成计算后只写回线性大小的输出与统计量。</desc>
+              <defs>
+                <pattern id="hero-grid" width="28" height="28" patternUnits="userSpaceOnUse">
+                  <path class="grid-line" d="M 28 0 L 0 0 0 28"></path>
+                </pattern>
+                <marker id="hero-arrow-data" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-data" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+                <marker id="hero-arrow-sram" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-sram" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+              </defs>
+              <text class="svg-hbm-text" x="34" y="38">HBM / SLOW, LARGE</text>
+              <rect class="matrix-ghost" x="34" y="58" width="280" height="280"></rect>
+              <rect x="34" y="58" width="280" height="280" fill="url(#hero-grid)"></rect>
+              <path class="matrix-cross" d="M54 78 L294 318 M294 78 L54 318"></path>
+              <rect class="overlay-label" x="69" y="166" width="210" height="64"></rect>
+              <text class="svg-text" x="174" y="192" text-anchor="middle">S, P ∈ R^(N×N)</text>
+              <text class="svg-hbm-text" x="174" y="215" text-anchor="middle">NOT MATERIALIZED</text>
+              <text class="svg-sram-text" x="358" y="38">SRAM / FAST, SMALL</text>
+              <rect class="matrix-live" x="362" y="64" width="112" height="112"></rect>
+              <path class="grid-line" d="M390 64 V176 M418 64 V176 M446 64 V176 M362 92 H474 M362 120 H474 M362 148 H474"></path>
+              <text class="svg-mono" x="418" y="200" text-anchor="middle">Bᵣ × B𝚌 tile</text>
+              <path class="edge-data" d="M314 124 C340 124 338 124 358 124" marker-end="url(#hero-arrow-data)"></path>
+              <path class="edge-sram" d="M418 182 V244" marker-end="url(#hero-arrow-sram)"></path>
+              <rect class="svg-kernel" x="338" y="252" width="160" height="72"></rect>
+              <text class="svg-mono" x="418" y="280" text-anchor="middle">softmax tile × V</text>
+              <text class="svg-small" x="418" y="302" text-anchor="middle">rescale + accumulate</text>
+              <path class="edge-data" d="M338 302 C310 302 322 362 278 362" marker-end="url(#hero-arrow-data)"></path>
+              <text class="svg-mono" x="34" y="368">O(N×d), ℓ(N), m(N)</text>
+            </svg>
+            <figcaption>核心不是“把 N×N 算得更近似”，而是“让 N×N 根本不必成为 HBM 中的对象”。依据论文 Figure 1 重绘／示意。</figcaption>
+          </figure>
+        </div>
+        <div class="metric-strip" aria-label="论文关键结果">
+          <div class="metric"><strong>7.6×</strong><span>GPT-2 注意力计算最高加速</span><small>FIGURE 1 · VS PYTORCH</small></div>
+          <div class="metric"><strong>40.3→4.4 GB</strong><span>HBM 读写，约 9.2× 减少</span><small>FIGURE 2 · 比值为本文演算</small></div>
+          <div class="metric"><strong>20×</strong><span>相对精确注意力基线的最高显存效率</span><small>§4.3 · UP TO</small></div>
+          <div class="metric"><strong>64K</strong><span>基准中扩展到的序列长度</span><small>TABLE 9–21 · A100 40GB</small></div>
+        </div>
+      </section>
+
+      <section class="report-section" id="problem" aria-labelledby="problem-title">
+        <div class="section-heading">
+          <span class="eyebrow">01 / Bottleneck, not just FLOPs</span>
+          <h2 id="problem-title">真正昂贵的，是把中间矩阵当成“必须落盘”的对象</h2>
+          <p class="section-deck">标准注意力的计算量已经是 O(N²d)，但论文抓住的是另一层：softmax、mask、dropout 等操作常受内存访问限制，多次 HBM 往返会让理论 FLOPs 的优势无法变成墙钟时间。</p>
+          <div class="source-line"><span class="source-chip">论文 §2 · Algorithm 0</span><span>目标：精确计算 softmax(QKᵀ)V，同时减少 HBM reads / writes</span></div>
+        </div>
+        <div class="stack">
+          <div class="two-col">
+            <div class="callout">
+              <span class="callout-label">论文问题定义</span>
+              <p>给定 Q、K、V ∈ R^(N×d)，输出 O = softmax(QKᵀ)V。常见情形 N ≫ d；标准实现把 S 与 P 两个 N×N 矩阵写入 HBM，额外显存为 O(N²)。</p>
+            </div>
+            <div class="callout engineer">
+              <span class="callout-label">工程师视角 · 分水岭</span>
+              <p>Reformer、Performer、Linformer 等主要改数学结构以压 FLOPs；FlashAttention 保留精确语义，改数据布局与执行方式。评价指标从“渐近复杂度”扩到“实际字节流量 + 内核边界”。</p>
+            </div>
+          </div>
+          <div>
+            <div class="pipeline" aria-label="标准注意力的三次 HBM 往返">
+              <div class="pipeline-node"><h3>① S = QKᵀ</h3><p>从 HBM 读 Q、K；把 N×N 的 S 写回 HBM。</p></div>
+              <span class="pipeline-arrow" aria-hidden="true">→</span>
+              <div class="pipeline-node"><h3>② P = softmax(S)</h3><p>再从 HBM 读 S；把 N×N 的 P 写回 HBM。</p></div>
+              <span class="pipeline-arrow" aria-hidden="true">→</span>
+              <div class="pipeline-node"><h3>③ O = PV</h3><p>从 HBM 读 P、V；写回 N×d 的 O。训练还要保存中间量。</p></div>
+            </div>
+            <div class="fused-node"><strong>FLASHATTENTION / ONE FUSED KERNEL</strong><span>QKᵀ → mask → online softmax → dropout → ×V 都在片上完成；S、P 不写入 HBM。</span></div>
+          </div>
+          <div class="hardware-table table-wrap">
+            <table aria-label="论文给出的 A100 存储层级示例">
+              <thead><tr><th>资源</th><th>论文中的 A100 示例</th><th>优化含义</th></tr></thead>
+              <tbody>
+                <tr><td>片上 SRAM</td><td>每个 SM 192 KB；108 个 SM；估计约 19 TB/s</td><td>快但小：让当前 tile 驻留并复用</td></tr>
+                <tr><td>HBM</td><td>40–80 GB；1.5–2.0 TB/s</td><td>大但相对慢：减少读写次数与字节量</td></tr>
+                <tr><td>执行边界</td><td>kernel：HBM → registers / SRAM → compute → HBM</td><td>融合减少中间值的跨内核往返</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="muted">算术强度（每次内存访问对应多少算术操作）决定更可能受计算还是内存限制。FlashAttention 并没有让 O(N²d) 消失；它先消除内存受限部分，最终仍会在大 tile 或长序列下遇到计算瓶颈。</p>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 一个 N×N 矩阵到底有多大</div>
+          <div class="calc-line"><span>示例输入</span><strong>N = 4,096；FP16 = 2 bytes；单个 attention head</strong></div>
+          <div class="calc-line"><span>一个 S 矩阵</span><strong>4,096² × 2 B = 33,554,432 B = 32 MiB</strong></div>
+          <div class="calc-line"><span>S 与 P 同时物化</span><strong>2 × 32 MiB = 64 MiB / head</strong></div>
+          <div class="calc-line"><span>还没计入</span><strong>batch、heads、梯度、mask、dropout 与重复读写流量</strong></div>
+          <p class="example-note">“示例值／演算”：N 与 FP16 用于演示，单个矩阵大小由论文的 N×N 形状推导；不是论文直接报告的显存总量。论文实测显存见 §4.3 与 Table 21。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="architecture" aria-labelledby="architecture-title">
+        <div class="section-heading">
+          <span class="eyebrow">02 / High-level design</span>
+          <h2 id="architecture-title">HBM 只保存“源与摘要”，SRAM 完成 N×N 的短暂生命</h2>
+          <p class="section-deck">外循环让 K、V 分块依次驻留片上；内循环扫过 Q 与输出状态。注意力分数块 S<sub>ij</sub> 和概率块 P<sub>ij</sub> 只在 SRAM 中存在，HBM 中留下 O、逐行最大值 m、指数和 ℓ，以及 dropout 的 RNG 状态。</p>
+          <div class="source-line"><span class="source-chip">依据 Figure 1 · Algorithm 1 / 2 / 4 重绘</span><span>实线：数据面　虚线：控制面或不物化的对象</span></div>
+        </div>
+        <figure>
+          <div class="svg-scroll">
+            <svg class="architecture-svg" viewBox="0 0 1100 650" role="img" aria-labelledby="hld-title hld-desc">
+              <title id="hld-title">FlashAttention 高层架构</title>
+              <desc id="hld-desc">左侧 HBM 存放 Q、K、V、O 和统计量，右侧 SRAM 内有 K/V tile、Q/state tile、score tile 与在线更新单元。实线箭头表示数据移动，虚线表示循环控制。底部说明反向重算。</desc>
+              <defs>
+                <marker id="hld-arrow-data" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-data" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+                <marker id="hld-arrow-sram" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-sram" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+                <marker id="hld-arrow-control" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-control" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+              </defs>
+              <rect class="svg-hbm" x="28" y="80" width="260" height="450" rx="3"></rect>
+              <text class="svg-hbm-text" x="48" y="111">HBM / GLOBAL MEMORY</text>
+              <text class="svg-small" x="48" y="132">优化目标：减少往返与驻留对象</text>
+              <rect class="svg-panel" x="52" y="157" width="212" height="54" rx="2"></rect>
+              <text class="svg-mono" x="68" y="181">Qᵢ  /  N × d</text>
+              <text class="svg-small" x="68" y="200">内循环反复读取</text>
+              <rect class="svg-panel" x="52" y="227" width="212" height="54" rx="2"></rect>
+              <text class="svg-mono" x="68" y="251">Kⱼ, Vⱼ  /  N × d</text>
+              <text class="svg-small" x="68" y="270">外循环各读取一次</text>
+              <rect class="svg-ghost" x="52" y="303" width="212" height="76" rx="2"></rect>
+              <path class="matrix-cross" d="M64 315 L128 367 M128 315 L64 367"></path>
+              <text class="svg-small" x="142" y="331">S, P / N × N</text>
+              <text class="svg-hbm-text" x="142" y="354">不在此物化</text>
+              <rect class="svg-panel" x="52" y="400" width="212" height="103" rx="2"></rect>
+              <text class="svg-mono" x="68" y="426">Oᵢ / N × d</text>
+              <text class="svg-mono" x="68" y="452">ℓᵢ, mᵢ / N</text>
+              <text class="svg-small" x="68" y="479">输出 + softmax 摘要 + R</text>
+
+              <rect class="svg-sram" x="400" y="48" width="662" height="482" rx="3"></rect>
+              <text class="svg-sram-text" x="422" y="79">ON-CHIP SRAM / ONE FUSED CUDA KERNEL</text>
+              <text class="svg-small" x="422" y="100">优化目标：tile 可放入、数据复用、避免中间量离片</text>
+              <rect class="svg-kernel" x="432" y="128" width="182" height="78" rx="2"></rect>
+              <text class="svg-mono" x="450" y="157">Kⱼ, Vⱼ tile</text>
+              <text class="svg-small" x="450" y="181">B𝚌 × d / outer loop</text>
+              <rect class="svg-kernel" x="432" y="286" width="182" height="96" rx="2"></rect>
+              <text class="svg-mono" x="450" y="315">Qᵢ + Oᵢ</text>
+              <text class="svg-mono" x="450" y="339">ℓᵢ + mᵢ</text>
+              <text class="svg-small" x="450" y="363">inner loop state</text>
+              <rect class="svg-kernel" x="726" y="137" width="278" height="122" rx="2"></rect>
+              <text class="svg-mono" x="746" y="168">Sᵢⱼ = τ Qᵢ Kⱼᵀ</text>
+              <text class="svg-small" x="746" y="193">mask / dropout on chip</text>
+              <text class="svg-small" x="746" y="218">Bᵣ × B𝚌 / temporary</text>
+              <path class="grid-line" d="M955 146 V248 M971 146 V248 M987 146 V248"></path>
+              <rect class="svg-kernel" x="726" y="324" width="278" height="130" rx="2"></rect>
+              <text class="svg-mono" x="746" y="354">mⁿᵉʷ = max(m, m̃)</text>
+              <text class="svg-mono" x="746" y="381">ℓⁿᵉʷ = e^(m−mⁿᵉʷ)ℓ + …</text>
+              <text class="svg-mono" x="746" y="408">Oᵢ ← rescale + P̃ᵢⱼVⱼ</text>
+              <text class="svg-small" x="746" y="435">在线归一化，而非事后拼 softmax</text>
+
+              <path class="edge-data" d="M264 184 C350 184 346 334 426 334" marker-end="url(#hld-arrow-data)"></path>
+              <path class="edge-data" d="M264 254 C346 254 350 167 426 167" marker-end="url(#hld-arrow-data)"></path>
+              <path class="edge-sram" d="M614 167 C666 167 674 181 720 181" marker-end="url(#hld-arrow-sram)"></path>
+              <path class="edge-sram" d="M614 330 C672 330 670 232 720 220" marker-end="url(#hld-arrow-sram)"></path>
+              <path class="edge-sram" d="M865 259 V318" marker-end="url(#hld-arrow-sram)"></path>
+              <path class="edge-data" d="M726 414 C532 414 442 470 270 464" marker-end="url(#hld-arrow-data)"></path>
+              <path class="edge-control" d="M430 128 C410 128 410 206 430 206" marker-end="url(#hld-arrow-control)"></path>
+              <text class="svg-control-text" x="422" y="121">j：K/V 外循环</text>
+              <path class="edge-control" d="M504 392 C502 470 680 504 812 462" marker-end="url(#hld-arrow-control)"></path>
+              <text class="svg-control-text" x="532" y="493">i：扫过 Q / O / ℓ / m</text>
+
+              <rect class="svg-panel" x="28" y="560" width="1034" height="62" rx="2"></rect>
+              <text class="svg-control-text" x="48" y="585">BACKWARD / RECOMPUTE</text>
+              <text class="svg-small" x="246" y="585">载入 Q, K, V, O, dO, ℓ, m, R → 片上重建 S、P 与 dropout mask → dQ, dK, dV</text>
+              <text class="svg-small" x="246" y="606">保存足够统计量，而不是保存 N×N 中间矩阵；Dᵢ = rowsum(dOᵢ ∘ Oᵢ)</text>
+            </svg>
+          </div>
+          <figcaption class="diagram-caption">组件边界即优化边界：HBM 管理持久输入／输出，SRAM 管理短生命周期中间量。R 是伪随机数发生器状态，用于反向复现 dropout；控制面只决定块遍历，数据面负责实线搬运。依据论文 Figure 1、Algorithm 2 与 Algorithm 4 重绘／示意。</figcaption>
+        </figure>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 块大小如何决定扫描次数</div>
+          <div class="calc-line"><span>示例值</span><strong>N = 128，d = 64；把 SRAM 预算 M 简化为 4,096 个元素</strong></div>
+          <div class="calc-line"><span>Algorithm 1</span><strong>B𝚌 = ⌈M / 4d⌉ = 16；Bᵣ = min(⌈M / 4d⌉, d) = 16</strong></div>
+          <div class="calc-line"><span>块网格</span><strong>T𝚌 = N / B𝚌 = 8；Tᵣ = N / Bᵣ = 8</strong></div>
+          <div class="calc-line"><span>数据移动</span><strong>K/V 每块装入一次；Q/O 状态随 8 个 K/V 外循环被扫 8 遍</strong></div>
+          <p class="example-note">这是为看清循环而缩小的“示例值／演算”，未换算具体 dtype、字节对齐与真实 kernel 占用。论文实际讨论的典型 M 约为 100 KB、d 为 64–128；复杂度推导给出 T𝚌 = Θ(Nd/M)。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="flow" aria-labelledby="flow-title">
+        <div class="section-heading">
+          <span class="eyebrow">03 / Execution trace</span>
+          <h2 id="flow-title">沿着一个 tile，走完前向与反向</h2>
+          <p class="section-deck">点击步骤，或用左右方向键切换。关键是第 5、6 步：新块可能带来更大的行最大值，因此旧的 ℓ 与 O 必须乘上指数缩放因子，再与新块累加。</p>
+          <div class="source-line"><span class="source-chip">Algorithm 1 / 2 / 4</span><span>数学目标始终等价于 row-wise softmax(QKᵀ)V</span></div>
+        </div>
+        <div class="stepper" id="flow-stepper">
+          <div class="step-tabs" role="tablist" aria-label="FlashAttention 执行步骤">
+            <button class="step-tab" id="step-tab-1" role="tab" aria-selected="true" aria-controls="step-panel-1" tabindex="0" data-step="0" type="button"><span>01</span>分块与初始化</button>
+            <button class="step-tab" id="step-tab-2" role="tab" aria-selected="false" aria-controls="step-panel-2" tabindex="-1" data-step="1" type="button"><span>02</span>装入 K/V</button>
+            <button class="step-tab" id="step-tab-3" role="tab" aria-selected="false" aria-controls="step-panel-3" tabindex="-1" data-step="2" type="button"><span>03</span>装入 Q/状态</button>
+            <button class="step-tab" id="step-tab-4" role="tab" aria-selected="false" aria-controls="step-panel-4" tabindex="-1" data-step="3" type="button"><span>04</span>片上 score</button>
+            <button class="step-tab" id="step-tab-5" role="tab" aria-selected="false" aria-controls="step-panel-5" tabindex="-1" data-step="4" type="button"><span>05</span>在线 softmax</button>
+            <button class="step-tab" id="step-tab-6" role="tab" aria-selected="false" aria-controls="step-panel-6" tabindex="-1" data-step="5" type="button"><span>06</span>重缩放输出</button>
+            <button class="step-tab" id="step-tab-7" role="tab" aria-selected="false" aria-controls="step-panel-7" tabindex="-1" data-step="6" type="button"><span>07</span>保存与反向</button>
+          </div>
+          <div class="step-panels">
+            <article class="step-panel" id="step-panel-1" role="tabpanel" aria-labelledby="step-tab-1" data-panel="0">
+              <div class="step-heading"><span class="step-index">01</span><div><h3>把大矩阵问题改写成块网格</h3><p>按 SRAM 容量选择 Bᵣ、B𝚌；Q 与 O 分成 Tᵣ 个行块，K 与 V 分成 T𝚌 个列块。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>O 初始化为 0，ℓ 初始化为 0，m 初始化为 −∞。它们都在 HBM 中，大小分别是 N×d、N、N。</p></div><div><h4>工程要点</h4><p>块大小不是单纯越大越好：必须同时容纳 K/V、Q/O 和 S tile；论文用 B𝚌 = ⌈M/4d⌉、Bᵣ = min(⌈M/4d⌉, d) 表达容量约束。</p></div></div>
+              <span class="formula">Tᵣ = ⌈N / Bᵣ⌉　　T𝚌 = ⌈N / B𝚌⌉</span>
+              <span class="source-chip">Algorithm 1 · lines 1–4</span>
+            </article>
+            <article class="step-panel" id="step-panel-2" role="tabpanel" aria-labelledby="step-tab-2" data-panel="1" hidden>
+              <div class="step-heading"><span class="step-index">02</span><div><h3>外循环：让一个 Kⱼ、Vⱼ 块驻留片上</h3><p>对每个 j，把 Kⱼ 与 Vⱼ 从 HBM 装入 SRAM。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>这一块 K/V 会与所有 Q 行块交互。K/V 的每个元素在外循环中只需载入一次，是 IO 复杂度下降的一半原因。</p></div><div><h4>工程要点</h4><p>外循环顺序让 K/V 获得复用；代价是 Q、O 与统计量要被多次扫描。M 越大，T𝚌 越小，扫描次数越少。</p></div></div>
+              <span class="formula">for j = 1 … T𝚌:　load Kⱼ, Vⱼ : HBM → SRAM</span>
+              <span class="source-chip">Algorithm 1 · lines 5–6 · Theorem 2 proof</span>
+            </article>
+            <article class="step-panel" id="step-panel-3" role="tabpanel" aria-labelledby="step-tab-3" data-panel="2" hidden>
+              <div class="step-heading"><span class="step-index">03</span><div><h3>内循环：流式扫过 Qᵢ 与输出状态</h3><p>固定 Kⱼ、Vⱼ，依次装入 Qᵢ、Oᵢ、ℓᵢ、mᵢ。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>每个 (i,j) 组合对应注意力矩阵中的一个 Bᵣ×B𝚌 tile；此前的 Oᵢ、ℓᵢ、mᵢ 总结了已经处理过的列块。</p></div><div><h4>工程要点</h4><p>不是为每个列块保存一份临时输出，而是维护一份可增量合并的输出状态。这也是与 Rabe &amp; Staats 方法的重要区别。</p></div></div>
+              <span class="formula">for i = 1 … Tᵣ:　load Qᵢ, Oᵢ, ℓᵢ, mᵢ : HBM → SRAM</span>
+              <span class="source-chip">Algorithm 1 · lines 7–8 · Appendix B.5</span>
+            </article>
+            <article class="step-panel" id="step-panel-4" role="tabpanel" aria-labelledby="step-tab-4" data-panel="3" hidden>
+              <div class="step-heading"><span class="step-index">04</span><div><h3>只在片上生成 Sᵢⱼ</h3><p>计算缩放后的 QᵢKⱼᵀ，并在同一 fused kernel 中应用 mask。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>Sᵢⱼ 的形状只有 Bᵣ×B𝚌。它不需要覆盖整行，更不需要写入 HBM；dropout 也在片上执行。</p></div><div><h4>工程要点</h4><p>“没有 N×N 中间矩阵”指没有离片物化，而不是从不计算任何注意力分数。稠密版本仍计算所有必要的 score tile，FLOPs 仍为 O(N²d)。</p></div></div>
+              <span class="formula">Sᵢⱼ = τ Qᵢ Kⱼᵀ　　Sᵐᵃˢᵏᵉᵈᵢⱼ = mask(Sᵢⱼ)</span>
+              <span class="source-chip">Algorithm 2 · lines 10–11</span>
+            </article>
+            <article class="step-panel" id="step-panel-5" role="tabpanel" aria-labelledby="step-tab-5" data-panel="4" hidden>
+              <div class="step-heading"><span class="step-index">05</span><div><h3>用 (m, ℓ) 合并 softmax 的“充分统计量”</h3><p>先取当前 tile 的行最大值 m̃ 与指数和 ℓ̃，再和旧状态合并。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>m 保证数值稳定，ℓ 保存相对当前 m 的指数和。若新块最大值更大，旧指数和乘 e^(m−mⁿᵉʷ)，新块乘 e^(m̃−mⁿᵉʷ)。</p></div><div><h4>工程要点</h4><p>这是代数聚合，不是近似。合并后的 m、ℓ 与一次性对整行做稳定 softmax 所维护的统计量相同。</p></div></div>
+              <span class="formula">mⁿᵉʷ = max(m, m̃)　　ℓⁿᵉʷ = e^(m−mⁿᵉʷ)ℓ + e^(m̃−mⁿᵉʷ)ℓ̃</span>
+              <span class="source-chip">§3.1 · Algorithm 1 · lines 10–11</span>
+            </article>
+            <article class="step-panel" id="step-panel-6" role="tabpanel" aria-labelledby="step-tab-6" data-panel="5" hidden>
+              <div class="step-heading"><span class="step-index">06</span><div><h3>同步重缩放旧输出，再累加当前 PV</h3><p>仅更新 ℓ 还不够；旧 O 的归一化基准也必须跟着 m、ℓ 改变。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>旧输出先乘 e^(m−mⁿᵉʷ)，当前未归一化概率块乘 e^(m̃−mⁿᵉʷ) 后与 Vⱼ 相乘，最后统一除以 ℓⁿᵉʷ。</p></div><div><h4>工程要点</h4><p>每处理一个列块就得到“截至目前所有列”的精确部分注意力输出。处理完最后一个列块，O 就是最终输出，无需第二次全量归一化。</p></div></div>
+              <span class="formula">Oᵢ ← (ℓⁿᵉʷ)⁻¹ [ ℓ e^(m−mⁿᵉʷ) Oᵢ + e^(m̃−mⁿᵉʷ) P̃ᵢⱼ Vⱼ ]</span>
+              <span class="source-chip">Algorithm 1 · line 12 · Theorem 1 correctness proof</span>
+            </article>
+            <article class="step-panel" id="step-panel-7" role="tabpanel" aria-labelledby="step-tab-7" data-panel="6" hidden>
+              <div class="step-heading"><span class="step-index">07</span><div><h3>前向只留摘要；反向按块重建</h3><p>保存 O、ℓ、m 与 RNG 状态 R。反向载入这些量和 Q/K/V/dO，重新计算 S、P 与 dropout mask。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>Pᵢⱼ = diag(ℓᵢ)⁻¹ exp(Sᵐᵃˢᵏᵉᵈᵢⱼ − mᵢ)；由 R 复现 dropout。Dᵢ 可直接写成 rowsum(dOᵢ∘Oᵢ)，避免对长度为 N 的 P、dP 做归约。</p></div><div><h4>工程要点</h4><p>重算增加 FLOPs，却省掉保存和读取 N×N 中间量的 IO。dK、dV 在片上累积后写出，dQ 按内循环增量更新。</p></div></div>
+              <span class="formula">Dᵢ = rowsum(dOᵢ ∘ Oᵢ)　　dSᵢⱼ = Pᵢⱼ ∘ (dPᵢⱼ − Dᵢ)</span>
+              <span class="source-chip">Appendix B.2 / B.4 · Algorithm 4</span>
+            </article>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 两个 score 块如何合并成同一个 softmax</div>
+          <div class="calc-line"><span>示例输入</span><strong>x⁽¹⁾ = [1, 2]；x⁽²⁾ = [3, 0]</strong></div>
+          <div class="calc-line"><span>第一块</span><strong>m = 2；ℓ = e^(1−2) + e^(2−2) = 1.367879</strong></div>
+          <div class="calc-line"><span>第二块局部量</span><strong>m̃ = 3；ℓ̃ = e^(3−3) + e^(0−3) = 1.049787</strong></div>
+          <div class="calc-line"><span>合并</span><strong>mⁿᵉʷ = 3；ℓⁿᵉʷ = e^(2−3)×1.367879 + 1.049787 = 1.553002</strong></div>
+          <div class="calc-line"><span>最终概率</span><strong>[0.087144, 0.236883, 0.643914, 0.032059]，和为 1</strong></div>
+          <p class="example-note">“示例值／演算”：分数由本报告假设，用于验证 §3.1 的合并公式。它与对 [1,2,3,0] 一次性做稳定 softmax 完全一致；数值四舍五入到 6 位小数。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="workloads" aria-labelledby="workloads-title">
+        <div class="section-heading">
+          <span class="eyebrow">04 / Workload dataflow</span>
+          <h2 id="workloads-title">同一套机制，在三种负载里走不同的路</h2>
+          <p class="section-deck">稠密精确与长序列版本遍历所有必要 tile；块稀疏版本由掩码跳过零块。切换场景，观察同一张图上的通路、编号和实验语义。</p>
+          <div class="source-line"><span class="source-chip">依据 Figure 1 · Algorithm 2 / 5 重绘</span><span>路径高亮可关闭动画：遵循系统 reduced-motion 设置</span></div>
+        </div>
+        <div class="scenario-tabs" role="group" aria-label="选择负载场景">
+          <button class="scenario-tab" type="button" data-scenario-choice="dense" aria-pressed="true">稠密精确 · GPT-2 1K</button>
+          <button class="scenario-tab" type="button" data-scenario-choice="long" aria-pressed="false">长序列精确 · Path-X 16K</button>
+          <button class="scenario-tab" type="button" data-scenario-choice="sparse" aria-pressed="false">块稀疏 · Path-256 64K</button>
+        </div>
+        <div id="scenario-stage" data-scenario="dense">
+          <div class="svg-scroll">
+            <svg class="scenario-svg" viewBox="0 0 1080 520" role="img" aria-labelledby="scenario-svg-title scenario-svg-desc">
+              <title id="scenario-svg-title">三种负载的 FlashAttention 数据流</title>
+              <desc id="scenario-svg-desc">可切换稠密精确、长序列精确和块稀疏场景。公共通路从 HBM 的 Q/K/V 进入 SRAM 分块计算并写回输出；稠密和长序列包含反向重算，块稀疏包含掩码控制跳块。</desc>
+              <defs>
+                <marker id="scenario-arrow-data" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-data" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+                <marker id="scenario-arrow-sram" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-sram" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+                <marker id="scenario-arrow-control" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-control" d="M 0 0 L 10 5 L 0 10 z"></path></marker>
+              </defs>
+              <g data-s="dense long sparse">
+                <rect class="svg-hbm" x="40" y="132" width="210" height="120" rx="3"></rect>
+                <text class="svg-hbm-text" x="60" y="162">HBM</text>
+                <text class="svg-mono" x="60" y="194">Q, K, V / N × d</text>
+                <text class="svg-small" x="60" y="222">persistent inputs</text>
+              </g>
+              <g data-s="dense long sparse">
+                <rect class="svg-hbm" x="40" y="346" width="210" height="112" rx="3"></rect>
+                <text class="svg-hbm-text" x="60" y="376">HBM</text>
+                <text class="svg-mono" x="60" y="407">O, ℓ, m, R</text>
+                <text class="svg-small" x="60" y="434">linear-size state</text>
+              </g>
+              <g data-s="dense long sparse">
+                <rect class="svg-sram" x="390" y="96" width="246" height="178" rx="3"></rect>
+                <text class="svg-sram-text" x="412" y="126">SRAM TILE</text>
+                <text class="svg-mono" x="412" y="158">Qᵢ, Kⱼ, Vⱼ</text>
+                <text class="svg-mono" x="412" y="187">Sᵢⱼ = τQᵢKⱼᵀ</text>
+                <text class="svg-small" x="412" y="218">mask + dropout on chip</text>
+                <text class="svg-small" x="412" y="245">no N×N HBM write</text>
+              </g>
+              <g data-s="dense long sparse">
+                <rect class="svg-kernel" x="746" y="96" width="278" height="178" rx="3"></rect>
+                <text class="svg-mono" x="770" y="134">ONLINE UPDATE</text>
+                <text class="svg-mono" x="770" y="169">m, ℓ ← merge</text>
+                <text class="svg-mono" x="770" y="200">Oᵢ ← rescale + P̃V</text>
+                <text class="svg-small" x="770" y="237">exact partial output</text>
+              </g>
+              <g data-s="dense long">
+                <rect class="svg-panel" x="390" y="346" width="246" height="112" rx="3"></rect>
+                <text class="svg-control-text" x="412" y="379">BACKWARD</text>
+                <text class="svg-mono" x="412" y="410">recompute S, P, Z</text>
+                <text class="svg-small" x="412" y="437">more FLOPs / less HBM IO</text>
+              </g>
+              <g data-s="sparse">
+                <rect class="svg-panel" x="728" y="318" width="296" height="140" rx="3"></rect>
+                <text class="svg-control-text" x="752" y="349">BLOCK MASK / CONTROL</text>
+                <text class="svg-mono" x="752" y="383">if Mᵢⱼ = 0: skip</text>
+                <text class="svg-mono" x="752" y="413">IO quadratic term × s</text>
+                <text class="svg-small" x="752" y="440">approximate attention</text>
+              </g>
+              <g data-s="sparse">
+                <rect class="svg-ghost" x="390" y="346" width="246" height="112" rx="3"></rect>
+                <text class="svg-faint" x="412" y="385">ZERO TILE</text>
+                <text class="svg-mono" x="412" y="417">no load / no score</text>
+              </g>
+
+              <path class="edge-data flow-edge" data-s="dense long sparse" d="M250 174 C320 174 330 174 384 174" marker-end="url(#scenario-arrow-data)"></path>
+              <path class="edge-sram flow-edge" data-s="dense long sparse" d="M636 174 H740" marker-end="url(#scenario-arrow-sram)"></path>
+              <path class="edge-data flow-edge" data-s="dense long sparse" d="M746 252 C530 310 340 402 256 402" marker-end="url(#scenario-arrow-data)"></path>
+              <path class="edge-control" data-s="dense long" d="M250 434 C314 434 330 414 384 414" marker-end="url(#scenario-arrow-control)"></path>
+              <path class="edge-control" data-s="dense long" d="M512 346 C512 312 512 300 512 280" marker-end="url(#scenario-arrow-control)"></path>
+              <path class="edge-control flow-edge" data-s="long" d="M408 82 C560 18 852 20 982 82" marker-end="url(#scenario-arrow-control)"></path>
+              <text class="svg-control-text" data-s="long" x="634" y="30">更多外循环；N² 中间量仍不落 HBM</text>
+              <path class="edge-control" data-s="sparse" d="M850 318 C760 280 690 234 642 210" marker-end="url(#scenario-arrow-control)"></path>
+              <path class="edge-ghost" data-s="sparse" d="M512 340 V280" marker-end="url(#scenario-arrow-control)"></path>
+
+              <g class="scenario-badge" data-badge="dense" transform="translate(326 152)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">1</text></g>
+              <g class="scenario-badge" data-badge="dense" transform="translate(684 152)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">2</text></g>
+              <g class="scenario-badge" data-badge="dense" transform="translate(874 292)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">3</text></g>
+              <g class="scenario-badge" data-badge="dense" transform="translate(324 424)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">4</text></g>
+              <g class="scenario-badge" data-badge="long" transform="translate(326 152)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">1</text></g>
+              <g class="scenario-badge" data-badge="long" transform="translate(684 60)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">2</text></g>
+              <g class="scenario-badge" data-badge="long" transform="translate(874 292)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">3</text></g>
+              <g class="scenario-badge" data-badge="long" transform="translate(324 424)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">4</text></g>
+              <g class="scenario-badge" data-badge="sparse" transform="translate(874 294)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">1</text></g>
+              <g class="scenario-badge" data-badge="sparse" transform="translate(512 312)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">2</text></g>
+              <g class="scenario-badge" data-badge="sparse" transform="translate(684 152)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">3</text></g>
+              <g class="scenario-badge" data-badge="sparse" transform="translate(992 413)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">4</text></g>
+            </svg>
+          </div>
+          <div class="scenario-panels">
+            <article class="scenario-panel" data-scenario-panel="dense">
+              <div class="scenario-summary"><span class="source-chip">DENSE / EXACT</span><h3>稠密训练：所有 score tile 都算，但都不离片</h3><p>代表负载为 GPT-2、序列长度 1K。路径保留完整 softmax(QKᵀ)V；反向通过重算换取线性额外显存。</p></div>
+              <ol class="scenario-steps"><li><strong>①</strong> K/V 外循环装入，Q 与状态内循环扫描。</li><li><strong>②</strong> 在片上完成 QKᵀ、mask、softmax、dropout 与 ×V。</li><li><strong>③</strong> 增量写回 O、ℓ、m；不生成 HBM 中的 S/P。</li><li><strong>④</strong> 反向利用 O、ℓ、m、R 重建中间块并求梯度。</li></ol>
+            </article>
+            <article class="scenario-panel" data-scenario-panel="long" hidden>
+              <div class="scenario-summary"><span class="source-chip">LONG / EXACT</span><h3>Path-X：16K 上下文，把“能不能跑”变成“能训练”</h3><p>更多 token 带来更多列块与扫描，但显存中的额外状态仍随 N 线性增长。论文在 Path-X（16K）上报告 61.4% accuracy，首次让 Transformer 超过随机表现。</p></div>
+              <ol class="scenario-steps"><li><strong>①</strong> Q/K/V 仍以 N×d 存在，输入输出规模线性。</li><li><strong>②</strong> 外循环次数增加；N×N score 仍只以 tile 短暂存在。</li><li><strong>③</strong> 同一在线更新逻辑输出精确结果，无近似结构替换。</li><li><strong>④</strong> 训练反向继续重算；长序列最终会更受计算量约束。</li></ol>
+            </article>
+            <article class="scenario-panel" data-scenario-panel="sparse" hidden>
+              <div class="scenario-summary"><span class="source-chip">BLOCK-SPARSE / APPROXIMATE</span><h3>Path-256：把零块变成真正的“不加载、不计算”</h3><p>预定义块掩码 Mᵢⱼ 为 0 时跳过整个 tile；非零块比例为 s。论文在 64K 的 Path-256 上报告 63.1% accuracy，下游实验使用固定 butterfly 稀疏模式。</p></div>
+              <ol class="scenario-steps"><li><strong>①</strong> 块掩码在控制面决定哪些 (i,j) 组合需要执行。</li><li><strong>②</strong> 零块不装载 Q/state，也不计算 score。</li><li><strong>③</strong> 非零块沿用同一 SRAM 数据面与在线更新。</li><li><strong>④</strong> HBM 复杂度的二次项乘 s；这是近似注意力，不再等价于稠密全注意力。</li></ol>
+            </article>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 块稀疏怎样作用于二次项</div>
+          <div class="calc-line"><span>示例输入</span><strong>N = 4,096；假设非零块比例 s = 25%</strong></div>
+          <div class="calc-line"><span>稠密 score 网格</span><strong>N² = 16,777,216 个标量位置</strong></div>
+          <div class="calc-line"><span>块稀疏需计算</span><strong>sN² = 4,194,304；跳过 (1−s)N² = 12,582,912</strong></div>
+          <div class="calc-line"><span>IO 复杂度</span><strong>Θ(Nd + N²d²M⁻¹s)：二次项缩为 1/4，线性输出项仍保留</strong></div>
+          <p class="example-note">“示例值／演算”：s=25% 为本报告假设，公式来自 Proposition 4。它不等于承诺 4× 墙钟加速，也不意味着结果仍等价于稠密注意力；实际收益还受线性项、kernel 与稀疏模式影响。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="decisions" aria-labelledby="decisions-title">
+        <div class="section-heading">
+          <span class="eyebrow">05 / Design decisions</span>
+          <h2 id="decisions-title">六个选择，构成论文真正的工程价值</h2>
+          <p class="section-deck">每张卡都按“问题 → 被否决方案 → 选择理由 → 代价”展开。这里没有免费的加速：收益来自把成本从慢速内存移动，转移到更便宜的片上计算与状态维护。</p>
+        </div>
+        <div class="decision-grid">
+          <article class="decision-card">
+            <div class="decision-title"><span>D1</span><h3>优化 IO，而不是继续只压 FLOPs</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>长序列注意力慢，究竟要改数学近似，还是改硬件执行？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>Reformer 的稀疏／哈希、Performer 的低秩近似、Linformer 的序列压缩：复杂度可近线性，但不一定带来墙钟加速，且改变模型语义。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>现代 GPU 上，注意力的多个阶段受内存访问限制。保留精确注意力，同时把 HBM 流量降为 Θ(N²d²/M)，可直接服务现有模型。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>稠密 FLOPs 仍是 O(N²d)。序列足够长或 tile 足够大时，计算重新成为瓶颈；近似方法仍可能更快。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D2</span><h3>分块 + 在线 softmax，而非整行归一化</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>softmax 需要整行最大值与指数和，如何在看不到整行时保持精确？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>标准 PyTorch／Megatron 路径物化 S、P；仅把多个 elementwise 操作做朴素融合，训练时仍要保存大中间量。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>Milakov &amp; Gimels 的 online normalizer 与 tiling 提供了代数分解：维护 (m,ℓ)，每个块都可精确合并，数值稳定性也保留。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>每块都要维护并重缩放状态，内核逻辑比三次矩阵流水线复杂；块容量还受 SRAM 与 head dimension 制约。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D3</span><h3>增量更新一份 O，而非保存所有临时输出</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>处理完每个列块后，部分结果如何跨块传递？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>Rabe &amp; Staats 为每个块保留临时输出与统计量，最后再合并；K 个块意味着 K 份临时输出。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>每处理一个块就按新 (m,ℓ) 重缩放并更新 O，只需一份输出。论文指出这比保留 K 份临时输出进一步降低总显存。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>O、ℓ、m 在内循环中反复读写 HBM；其流量通过较大的 K/V 块与较少的 T𝚌 扫描来控制。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D4</span><h3>反向重算 S/P，而非从 HBM 读回</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>训练反向需要 S、P，前向不保存它们，梯度怎么算？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>标准 attention 与 Apex FMHA 保存并读取注意力矩阵；通用 gradient checkpointing 往往以速度换显存。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>QKᵀ 来自低秩输入，score tile 重算很便宜；保存 O、ℓ、m、R 就足以重建 P 和 dropout。解析化反向还用 Dᵢ = rowsum(dOᵢ∘Oᵢ) 避免长行归约。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>FLOPs 增加。短序列上未必划算：Table 7 中 N=128 时前向+反向比 Apex FMHA 约慢 4%。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D5</span><h3>自定义 fused CUDA，而非停留在高层算子</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>怎样确保理论上的 tile 生命周期真的不会变成隐藏 HBM 读写？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>纯 PyTorch／TensorFlow 算子组合缺少细粒度内存控制；Apex FMHA 虽融合前向，却仍把 softmax 矩阵存入 HBM 供反向使用。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>把 matmul、mask、softmax、dropout、第二个 matmul 放进一个 CUDA kernel，才能让片上中间量与 IO 复杂度分析对应到真实执行。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>每种新 attention 变体都要写低层内核，工程成本高，且未必能跨 GPU 架构直接迁移。论文把高层编译到 IO-aware CUDA 列为未来方向。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D6</span><h3>块级稀疏跳过整个 tile，而非只谈稀疏率</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>能否把 IO-aware 原语用于近似注意力，让稀疏真正变成墙钟收益？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>单纯元素级稀疏难以对齐当前数据块；Linformer、Performer 等则走另一条低秩／核近似路线，不能直接复用稠密 tile 机制。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>块掩码为 0 时，整个 (i,j) tile 不加载也不计算。IO 二次项直接乘非零块比例 s；实验使用可表达多种结构的固定 butterfly 稀疏。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>它不再等价于稠密全注意力；需要预定义块模式。线性 Nd 项仍在，稀疏率也不能直接兑换成等比例墙钟加速。</p></div>
+          </article>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 为什么“多算”反而“更快”</div>
+          <div class="calc-line"><span>论文配置</span><strong>GPT-2 medium；N=1,024，d=64，16 heads，batch=64；A100；前向+反向</strong></div>
+          <div class="calc-line"><span>计算量</span><strong>66.6 → 75.2 GFLOPs：增加 12.9%</strong></div>
+          <div class="calc-line"><span>HBM 读写</span><strong>40.3 → 4.4 GB：减少 89.1%，约 9.2×</strong></div>
+          <div class="calc-line"><span>运行时</span><strong>41.7 → 7.3 ms：约 5.7× 加速</strong></div>
+          <p class="example-note">原始数值来自 Figure 2 左表；百分比与倍率为本报告据表演算。它展示的是这组配置下的机制收益，不应与 Figure 1 的 7.6× 或端到端训练加速混为一谈。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="experiments" aria-labelledby="experiments-title">
+        <div class="section-heading">
+          <span class="eyebrow">06 / Evidence, with boundaries</span>
+          <h2 id="experiments-title">数据支持核心论点，也明确画出失效边界</h2>
+          <p class="section-deck">先看“多 FLOPs、少 IO、低延迟”的直接证据，再看不同 N 下的运行时。不要把 up to、端到端、微基准和块稀疏结果混成同一个加速数字。</p>
+          <div class="source-line"><span class="source-chip">Figure 2 / 3 · Table 1–6 / 11 / 21</span><span>所有未直接印出的倍率均标为演算</span></div>
+        </div>
+        <div class="stack">
+          <div class="evidence-block">
+            <div class="evidence-heading"><div><span class="source-chip">机制证据 · FIGURE 2 左</span><h3>同一次前向 + 反向：三项指标必须一起读</h3></div><p>GPT-2 medium，N=1,024，d=64，16 heads，batch=64，A100。</p></div>
+            <div class="mechanism-bars">
+              <div class="bar-metric">
+                <div class="bar-metric-title"><strong>GFLOPs</strong><span>越低越好，但重算会增加</span></div>
+                <div class="bar-row"><span>Standard</span><div class="bar-track"><div class="bar-fill bar-standard" style="--w:88.56%"></div></div><strong>66.6</strong></div>
+                <div class="bar-row"><span>Flash</span><div class="bar-track"><div class="bar-fill bar-flash" style="--w:100%"></div></div><strong>75.2</strong></div>
+              </div>
+              <div class="bar-metric">
+                <div class="bar-metric-title"><strong>HBM R/W · GB</strong><span>核心优化目标</span></div>
+                <div class="bar-row"><span>Standard</span><div class="bar-track"><div class="bar-fill bar-standard" style="--w:100%"></div></div><strong>40.3</strong></div>
+                <div class="bar-row"><span>Flash</span><div class="bar-track"><div class="bar-fill bar-flash" style="--w:10.92%"></div></div><strong>4.4</strong></div>
+              </div>
+              <div class="bar-metric">
+                <div class="bar-metric-title"><strong>Runtime · ms</strong><span>最终墙钟结果</span></div>
+                <div class="bar-row"><span>Standard</span><div class="bar-track"><div class="bar-fill bar-standard" style="--w:100%"></div></div><strong>41.7</strong></div>
+                <div class="bar-row"><span>Flash</span><div class="bar-track"><div class="bar-fill bar-flash" style="--w:17.51%"></div></div><strong>7.3</strong></div>
+              </div>
+            </div>
+            <p class="example-note">每组条形只在同一指标内归一化；不能把 GFLOPs、GB 与 ms 的条长跨组比较。</p>
+          </div>
+
+          <div class="evidence-block">
+            <div class="evidence-heading"><div><span class="source-chip">按 N 探索 · TABLE 11</span><h3>运行时交叉点：精确稠密并非处处最快</h3></div><p>前向 + 反向；dropout + padding mask；A100 40GB，batch=16，8 heads，d=64；100 次测量均值。</p></div>
+            <div class="chart-tabs" role="group" aria-label="选择序列长度">
+              <button type="button" data-n-choice="512" aria-pressed="true">N = 512</button>
+              <button type="button" data-n-choice="1024" aria-pressed="false">N = 1,024</button>
+              <button type="button" data-n-choice="4096" aria-pressed="false">N = 4,096</button>
+              <button type="button" data-n-choice="16384" aria-pressed="false">N = 16K</button>
+              <button type="button" data-n-choice="65536" aria-pressed="false">N = 64K</button>
+            </div>
+            <div class="runtime-chart" aria-live="polite">
+              <div class="runtime-chart-head"><h4 id="runtime-chart-title">N = 512 · runtime ms · 越低越好</h4><span>每个 N 独立线性归一化</span></div>
+              <div id="runtime-bars"></div>
+              <div class="chart-legend"><span class="legend-standard">PyTorch</span><span class="legend-flash">FlashAttention</span><span class="legend-linformer">Linformer</span><span class="legend-sparse">Block-Sparse Flash</span></div>
+            </div>
+            <div class="table-wrap">
+              <table class="wide-table" aria-label="Table 11 选定序列长度的运行时数据">
+                <thead><tr><th>N</th><th>PyTorch</th><th>FlashAttention</th><th>Linformer</th><th>Block-Sparse Flash</th></tr></thead>
+                <tbody>
+                  <tr><td>512</td><td>2.35</td><td class="row-highlight">0.95</td><td>1.55</td><td>0.45</td></tr>
+                  <tr><td>1,024</td><td>8.29</td><td>2.55</td><td class="row-highlight">1.60</td><td>0.89</td></tr>
+                  <tr><td>4,096</td><td>124.19</td><td>37.49</td><td>8.04</td><td>4.12</td></tr>
+                  <tr><td>16,384</td><td>—</td><td>586.61</td><td>30.92</td><td>16.60</td></tr>
+                  <tr><td>65,536</td><td>—</td><td>9,341.30</td><td>—</td><td>64.11</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="example-note">单位均为 ms。“—”表示该表此配置未给出结果，不在本报告中统一推断为 OOM。近似／稀疏基线的设置、掩码支持与精度例外见 Appendix E.6；跨方法比较应连同这些限制阅读。</p>
+          </div>
+
+          <div class="evidence-block">
+            <div class="evidence-heading"><div><span class="source-chip">端到端与质量 · TABLE 1–6</span><h3>同样的数学定义，让加速可以直接换成更长上下文</h3></div><p>质量收益来自“能训练更长上下文”，不是因为精确 FlashAttention 改变了注意力函数。</p></div>
+            <div class="table-wrap">
+              <table class="wide-table" aria-label="端到端训练和长序列质量结果">
+                <thead><tr><th>负载</th><th>基线</th><th>FlashAttention 结果</th><th>应读出的结论</th></tr></thead>
+                <tbody>
+                  <tr><td>BERT-large · MLPerf 1.1</td><td>NVIDIA：20.0 ± 1.5 min</td><td>17.4 ± 1.4 min</td><td>相同 72.0% MLM 目标；8×A100，10 次均值，约 15%</td></tr>
+                  <tr><td>GPT-2 small · 1K</td><td>HuggingFace：9.5 days</td><td>2.7 days；ppl 18.2 = 基线</td><td>端到端约 3.5×；Megatron 为 4.7 days</td></tr>
+                  <tr><td>GPT-2 small · 4K</td><td>Megatron 1K：4.7 days / ppl 18.2</td><td>3.6 days / ppl 17.5</td><td>4× 上下文仍更快，perplexity 低 0.7</td></tr>
+                  <tr><td>Long-Range Arena</td><td>Transformer avg 59.3</td><td>Dense avg 59.8 / 2.4×；块稀疏 avg 59.6 / 2.8×</td><td>精度大体相当；速度为五任务几何均值</td></tr>
+                  <tr><td>长文档分类</td><td>512 tokens</td><td>MIMIC 16K：+4.3 micro-F1；ECtHR 8K：+8.5</td><td>摘要中的平均 6.4 points；作者提示分布偏移可能性</td></tr>
+                  <tr><td>Path-X / Path-256</td><td>此前 Transformer：OOM 或随机表现</td><td>16K：61.4%；64K 块稀疏：63.1%</td><td>更长上下文带来新能力；两条结果使用不同版本</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 在 Table 11 里找“交叉点”</div>
+          <div class="calc-line"><span>N = 512</span><strong>Flash 0.95 ms &lt; Linformer 1.55 ms &lt; PyTorch 2.35 ms</strong></div>
+          <div class="calc-line"><span>N = 1,024</span><strong>Linformer 1.60 ms &lt; Flash 2.55 ms &lt; PyTorch 8.29 ms</strong></div>
+          <div class="calc-line"><span>同一行的另一倍率</span><strong>PyTorch / Flash = 8.29 / 2.55 ≈ 3.25×（本文演算）</strong></div>
+          <div class="calc-line"><span>正确结论</span><strong>Flash 显著加速精确注意力；但近似方法可在约 512–1K 后开始更快</strong></div>
+          <p class="example-note">数据来自 Table 11 的 dropout + masking、前向+反向配置。交叉点是该实验设置下的观察，不是所有硬件、head 数和实现下的固定常数。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="critical" aria-labelledby="critical-title">
+        <div class="section-heading">
+          <span class="eyebrow">07 / Critical reading</span>
+          <h2 id="critical-title">真正的限制不在“是否精确”，而在“精确还要付出多少计算与工程成本”</h2>
+          <p class="section-deck">论文自己承认 CUDA 工程、跨架构迁移和多 GPU IO 尚未解决。进一步读实验，还能看到短序列、head dimension、SRAM 容量与近似交叉点构成的实际适用边界。</p>
+        </div>
+        <div class="stack">
+          <div class="critique-group">
+            <span class="source-chip">论文自认 · §5</span>
+            <div class="critique-grid three">
+              <article class="critique-card"><h3>内核生产仍是瓶颈</h3><p>每种新 attention 都需要新的 CUDA 实现；作者希望未来能从 PyTorch 等高层表达编译到 IO-aware 内核。</p></article>
+              <article class="critique-card"><h3>跨 GPU 不保证可迁移</h3><p>实现可能依赖具体架构。A100、RTX 3090、T4 的 SRAM 与带宽不同，实测加速区间也不同。</p></article>
+              <article class="critique-card"><h3>理论最优限于单 GPU 语境</h3><p>多 GPU 引入另一层互联 IO。论文把跨卡注意力与相应的 IO 分析列为未来工作。</p></article>
+            </div>
+          </div>
+          <div class="critique-group">
+            <span class="source-chip">工程师视角 · 进一步质疑</span>
+            <div class="critique-grid">
+              <article class="critique-card engineer-card"><h3>“精确”不等于“总能赢”</h3><p>Table 11 里 Linformer 在 N=1,024 已快于稠密 Flash；N=64K 时稠密 Flash 仍呈二次增长。它消除的是不必要 IO，不是全部二次计算。</p></article>
+              <article class="critique-card engineer-card"><h3>“更少 HBM”不等于“任何形状都快”</h3><p>d=128 时块必须缩小，论文报告整体加速下降；T4 的 SRAM 更小，也对应更低收益。部署前必须按 d、N、mask、dropout 与硬件重测。</p></article>
+              <article class="critique-card engineer-card"><h3>短序列的反向重算可能倒贴</h3><p>Apex FMHA 在 N≤512 的对比中，Flash 前向略快、反向略慢；N=128 总时延还高约 4%。如果显存不是瓶颈，保存 P 可以是合理选择。</p></article>
+              <article class="critique-card engineer-card"><h3>下界陈述要保留原命题的限定</h3><p>Proposition 3 说的是：不存在能在整个 M 范围上渐近优于 N²d²/M 的精确算法；作者仍把针对 M 的更精细参数化下界留作未来工作。不要简化成“每个 M 都已证明最优”。</p></article>
+              <article class="critique-card engineer-card"><h3>长上下文质量不是免费副产品</h3><p>Path-X 还经历 Path-64 预训练、位置嵌入插值与额外微调；附录明确说追加微调约贡献 4 个 accuracy points。长序列是必要条件之一，不是完整训练配方。</p></article>
+              <article class="critique-card engineer-card"><h3>“精确”是数学语义，不是逐 bit 承诺</h3><p>分块改变归约顺序，浮点结果不应被理解为与每个基线逐位一致。论文用相同训练／验证曲线与 perplexity 来验证数值行为，而非声称 bitwise equality。</p></article>
+            </div>
+          </div>
+          <div class="steal-list">
+            <div><span class="source-chip">可以直接偷的思想</span><h3>即使你不实现 attention，也能复用这五条</h3></div>
+            <ol>
+              <li><strong>先画像字节，再画像 FLOPs。</strong>把 HBM 读写、内核边界和中间量生命周期放进性能模型。</li>
+              <li><strong>寻找可代数合并的充分统计量。</strong>softmax 的 (m,ℓ) 让全局归约变成可流式合并，而不必近似。</li>
+              <li><strong>保存“重建所需的最小状态”。</strong>O、ℓ、m、R 比 N×N 中间量便宜；随机 mask 可保存 RNG 状态而非所有随机数。</li>
+              <li><strong>优先重算低成本、可再生的中间量。</strong>当生成器是低秩 QKᵀ 时，重算可能比存储与读取更便宜。</li>
+              <li><strong>把稀疏做成硬件能跳过的单位。</strong>稀疏率只有映射到整个 tile 的加载与计算消除，才更容易兑现为墙钟收益。</li>
+            </ol>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 短序列到底该不该重算</div>
+          <div class="calc-line"><span>N = 128 · Apex FMHA</span><strong>forward 0.10 + backward 0.17 = 0.27 ms</strong></div>
+          <div class="calc-line"><span>N = 128 · FlashAttention</span><strong>forward 0.08 + backward 0.20 = 0.28 ms</strong></div>
+          <div class="calc-line"><span>N = 512 · 两者对比</span><strong>Apex 1.14 + 1.81 = 2.95 ms；Flash 0.81 + 2.00 = 2.81 ms</strong></div>
+          <div class="calc-line"><span>工程判断</span><strong>N=128：总时延约慢 4%；N=512：总时延约快 5%，但反向仍较慢</strong></div>
+          <p class="example-note">数据来自 Table 7：A100-SXM4-40GB，batch=64，16 heads，d=64，masking + dropout。它说明“保存还是重算”应按序列长度与显存压力选择，而不是把单一机制绝对化。</p>
+        </aside>
+      </section>
+
+      <footer class="report-footer">
+        <div><span class="source-chip">SOURCE &amp; METHOD</span><h2>读到这里，应该记住的一句话</h2></div>
+        <p>FlashAttention 的贡献不是一种新的注意力近似，而是一套把精确注意力映射到存储层级的方法：<strong>让大中间量只在片上短暂存在，用可合并状态维持正确性，用重算把显存与 IO 换成更便宜的计算。</strong></p>
+        <p class="muted">本报告仅依据用户提供的 arXiv:2205.14135 论文（2022-06-24 版本）编写，页码与表号均指该 PDF；未混入后续 FlashAttention-2 / 3 的设计或结果。所有自行假设的输入均标为“示例值”，所有由论文数据计算的倍率均标为“演算”。重绘图均在图注注明依据。</p>
+        <div class="footer-links"><a href="https://arxiv.org/abs/2205.14135">论文页面</a><a href="https://github.com/HazyResearch/flash-attention">论文所附开源仓库</a><a href="#hero">回到顶部</a></div>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+      var root = document.documentElement;
+      var params = new URLSearchParams(window.location.search);
+      var themeButton = document.getElementById('theme-toggle');
+      var scheme = window.matchMedia('(prefers-color-scheme: light)');
+
+      function storedTheme() {
+        try { return window.localStorage.getItem('fa-deep-dive-theme'); } catch (error) { return null; }
+      }
+      function applyTheme(theme, persist) {
+        var value = theme === 'light' ? 'light' : 'dark';
+        root.setAttribute('data-theme', value);
+        themeButton.textContent = value === 'light' ? '主题：浅色' : '主题：深色';
+        themeButton.setAttribute('aria-label', value === 'light' ? '切换为深色主题' : '切换为浅色主题');
+        if (persist) {
+          try { window.localStorage.setItem('fa-deep-dive-theme', value); } catch (error) {}
+        }
+      }
+      applyTheme(root.getAttribute('data-theme'), false);
+      themeButton.addEventListener('click', function () {
+        applyTheme(root.getAttribute('data-theme') === 'light' ? 'dark' : 'light', true);
+      });
+      if (typeof scheme.addEventListener === 'function') {
+        scheme.addEventListener('change', function (event) {
+          if (!storedTheme()) applyTheme(event.matches ? 'light' : 'dark', false);
+        });
+      }
+
+      var stepTabs = Array.prototype.slice.call(document.querySelectorAll('.step-tab'));
+      var stepPanels = Array.prototype.slice.call(document.querySelectorAll('.step-panel'));
+      function selectStep(index, moveFocus) {
+        var next = Math.max(0, Math.min(stepTabs.length - 1, index));
+        stepTabs.forEach(function (tab, i) {
+          var active = i === next;
+          tab.setAttribute('aria-selected', active ? 'true' : 'false');
+          tab.tabIndex = active ? 0 : -1;
+        });
+        stepPanels.forEach(function (panel, i) { panel.hidden = i !== next; });
+        document.getElementById('flow-stepper').setAttribute('data-active-step', String(next + 1));
+        if (moveFocus) stepTabs[next].focus();
+      }
+      stepTabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () { selectStep(index, false); });
+        tab.addEventListener('keydown', function (event) {
+          var current = stepTabs.indexOf(document.activeElement);
+          var next = null;
+          if (event.key === 'ArrowRight') next = (current + 1) % stepTabs.length;
+          if (event.key === 'ArrowLeft') next = (current - 1 + stepTabs.length) % stepTabs.length;
+          if (event.key === 'Home') next = 0;
+          if (event.key === 'End') next = stepTabs.length - 1;
+          if (next !== null) { event.preventDefault(); selectStep(next, true); }
+        });
+      });
+
+      var scenarioStage = document.getElementById('scenario-stage');
+      var scenarioButtons = Array.prototype.slice.call(document.querySelectorAll('[data-scenario-choice]'));
+      var scenarioPanels = Array.prototype.slice.call(document.querySelectorAll('[data-scenario-panel]'));
+      function selectScenario(name) {
+        var valid = ['dense', 'long', 'sparse'].indexOf(name) >= 0 ? name : 'dense';
+        scenarioStage.setAttribute('data-scenario', valid);
+        scenarioButtons.forEach(function (button) {
+          button.setAttribute('aria-pressed', button.getAttribute('data-scenario-choice') === valid ? 'true' : 'false');
+        });
+        scenarioPanels.forEach(function (panel) { panel.hidden = panel.getAttribute('data-scenario-panel') !== valid; });
+      }
+      scenarioButtons.forEach(function (button) {
+        button.addEventListener('click', function () { selectScenario(button.getAttribute('data-scenario-choice')); });
+      });
+
+      var runtimeData = {
+        '512': [
+          { name: 'PyTorch', kind: 'standard', value: 2.35 },
+          { name: 'FlashAttention', kind: 'flash', value: 0.95 },
+          { name: 'Linformer', kind: 'linformer', value: 1.55 },
+          { name: 'Block-Sparse Flash', kind: 'sparse', value: 0.45 }
+        ],
+        '1024': [
+          { name: 'PyTorch', kind: 'standard', value: 8.29 },
+          { name: 'FlashAttention', kind: 'flash', value: 2.55 },
+          { name: 'Linformer', kind: 'linformer', value: 1.60 },
+          { name: 'Block-Sparse Flash', kind: 'sparse', value: 0.89 }
+        ],
+        '4096': [
+          { name: 'PyTorch', kind: 'standard', value: 124.19 },
+          { name: 'FlashAttention', kind: 'flash', value: 37.49 },
+          { name: 'Linformer', kind: 'linformer', value: 8.04 },
+          { name: 'Block-Sparse Flash', kind: 'sparse', value: 4.12 }
+        ],
+        '16384': [
+          { name: 'PyTorch', kind: 'standard', value: null },
+          { name: 'FlashAttention', kind: 'flash', value: 586.61 },
+          { name: 'Linformer', kind: 'linformer', value: 30.92 },
+          { name: 'Block-Sparse Flash', kind: 'sparse', value: 16.60 }
+        ],
+        '65536': [
+          { name: 'PyTorch', kind: 'standard', value: null },
+          { name: 'FlashAttention', kind: 'flash', value: 9341.30 },
+          { name: 'Linformer', kind: 'linformer', value: null },
+          { name: 'Block-Sparse Flash', kind: 'sparse', value: 64.11 }
+        ]
+      };
+      var runtimeButtons = Array.prototype.slice.call(document.querySelectorAll('[data-n-choice]'));
+      var runtimeBars = document.getElementById('runtime-bars');
+      var runtimeTitle = document.getElementById('runtime-chart-title');
+      function formatNumber(value) {
+        return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      }
+      function selectRuntime(n) {
+        var valid = Object.prototype.hasOwnProperty.call(runtimeData, n) ? n : '512';
+        var rows = runtimeData[valid];
+        var max = Math.max.apply(null, rows.filter(function (row) { return row.value !== null; }).map(function (row) { return row.value; }));
+        runtimeButtons.forEach(function (button) {
+          button.setAttribute('aria-pressed', button.getAttribute('data-n-choice') === valid ? 'true' : 'false');
+        });
+        runtimeTitle.textContent = 'N = ' + Number(valid).toLocaleString('en-US') + ' · runtime ms · 越低越好';
+        runtimeBars.textContent = '';
+        rows.forEach(function (row) {
+          var item = document.createElement('div');
+          item.className = 'runtime-row';
+          var label = document.createElement('span');
+          label.className = 'runtime-label';
+          label.textContent = row.name;
+          var track = document.createElement('div');
+          track.className = 'runtime-track';
+          var value = document.createElement('strong');
+          value.className = 'runtime-value';
+          if (row.value === null) {
+            track.classList.add('is-empty');
+            track.textContent = '该配置未报告';
+            value.textContent = '—';
+            item.setAttribute('aria-label', row.name + '：该配置未报告');
+          } else {
+            var fill = document.createElement('div');
+            fill.className = 'runtime-fill runtime-' + row.kind;
+            fill.style.setProperty('--w', (row.value / max * 100).toFixed(3) + '%');
+            track.appendChild(fill);
+            value.textContent = formatNumber(row.value);
+            item.setAttribute('aria-label', row.name + '：' + formatNumber(row.value) + ' 毫秒');
+          }
+          item.appendChild(label);
+          item.appendChild(track);
+          item.appendChild(value);
+          runtimeBars.appendChild(item);
+        });
+        runtimeBars.setAttribute('data-active-n', valid);
+      }
+      runtimeButtons.forEach(function (button) {
+        button.addEventListener('click', function () { selectRuntime(button.getAttribute('data-n-choice')); });
+      });
+
+      var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#toc-list a'));
+      var sections = tocLinks.map(function (link) { return document.querySelector(link.getAttribute('href')); }).filter(Boolean);
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function () {
+          var current = sections[0];
+          var anchor = window.scrollY + Math.min(window.innerHeight * .28, 260);
+          if (window.scrollY > 80) {
+            sections.forEach(function (section) {
+              var top = section.getBoundingClientRect().top + window.scrollY;
+              if (top <= anchor) current = section;
+            });
+          }
+          tocLinks.forEach(function (link) {
+            link.setAttribute('aria-current', link.getAttribute('href') === '#' + current.id ? 'true' : 'false');
+          });
+        }, { rootMargin: '-12% 0px -62% 0px', threshold: [0, 0.05, 0.2, 0.5] });
+        sections.forEach(function (section) { observer.observe(section); });
+      }
+
+      var requestedStep = Number(params.get('step') || '1') - 1;
+      selectStep(Number.isFinite(requestedStep) ? requestedStep : 0, false);
+      selectScenario(params.get('scenario') || 'dense');
+      selectRuntime(params.get('n') || '512');
+
+      function runSelfTest() {
+        var errors = [];
+        stepTabs.forEach(function (tab, index) {
+          selectStep(index, false);
+          if (stepPanels[index].hidden) errors.push('step panel hidden incorrectly: ' + index);
+        });
+        selectStep(0, false);
+        stepTabs[0].focus();
+        stepTabs[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        if (stepPanels[1].hidden) errors.push('ArrowRight did not advance stepper');
+        ['dense', 'long', 'sparse'].forEach(function (name) {
+          selectScenario(name);
+          if (scenarioStage.getAttribute('data-scenario') !== name) errors.push('scenario failed: ' + name);
+        });
+        Object.keys(runtimeData).forEach(function (n) {
+          selectRuntime(n);
+          if (runtimeBars.children.length !== 4) errors.push('runtime row count failed: ' + n);
+        });
+        selectStep(0, false);
+        selectScenario('dense');
+        selectRuntime('512');
+        if (!root.getAttribute('data-theme')) errors.push('missing data-theme');
+        if (document.documentElement.scrollWidth > window.innerWidth + 1) errors.push('body horizontal overflow');
+        if (document.querySelectorAll('script[src], link[rel="stylesheet"], img[src^="http"]').length) errors.push('external dependency found');
+        var output = document.createElement('pre');
+        output.id = 'selftest-result';
+        output.textContent = JSON.stringify({
+          status: errors.length ? 'FAIL' : 'PASS',
+          errors: errors,
+          viewport: [window.innerWidth, window.innerHeight],
+          documentWidth: document.documentElement.scrollWidth,
+          documentHeight: document.documentElement.scrollHeight,
+          sectionOffsets: sections.map(function (section) {
+            return { id: section.id, top: Math.round(section.getBoundingClientRect().top + window.scrollY), height: Math.round(section.getBoundingClientRect().height) };
+          }),
+          stepCount: stepTabs.length,
+          scenarioCount: scenarioButtons.length,
+          runtimeStates: Object.keys(runtimeData).length
+        });
+        document.body.appendChild(output);
+      }
+      if (params.get('selftest') === '1') runSelfTest();
+    }());
+  </script>
+</body>
+</html>
