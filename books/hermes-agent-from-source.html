@@ -1377,6 +1377,26 @@ graph LR
 <p>Local desktop and TUI connections use short-lived, single-purpose tickets from a same-user control socket. A ticket for one profile or protocol does not work for another. Senders on chat platforms are approved by allowlist or pairing (Chapter 16). Dangerous commands still need approval. None of these implies the others.</p>
 <p>Credentials are frozen per session. On restart, inline keys are re-read only if the home, path, and fingerprint still match. A missing or rotated key fails closed, and a new session is how you adopt a new key.</p>
 <p>Clarify questions and approvals have their own waiters. The first answer wins. Neither ever times out into &ldquo;yes.&rdquo;</p>
+<h2 id="hosted-rooms-peer-agents-across-gateways">Hosted Rooms: Peer Agents Across Gateways</h2>
+<p>Chapter 12 covers a parent starting a child for a subtask. Hosted rooms are different: several <strong>peer</strong> agents, each living on its own gateway install, share one logical group without merging their private transcripts.</p>
+<div class="mermaid">
+flowchart LR
+  subgraph home["Home gateway"]
+    H["Room authority<br/>events + membership"]
+  end
+  subgraph peer["Peer gateway"]
+    M["Member agent<br/>own profile, own state.db"]
+  end
+  Desktop["Desktop may invite"] -.->|"not the courier"| H
+  H -->|"scoped room grant"| M
+  M -->|"dispatch + verify grant"| H
+  M -->|"hidden Group session<br/>room_… session id"| Priv["Private transcript<br/>for that member only"]
+</div>
+<p><strong>Receive path.</strong> A peer turn arrives as an API payload with <code>hosted_room_dispatch</code> (and an execution policy). The target gateway checks a <strong>room grant</strong> (HMAC, scoped, versioned — v2 is not wire-compatible with the unpublished v1 draft). Desktop may bootstrap an invitation, but it is never the issuer or the runtime courier: the <strong>target gateway</strong> verifies the grant and the task coordinates before any model or tool work runs.</p>
+<p><strong>What is shared.</strong> The room has an authority gateway, membership, and a sequenced event log (<code>hosted_room_events</code>). Grants and catalogs describe who may dispatch and which capabilities are in play. Execution policy can be bound for the turn so a peer cannot silently widen what the room allowed.</p>
+<p><strong>What stays private.</strong> Each member runs under its own profile and <code>state.db</code>. Dispatch creates or reuses a <strong>canonical hidden group session</strong> (<code>session_id = room_</code> + hash of install, room, …) titled <code>Group: &lt;room_id&gt;</code>. That session&rsquo;s transcript is not the home gateway&rsquo;s chat history, and it is not shared byte-for-byte with other members. Profile fences on gateway recovery keep a sibling profile in a shared legacy store from stamping its routing identity onto this profile&rsquo;s orphaned rows.</p>
+<p><strong>Failure modes that matter.</strong> Wrong or expired grant → reject. Room execution policy or capability catalog changed under you → typed errors, not a silent continue. Mixed gateways that cannot speak protocol v2 fall back to Desktop-driven rooms rather than accept a weaker token.</p>
+<p>This is Hermes&rsquo;s answer to &ldquo;several agents in one group&rdquo;: <strong>shared room authority + private member sessions</strong>, with cryptographic admission at the edge.</p>
 <h2 id="the-trade-offs">The Trade-offs</h2>
 <ul>
 <li><strong>The gateway is central.</strong> Local clients depend on it, so it must be easy to start and hard to duplicate.</li>
@@ -2190,7 +2210,7 @@ flowchart TD
 
 <footer>
   <p><b>Sources.</b> Public
-  <a href="https://github.com/NousResearch/hermes-agent">NousResearch/hermes-agent</a>
+  <a href="https://github.com/NousResearch/hermes-agent">NousResearch/hermes-agent</a> (snapshot fcc26fbd, 2026-10-29)
   (MIT) and its architecture / developer guides. Diagrams are Mermaid redrawings for this book.
   Built for the
   <a href="https://chendi0x7c00.github.io/ebooks/">Chendi ebook shelf</a>.</p>

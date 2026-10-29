@@ -526,8 +526,8 @@
     <strong>Independent educational analysis.</strong>
     Not affiliated with, endorsed by, or sponsored by OpenHands or All Hands AI.
     Based on reading the public, MIT-licensed repositories
-    <code>OpenHands/OpenHands</code> (snapshot 9057a57, 2026-10-21) and
-    <code>OpenHands/software-agent-sdk</code> (snapshot 0996c33, 2026-10-20).
+    <code>OpenHands/OpenHands</code> (snapshot 76ed105 (2026-10-29)
+    <code>OpenHands/software-agent-sdk</code> (snapshot 07e8c26 (2026-10-29)
     Not official documentation; details may have changed since. Example values in widgets are labelled illustrative.
   </div>
 </header>
@@ -1892,6 +1892,10 @@ stateDiagram-v2
 <h2 id="critics-scoring-the-work">Critics: Scoring the Work</h2>
 <p>A <strong>critic</strong> takes the events, and optionally a git patch, and returns a score. By default it runs when the agent finishes or sends a message; an <code>all_actions</code> mode evaluates every action, which the code warns is much slower. With <strong>iterative refinement</strong> configured, <code>run()</code> sends a follow-up prompt and runs again while the score stays below a threshold, up to a limit. The defaults are a threshold of 0.6 and 3 iterations.</p>
 <p>Built-in critics include simple ones, such as &ldquo;did the agent finish&rdquo; and &ldquo;is the patch empty&rdquo;, and an API-based critic that calls a scoring service.</p>
+<h2 id="what-this-is-not-peer-agents-in-one-group">What This Is Not: Peer Agents in One Group</h2>
+<p>The task tool is <strong>parent → child</strong>, not several peers sharing a room. The child gets a fresh conversation, inherits settings, and returns one observation. It does not receive the parent&rsquo;s live message stream, and siblings do not see each other&rsquo;s transcripts.</p>
+<p>Agent Canvas (the <code>OpenHands/OpenHands</code> frontend) can show many conversations in the UI. That is presentation and routing to Agent Server sessions — still separate conversations — not a Hermes-style hosted room where peer gateways co-admit work under a shared room authority with private member sessions.</p>
+<p>If you need peer-group receive paths and private-vs-shared context, look at Hermes Chapter 9&rsquo;s hosted rooms, not at the task tool.</p>
 <h2 id="the-trade-offs">The Trade-offs</h2>
 <ul>
 <li><strong>Blocking tasks.</strong> The parent waits for each child; parallelism needs a concurrency limit above 1.</li>
