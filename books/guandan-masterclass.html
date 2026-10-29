@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>掼蛋高手速成 · 出新手村的决策系统</title>
+<style>
+:root{
+  --paper:#f6f5ef;      /* 页面纸色 */
+  --card:#fffdf6;       /* 牌面/图面 */
+  --ink:#202623;        /* 正文墨色（偏绿的近黑） */
+  --ink-soft:#5a645e;   /* 次级文字 */
+  --felt:#0d5c40;       /* 牌桌绿 */
+  --felt-deep:#0a4430;  /* 深绿（TOC 底） */
+  --felt-tint:#e4efe8;  /* 绿的浅底 */
+  --red:#b23a30;        /* 牌红 */
+  --red-tint:#f8ebe8;
+  --gold:#96762f;       /* 口诀金 */
+  --gold-tint:#f4ecd8;
+  --line:#dcd8c8;
+  --line-strong:#bcb7a2;
+  --serif:"Songti SC","Noto Serif SC","STSong","SimSun",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;line-height:1.9;-webkit-font-smoothing:antialiased}
+p{margin:14px 0}
+strong{font-weight:650}
+em{font-style:normal;color:var(--felt);font-weight:600}
+a{color:var(--felt);text-decoration:none;border-bottom:1px solid rgba(13,92,64,.3)}
+a:hover{border-bottom-color:var(--felt)}
+
+/* ── 顶部进度 ─────────────────────── */
+#progress{position:fixed;top:0;left:0;height:3px;width:0;background:var(--felt);z-index:99}
+
+/* ── 左侧目录 ─────────────────────── */
+nav#toc{position:fixed;top:0;left:0;bottom:0;width:224px;background:var(--felt-deep);color:#dfe9e2;padding:30px 0 20px;overflow-y:auto;z-index:10}
+#toc .toc-brand{font-family:var(--serif);font-weight:700;font-size:19px;color:#fff;padding:0 22px 4px;letter-spacing:.06em}
+#toc .toc-sub{font-size:11.5px;color:#9db5a6;padding:0 22px 18px;letter-spacing:.28em}
+#toc a{display:block;color:#cfdcd3;font-size:13.5px;padding:7px 22px;border-bottom:none;line-height:1.5}
+#toc a:hover{background:rgba(255,255,255,.07);color:#fff}
+#toc a .no{display:inline-block;width:34px;color:#8fae9b;font-variant-numeric:tabular-nums;font-size:12px}
+#toc .toc-note{margin:20px 22px 0;padding-top:14px;border-top:1px solid rgba(255,255,255,.12);font-size:12px;color:#9db5a6;line-height:1.8}
+@media (max-width:1159px){nav#toc{display:none}}
+
+/* ── 主体 ─────────────────────────── */
+main{max-width:820px;margin:0 auto;padding:58px 26px 140px}
+@media (min-width:1160px){main{margin-left:280px}}
+
+/* ── 首屏 ─────────────────────────── */
+.hero{padding:26px 0 8px}
+.hero .eyebrow{font-size:12.5px;letter-spacing:.42em;color:var(--felt);font-weight:600}
+.hero h1{font-family:var(--serif);font-size:44px;line-height:1.32;margin:10px 0 6px;font-weight:700;letter-spacing:.01em}
+.hero .lede{font-size:17px;color:var(--ink-soft);max-width:620px;margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 6px}
+.chip{font-size:12.5px;color:var(--felt);background:var(--felt-tint);border:1px solid rgba(13,92,64,.22);border-radius:999px;padding:3px 13px}
+.hero-cards{margin:30px 0 4px}
+.hero-cap{font-size:12.5px;color:var(--ink-soft);margin-top:8px}
+
+/* ── 章节骨架 ─────────────────────── */
+section.chapter{margin-top:104px}
+.ch-head{margin-bottom:22px}
+.ch-label{font-size:12px;letter-spacing:.4em;color:var(--felt);font-weight:700}
+h2.ch-title{font-family:var(--serif);font-size:33px;line-height:1.4;margin:6px 0 12px;font-weight:700}
+.ch-thesis{color:var(--ink-soft);font-size:15.5px;border-left:3px solid var(--felt);padding:2px 0 2px 15px;max-width:640px}
+h3{font-family:var(--serif);font-size:21px;margin:38px 0 6px;font-weight:700;color:var(--ink)}
+h3 .h3no{color:var(--felt);margin-right:10px;font-variant-numeric:tabular-nums}
+h4{font-size:16px;margin:26px 0 4px;color:var(--felt-deep)}
+hr.sep{border:none;border-top:1px solid var(--line);margin:44px 0 0}
+
+/* ── 提示框 ───────────────────────── */
+.key,.warn,.tipbox,.rulebox{border-radius:0 9px 9px 0;padding:15px 20px 13px;margin:24px 0;font-size:15.5px}
+.key{background:var(--felt-tint);border-left:4px solid var(--felt)}
+.warn{background:var(--red-tint);border-left:4px solid var(--red)}
+.tipbox{background:var(--gold-tint);border-left:4px solid var(--gold)}
+.rulebox{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line-strong)}
+.blabel{display:block;font-size:12px;letter-spacing:.3em;font-weight:700;margin-bottom:5px}
+.key .blabel{color:var(--felt)}
+.warn .blabel{color:var(--red)}
+.tipbox .blabel{color:var(--gold)}
+.rulebox .blabel{color:var(--ink-soft)}
+.key p,.warn p,.tipbox p,.rulebox p{margin:6px 0}
+.key p:first-of-type,.warn p:first-of-type,.tipbox p:first-of-type,.rulebox p:first-of-type{margin-top:0}
+.key p:last-of-type,.warn p:last-of-type,.tipbox p:last-of-type,.rulebox p:last-of-type{margin-bottom:0}
+
+/* ── 扑克牌 ───────────────────────── */
+.hand{display:flex;flex-wrap:wrap;gap:7px;align-items:flex-end;margin:12px 0}
+.pc{position:relative;width:47px;height:66px;background:var(--card);border:1px solid var(--line-strong);border-radius:6px;box-shadow:0 1px 0 rgba(30,40,35,.10),0 2px 5px rgba(30,40,35,.07);font-family:Georgia,"Times New Roman",var(--serif);display:flex;flex-direction:column;justify-content:space-between;padding:4px 6px;flex:0 0 auto;line-height:1}
+.pc .r{font-size:16.5px;font-weight:700}
+.pc .s{font-size:13px;align-self:flex-end}
+.pc.red{color:var(--red)}
+.pc.blk{color:#272d33}
+.pc.sm{width:37px;height:52px;padding:3px 4px}
+.pc.sm .r{font-size:13px}
+.pc.sm .s{font-size:10.5px}
+.pc.lg{width:56px;height:78px}
+.pc.joker .r{font-size:12px;letter-spacing:1px;font-family:var(--sans);font-weight:700}
+.pc.joker .s{font-size:12px}
+.pc.wild{border:1.6px dashed var(--gold);background:#fffcee}
+.pc.wild::after{content:"逢人配";position:absolute;top:-9px;right:-7px;background:var(--gold);color:#fff;font-size:9.5px;line-height:1;padding:3px 5px;border-radius:3px;font-family:var(--sans);letter-spacing:1px}
+.pc.back{background:repeating-linear-gradient(45deg,#0d5c40 0 5px,#0b4d36 5px 10px);border-color:#0b4d36}
+.pc.back::after{content:"";position:absolute;inset:4px;border:1px solid rgba(255,255,255,.35);border-radius:3px}
+.pc.dim{opacity:.34;filter:grayscale(.4)}
+.pc.pick{outline:2px solid var(--felt);outline-offset:1px}
+.pc.good{border-color:var(--felt);box-shadow:0 0 0 1px var(--felt),0 2px 5px rgba(30,40,35,.08)}
+.pc.bad{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 2px 5px rgba(30,40,35,.08)}
+.handlab{font-size:12.5px;color:var(--ink-soft);margin:2px 0 0}
+
+/* ── 图 ───────────────────────────── */
+figure.fig{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:24px 24px 15px;margin:28px 0;overflow-x:auto}
+figure.fig svg{display:block;margin:0 auto;max-width:100%;height:auto}
+figcaption{margin-top:14px;padding-top:11px;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-soft);line-height:1.75}
+figcaption b{color:var(--felt)}
+/* SVG 内部样式 */
+.sn{fill:var(--felt-tint);stroke:var(--felt);stroke-width:1.4;rx:8}
+.sn2{fill:var(--card);stroke:var(--line-strong);stroke-width:1.3}
+.sn-red{fill:var(--red-tint);stroke:var(--red);stroke-width:1.4}
+.sn-gold{fill:var(--gold-tint);stroke:var(--gold);stroke-width:1.4}
+.sn-dark{fill:var(--felt);stroke:var(--felt-deep);stroke-width:1.4}
+.st{font-family:var(--sans);fill:var(--ink);font-size:14px}
+.st-b{font-weight:700}
+.st-w{fill:#fff}
+.st-s{font-size:12px;fill:var(--ink-soft)}
+.st-r{fill:var(--red)}
+.st-g{fill:var(--felt)}
+.sv-line{stroke:#79857e;stroke-width:1.6;fill:none}
+.sv-arr{fill:#79857e}
+
+/* ── 阶梯（牌型天梯） ─────────────── */
+.ladder{display:flex;flex-direction:column;gap:0;margin:10px 0}
+.rung{display:grid;grid-template-columns:minmax(0,3.2fr) minmax(0,2fr);gap:4px 18px;align-items:center;padding:11px 16px;border:1px solid var(--line);border-bottom:none;background:var(--card)}
+.rung:first-child{border-radius:10px 10px 0 0}
+.rung:last-child{border-bottom:1px solid var(--line);border-radius:0 0 10px 10px}
+.rung .rn{font-weight:650;font-size:15px}
+.rung .rd{font-size:13px;color:var(--ink-soft);line-height:1.65}
+.rung.tier-top{background:var(--felt);border-color:var(--felt)}
+.rung.tier-top .rn{color:#fff}
+.rung.tier-top .rd{color:#cfe2d6}
+.rung.tier-hi{background:var(--felt-tint)}
+.rung .rn .pwr{float:right;font-size:11px;letter-spacing:.2em;color:var(--gold);font-weight:700;margin-left:8px}
+@media (max-width:640px){.rung{grid-template-columns:1fr}}
+
+/* ── 对比双栏 ─────────────────────── */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0}
+@media (max-width:680px){.vs{grid-template-columns:1fr}}
+.vs .col{border:1px solid var(--line);border-radius:10px;padding:16px 18px 12px;background:var(--card)}
+.vs .col.win{border-color:rgba(13,92,64,.45);background:var(--felt-tint)}
+.vs .col .ct{font-size:12px;letter-spacing:.25em;font-weight:700;margin-bottom:8px}
+.vs .col.lose .ct{color:var(--red)}
+.vs .col.win .ct{color:var(--felt)}
+.vs .col p{margin:8px 0;font-size:14.5px}
+.badge{display:inline-block;font-size:12px;font-weight:700;border-radius:5px;padding:1px 9px;color:#fff;background:var(--felt);margin-left:8px;vertical-align:2px;font-family:var(--sans);letter-spacing:.05em}
+.badge.red{background:var(--red)}
+.badge.gold{background:var(--gold)}
+
+/* ── 步骤 ─────────────────────────── */
+ol.steps{list-style:none;counter-reset:st;margin:18px 0;padding:0}
+ol.steps li{counter-increment:st;position:relative;padding:0 0 18px 46px}
+ol.steps li::before{content:counter(st);position:absolute;left:0;top:3px;width:27px;height:27px;border-radius:50%;background:var(--felt);color:#fff;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+ol.steps li::after{content:"";position:absolute;left:13px;top:34px;bottom:4px;width:1.5px;background:var(--line-strong)}
+ol.steps li:last-child::after{display:none}
+ol.steps li .stt{font-weight:650}
+ol.steps li .stx{font-size:14.5px;color:var(--ink-soft);margin-top:2px}
+
+/* ── 表格 ─────────────────────────── */
+table.t{width:100%;border-collapse:collapse;font-size:14.5px;margin:20px 0;background:var(--card)}
+.t th{background:var(--felt);color:#f0f5f1;text-align:left;padding:9px 13px;font-weight:600;font-size:13px;letter-spacing:.08em}
+.t td{padding:9px 13px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.75}
+.t tr:nth-child(even) td{background:#f5f3ea}
+.t td b{color:var(--felt-deep)}
+.t .num{font-variant-numeric:tabular-nums}
+
+/* ── 自检折叠 ─────────────────────── */
+details.check{border:1px solid var(--line);border-radius:9px;padding:13px 18px;margin:20px 0;background:var(--card)}
+details.check summary{cursor:pointer;font-weight:650;color:var(--felt);font-size:15px}
+details.check summary:hover{color:var(--felt-deep)}
+details.check .ans{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:14.5px;color:var(--ink-soft)}
+details.check .ans b{color:var(--ink)}
+
+/* ── 自测 quiz ────────────────────── */
+.quiz{margin:8px 0}
+.q-item{border:1px solid var(--line);border-radius:11px;padding:20px 22px 14px;margin:18px 0;background:var(--card)}
+.q-item .q-no{font-size:12px;letter-spacing:.3em;color:var(--gold);font-weight:700}
+.q-item .q-t{font-weight:650;margin:4px 0 12px;line-height:1.7}
+.q-opt{display:block;border:1px solid var(--line);border-radius:8px;padding:9px 15px;margin:8px 0;cursor:pointer;font-size:15px;transition:border-color .15s,background .15s}
+.q-opt:hover{border-color:var(--felt)}
+.q-opt input{margin-right:9px;accent-color:var(--felt)}
+.q-opt.correct{border-color:var(--felt);background:var(--felt-tint)}
+.q-opt.wrong{border-color:var(--red);background:var(--red-tint)}
+.q-exp{display:none;font-size:14px;color:var(--ink-soft);background:#f5f3ea;border-radius:8px;padding:11px 15px;margin-top:10px;line-height:1.8}
+.q-item.done .q-exp{display:block}
+.q-item.done .q-opt{pointer-events:none;cursor:default}
+.q-exp b{color:var(--felt-deep)}
+#quiz-score{position:sticky;bottom:14px;margin:26px 0;background:var(--felt);color:#fff;border-radius:11px;padding:15px 22px;font-size:15.5px;display:none;justify-content:space-between;align-items:center;gap:14px;box-shadow:0 6px 18px rgba(10,68,48,.28);flex-wrap:wrap}
+#quiz-score .sc-big{font-family:var(--serif);font-size:22px;font-weight:700}
+#quiz-score button{background:#fff;color:var(--felt-deep);border:none;border-radius:8px;padding:8px 18px;font-size:14px;font-weight:650;cursor:pointer}
+
+/* ── 速查卡 ───────────────────────── */
+.cheat{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0}
+@media (max-width:680px){.cheat{grid-template-columns:1fr}}
+.cheat .c-box{border:1.5px solid var(--felt);border-radius:11px;background:var(--card);padding:16px 19px 12px}
+.cheat .c-box h5{margin:0 0 8px;font-size:13px;letter-spacing:.25em;color:var(--felt)}
+.cheat .c-box ul{margin:0;padding-left:18px;font-size:14px;line-height:1.9}
+.cheat .c-box ol{margin:0;padding-left:18px;font-size:14px;line-height:1.9}
+.cheat .c-box p{margin:6px 0;font-size:14px}
+
+/* ── 术语表 ───────────────────────── */
+.glossary{columns:2;column-gap:34px;font-size:14px;margin:18px 0}
+@media (max-width:640px){.glossary{columns:1}}
+.glossary div{break-inside:avoid;margin:0 0 11px}
+.glossary b{color:var(--felt-deep)}
+
+/* ── 页脚 ─────────────────────────── */
+footer{margin-top:90px;padding-top:22px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-soft);line-height:2}
+
+@media print{
+  nav#toc,#progress,#quiz-score,.quiz{display:none}
+  main{margin:0;max-width:none;padding:0}
+  body{background:#fff;font-size:12.5px}
+  figure.fig,details.check,.rung,.q-item{break-inside:avoid}
+  section.chapter{margin-top:56px}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+
+<nav id="toc" aria-label="目录">
+  <div class="toc-brand">掼蛋高手速成</div>
+  <div class="toc-sub">出村决策系统</div>
+  <a href="#ch0"><span class="no">序</span>诊断：你卡在哪</a>
+  <a href="#ch1"><span class="no">一</span>本质：手数与牌权</a>
+  <a href="#ch2"><span class="no">二</span>牌型与牌力：货币体系</a>
+  <a href="#ch3"><span class="no">三</span>起手 30 秒：评估与角色</a>
+  <a href="#ch4"><span class="no">四</span>牌权与位置：顶、让、送</a>
+  <a href="#ch5"><span class="no">五</span>炸弹：节奏武器</a>
+  <a href="#ch6"><span class="no">六</span>算牌：信息就是牌力</a>
+  <a href="#ch7"><span class="no">七</span>残局：倒推与喂牌</a>
+  <a href="#ch8"><span class="no">八</span>队友语言与喂牌</a>
+  <a href="#ch9"><span class="no">九</span>实战技巧 · 场景手册</a>
+  <a href="#ch10"><span class="no">十</span>新手村十坑</a>
+  <a href="#ch11"><span class="no">十一</span>出村训练计划 + 自测</a>
+  <a href="#appendix"><span class="no">附</span>一页速查卡</a>
+  <div class="toc-note">本教程依据国家体育总局《竞技掼蛋竞赛规则（试行）》核对规则事实；地方变体处以「以约定为准」标注。</div>
+</nav>
+
+<main>
+<!-- ═══════════ 首屏 ═══════════ -->
+<header class="hero">
+  <div class="eyebrow">掼蛋进阶教程 · 逻辑与实战</div>
+  <h1>从新手村<br>到牌桌高手</h1>
+  <p class="lede">你已经懂规则，也打过不少局，但每手牌还是凭感觉出。这本教程不堆技巧，给你一套每手牌都用得上的<b>决策系统</b>：三个问题、两条主线、一张座位图。</p>
+  <div class="chips">
+    <span class="chip">适读：已懂规则的初中级玩家</span>
+    <span class="chip">18 幅图解</span>
+    <span class="chip">10 题出村自测</span>
+    <span class="chip">约 40 分钟读完</span>
+  </div>
+  <div class="hero-cards">
+    <div class="hand" aria-hidden="true">
+      <div class="pc lg joker blk"><span class="r">大王</span><span class="s">★</span></div>
+      <div class="pc lg joker red"><span class="r">小王</span><span class="s">★</span></div>
+      <div class="pc lg red wild"><span class="r">2</span><span class="s">♥</span></div>
+      <div class="pc lg red"><span class="r">A</span><span class="s">♥</span></div>
+      <div class="pc lg blk"><span class="r">K</span><span class="s">♠</span></div>
+      <div class="pc lg red"><span class="r">10</span><span class="s">♦</span></div>
+      <div class="pc lg blk back"></div>
+    </div>
+    <p class="hero-cap">你的 27 张牌就是一条牌路：每一手都是一笔开销，出完为止。这本教程教你怎么把它走短、走赢。</p>
+  </div>
+</header>
+
+<!-- ═══════════ 导读 ═══════════ -->
+<section class="chapter" id="intro">
+  <div class="ch-head">
+    <div class="ch-label">使 用 说 明</div>
+    <h2 class="ch-title">先说清楚：高手和新手差在哪</h2>
+    <p class="ch-thesis">高手每出一手牌之前，脑子里都跑同一套程序。新手缺的，就是这套程序。</p>
+  </div>
+
+  <p>这本书的所有内容，最后都压缩成三个问题。从下一局开始，每次轮到你出牌，先在心里把这三问问一遍：</p>
+
+  <div class="key">
+    <span class="blabel">贯穿全场的三个问题</span>
+    <p><strong>① 我现在几手能走完？</strong>手数是路程，你所有的操作都在缩短它。</p>
+    <p><strong>② 牌权在谁手里、值多少？</strong>牌权是货币，花在能兑换头游的地方。</p>
+    <p><strong>③ 这一手在帮谁？</strong>四个人两条队，每一手牌都有受益方。</p>
+  </div>
+
+  <p>三个问题分别对应本书三条主线：<em>手数</em>（第一、二、三章）、<em>牌权</em>（第四、五、七章）、<em>信息与配合</em>（第六、八章）。中间的章节负责把它们装进具体场景。</p>
+
+  <h3>怎么读这本书</h3>
+  <ol class="steps">
+    <li><span class="stt">第一遍：顺序读完（约 40 分钟）</span>
+      <div class="stx">建立系统。不用背，看懂每章的「为什么」即可。</div></li>
+    <li><span class="stt">第二遍：只看图和口诀，去打两局</span>
+      <div class="stx">桌上只执行三个问题 + 那一章的一个动作，比如「这局我只练记王」。</div></li>
+    <li><span class="stt">第三遍：输了以后翻对应章节复盘</span>
+      <div class="stx">第十一章给了复盘方法和一张「出村考核表」，过关就算出村。</div></li>
+  </ol>
+
+  <div class="rulebox">
+    <span class="blabel">规则口径</span>
+    <p>本书规则事实以国家体育总局棋牌运动管理中心《竞技掼蛋竞赛规则（试行）》为准。民间玩法在几处规则上有分歧（逢人配能否进炸弹、过 A 条件、接风方式等），涉及处都会标注「以约定为准」。开打前先问清桌约，这本身就是高手习惯。</p>
+  </div>
+</section>
+
+<!-- ═══════════ 序章 ═══════════ -->
+<section class="chapter" id="ch0">
+  <div class="ch-head">
+    <div class="ch-label">序 章</div>
+    <h2 class="ch-title">诊断：你到底卡在哪</h2>
+    <p class="ch-thesis">从「会玩」到「会打」隔着一层东西。这层东西说得清楚，就练得出来。</p>
+  </div>
+
+  <p>先对照下面这张表。左边是新手的表现，右边是同一情境下高手在做什么。不用全中，中三条以上，你就还在新手村里。</p>
+
+  <table class="t">
+    <tr><th style="width:14%">情境</th><th style="width:41%">新手</th><th style="width:45%">高手</th></tr>
+    <tr><td>拿到 27 张</td><td>先看有几个炸、有没有双王</td><td>60 秒内完成组牌，数出<b>手数</b>，定下自己是主攻还是助攻</td></tr>
+    <tr><td>轮到出牌</td><td>手里有什么出什么，从小到大顺着来</td><td>按起手设计好的<b>牌路</b>走，先出哪手、留哪手回收，都有安排</td></tr>
+    <tr><td>队友的牌权</td><td>手痒，能压就压</td><td>轻易不接；接了必定回传队友要的牌型</td></tr>
+    <tr><td>被对手压住</td><td>情绪上头，掏炸弹解气</td><td>先问「炸完我能兑现什么」，答不上来就让</td></tr>
+    <tr><td>记牌</td><td>只记得自己缺什么</td><td>盯死五类：王、级牌、自己的断张、各家报牌、已出的炸弹</td></tr>
+    <tr><td>对手报牌</td><td>没注意，该怎么出还怎么出</td><td>立刻改出牌结构：对手剩 5 张就出对，剩 6 张出三不带</td></tr>
+    <tr><td>输了以后</td><td>怪队友不配合、怪手气</td><td>复盘三个问题：我几手走完的？转折在哪一手？哪一手帮了对手？</td></tr>
+    <tr><td>每局目标</td><td>把把都想自己头游</td><td>先判断这局我是主攻还是助攻，助攻的头游是<b>送</b>出来的</td></tr>
+  </table>
+
+  <p>看出共同点了吗？左列的病根是同一个：<strong>每手牌都在条件反射，没有决策。</strong>新手村困住你的就是这一层。三个问题，治的就是它。</p>
+
+  <details class="check">
+    <summary>自检：三个问题，你现在能答上来吗？</summary>
+    <div class="ans">
+      <p><b>「我现在几手能走完？」</b>大多数人打完都不知道自己打了几手。从第三章开始，这个数字会在你起手 30 秒内变成已知。</p>
+      <p><b>「牌权在谁手里、值多少？」</b>牌权不只是「这圈谁赢」，还包括「赢下之后能白走几手」。第四章给它定价。</p>
+      <p><b>「这一手在帮谁？」</b>这一问最锋利。中局大量新手出牌，仔细推演会发现是在帮对手拆牌、帮对手省炸。第六章教你识别。</p>
+    </div>
+  </details>
+</section>
+<!-- ═══════════ 第一章 本质 ═══════════ -->
+<section class="chapter" id="ch1">
+  <div class="ch-head">
+    <div class="ch-label">第 一 章</div>
+    <h2 class="ch-title">本质：这门游戏到底在比什么</h2>
+    <p class="ch-thesis">剥掉「升级」「跑得快」这些外壳，这门游戏剩两样东西：手数和牌权。组牌、炸弹、喂牌，全是围着它们转的动作。</p>
+  </div>
+
+  <h3>三层看掼蛋</h3>
+  <p><strong>表层</strong>是个跑得快游戏：谁先把牌出完谁赢。<strong>中层</strong>是团队赛：四个人两条队，对家是你的战友。<strong>本质层</strong>是下面这个引擎：你手里的 27 张牌，经过三个变量运转，输出头游或双下：</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 296" role="img" aria-label="掼蛋游戏引擎图">
+      <!-- 输入 -->
+      <rect class="sn2" x="14" y="98" width="158" height="84" rx="9"/>
+      <text class="st st-b" x="93" y="132" text-anchor="middle">你手里的 27 张</text>
+      <text class="st st-s" x="93" y="156" text-anchor="middle">一手牌 = 一次出牌机会</text>
+      <line class="sv-line" x1="172" y1="140" x2="228" y2="140" marker-end="url(#ar1)"/>
+      <!-- 引擎三箱 -->
+      <rect class="sn" x="236" y="24" width="286" height="68" rx="9"/>
+      <text class="st st-b st-g" x="258" y="52">手数 · 速度</text>
+      <text class="st st-s" x="258" y="76">你的 27 张要分几手出完 = 路程长度</text>
+      <rect class="sn" x="236" y="112" width="286" height="68" rx="9"/>
+      <text class="st st-b st-g" x="258" y="140">牌权 · 节奏</text>
+      <text class="st st-s" x="258" y="164">每圈只有一人赢下并领出下一圈</text>
+      <rect class="sn" x="236" y="200" width="286" height="68" rx="9"/>
+      <text class="st st-b st-g" x="258" y="228">信息 · 判断</text>
+      <text class="st st-s" x="258" y="252">看不见的 81 张分布在哪，靠记和推</text>
+      <!-- 输出 -->
+      <line class="sv-line" x1="522" y1="140" x2="580" y2="140" marker-end="url(#ar1)"/>
+      <rect class="sn-dark" x="588" y="62" width="158" height="60" rx="9"/>
+      <text class="st st-b st-w" x="667" y="88" text-anchor="middle">头游</text>
+      <text class="st st-s" x="667" y="110" text-anchor="middle" style="fill:#cfe2d6">最先出完的人</text>
+      <rect class="sn-red" x="588" y="152" width="158" height="60" rx="9"/>
+      <text class="st st-b st-r" x="667" y="178" text-anchor="middle">双下（防守）</text>
+      <text class="st st-s" x="667" y="200" text-anchor="middle">别让对面两人包揽前二</text>
+      <text class="st st-s" x="380" y="290" text-anchor="middle">胜负 = 谁先把「手数」走到零，而每一手都要用「牌权」去换通行权</text>
+      <defs><marker id="ar1" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 1 · 掼蛋引擎。</b>新手只盯着输入（我有什么牌），高手盯着整个引擎：手数决定你要走多远，牌权决定你走不走得动，信息决定你每一步是不是在赌。</figcaption>
+  </figure>
+
+  <h3>手数：你的路程长度</h3>
+  <p>把 27 张牌分几次出完，这个次数就是<strong>手数</strong>。它和「牌好不好」是两回事：一手烂牌可以组得很紧凑（手数少），一手好牌也可能拆得稀碎（手数多）。有人统计过：一局掼蛋平均打 38 手上下，而头游平均只用 9 手左右就走完了。头游往往没赢几圈，他只是<em>手数最少</em>。</p>
+  <p>这就是出村第一条：<strong>组牌头等大事，是把 27 张压成尽量少的手。</strong>同样五张牌，单张单张出是 5 手，拼成顺子是 1 手。压缩率高，速度就快。</p>
+
+  <h3>牌权：每圈一次的竞拍</h3>
+  <p>每一圈出牌，只有一个人能赢下它，赢家同时拿到下一圈的领出权。这个权利叫<strong>牌权</strong>。它是一种稀缺货币：你压别人的每一手都在花钱（消耗大牌），赢下的每一圈都给你找零（一次免费领出）。</p>
+  <p>高手的账本上，每一手牌都是一笔交易：<strong>花多少牌力，买几手路？</strong>用大王压一圈、然后连走两手小牌，两买三，赚。用炸弹压对手一个无关痛痒的对子，大钱买废纸，亏。第五章专门讲这笔账怎么算。</p>
+
+  <h3>一圈牌的生命周期</h3>
+  <p>牌权的流转规则很简单，但有一个细节大量新手搞错：</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 330" role="img" aria-label="一圈牌的生命周期示意图">
+      <!-- 座位顺序 -->
+      <text class="st st-s" x="20" y="26">出牌顺序（逆时针循环）：</text>
+      <rect class="sn-dark" x="196" y="8" width="76" height="30" rx="6"/><text class="st st-b st-w" x="234" y="28" text-anchor="middle">你</text>
+      <line class="sv-line" x1="272" y1="23" x2="304" y2="23" marker-end="url(#ar2)"/>
+      <rect class="sn2" x="310" y="8" width="76" height="30" rx="6"/><text class="st st-b" x="348" y="28" text-anchor="middle">下家</text>
+      <line class="sv-line" x1="386" y1="23" x2="418" y2="23" marker-end="url(#ar2)"/>
+      <rect class="sn2" x="424" y="8" width="76" height="30" rx="6"/><text class="st st-b" x="462" y="28" text-anchor="middle">对家</text>
+      <line class="sv-line" x1="500" y1="23" x2="532" y2="23" marker-end="url(#ar2)"/>
+      <rect class="sn2" x="538" y="8" width="76" height="30" rx="6"/><text class="st st-b" x="576" y="28" text-anchor="middle">上家</text>
+      <path class="sv-line" d="M 614 23 H 648 A 10 10 0 0 1 658 33 V 33" marker-end="url(#ar2)"/>
+      <text class="st st-s" x="668" y="28">…循环</text>
+      <!-- 牌局时序 -->
+      <text class="st st-s" x="20" y="86">一圈的完整过程（以单张为例）：</text>
+      <g>
+        <rect class="sn2" x="20" y="100" width="128" height="96" rx="8"/>
+        <text class="st st-b st-g" x="34" y="124">① 你领出</text>
+        <rect x="34" y="136" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="49" y="163" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">5</text>
+        <text class="st st-s" x="34" y="190">试探性小单</text>
+      </g>
+      <line class="sv-line" x1="148" y1="148" x2="176" y2="148" marker-end="url(#ar2)"/>
+      <g>
+        <rect class="sn2" x="182" y="100" width="128" height="96" rx="8"/>
+        <text class="st st-b st-g" x="196" y="124">② 下家接</text>
+        <rect x="196" y="136" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="211" y="163" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#b23a30">9</text>
+        <text class="st st-s" x="196" y="190">花了中张</text>
+      </g>
+      <line class="sv-line" x1="310" y1="148" x2="338" y2="148" marker-end="url(#ar2)"/>
+      <g>
+        <rect class="sn2" x="344" y="100" width="128" height="96" rx="8"/>
+        <text class="st st-b st-g" x="358" y="124">③ 对家不接</text>
+        <text class="st st-s" x="358" y="150">过（要让队友、</text>
+        <text class="st st-s" x="358" y="168">或没大的）</text>
+      </g>
+      <line class="sv-line" x1="472" y1="148" x2="500" y2="148" marker-end="url(#ar2)"/>
+      <g>
+        <rect class="sn2" x="506" y="100" width="128" height="96" rx="8"/>
+        <text class="st st-b st-g" x="520" y="124">④ 上家 2 压住</text>
+        <rect x="520" y="136" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="535" y="163" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">2</text>
+        <text class="st st-s" x="520" y="190">赢下本圈</text>
+      </g>
+      <line class="sv-line" x1="634" y1="148" x2="662" y2="148" marker-end="url(#ar2)"/>
+      <g>
+        <rect class="sn" x="668" y="100" width="76" height="96" rx="8"/>
+        <text class="st st-b" x="706" y="138" text-anchor="middle">⑤ 两家</text>
+        <text class="st st-b" x="706" y="158" text-anchor="middle">都过</text>
+        <text class="st st-s" x="706" y="182" text-anchor="middle">圈结束</text>
+      </g>
+      <!-- 结果 -->
+      <rect class="sn" x="20" y="222" width="344" height="86" rx="9"/>
+      <text class="st st-b st-g" x="40" y="250">规则要点</text>
+      <text class="st" x="40" y="276" font-size="13.5">由<tspan font-weight="700">本圈最后出牌者</tspan>（上家）领出下一圈，</text>
+      <text class="st" x="40" y="297" font-size="13.5">不是回到首出者。牌权归最后压住的人。</text>
+      <rect class="sn-dark" x="384" y="222" width="360" height="86" rx="9"/>
+      <text class="st st-b st-w" x="404" y="250">如果没人压呢？</text>
+      <text class="st" x="404" y="276" font-size="13.5" style="fill:#dcebe1">你直接赢下自己这圈，继续领出——</text>
+      <text class="st" x="404" y="297" font-size="13.5" style="fill:#dcebe1">等于免费再走一手。这是「出完即走」的基础。</text>
+      <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 2 · 一圈牌的生命周期。</b>很多新手以为三家不要就重新轮到自己，错。牌权交给最后压住的人，所以压牌要压得值：赢下一圈，附赠一次领出权。</figcaption>
+  </figure>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>头游不是每圈都赢的人，是手数最少的人；牌权是买路钱，每一手都要问一句值不值。</strong></p>
+  </div>
+
+  <details class="check">
+    <summary>停下来想：你上局大约打了几手？</summary>
+      <div class="ans">如果答不上来，说明你还没建立「手数」概念，第三章就是给这个的。现在只需记住：把牌分几次出完，可以提前算出来，不用等打完。</div>
+  </details>
+</section>
+
+<!-- ═══════════ 第二章 牌型与牌力 ═══════════ -->
+<section class="chapter" id="ch2">
+  <div class="ch-head">
+    <div class="ch-label">第 二 章</div>
+    <h2 class="ch-title">牌型与牌力：牌桌上的货币体系</h2>
+    <p class="ch-thesis">牌型解决的是压缩问题：同样几张牌，用什么型态出，就算几手。牌力分三层，各有各的用途，混着用是浪费。</p>
+  </div>
+
+  <h3>牌型天梯：谁压谁</h3>
+  <p>先看官方规则的完整座次。记住一个总原则：<strong>炸弹之间张数优先，张数相同比点数；基本型之间必须同型才可比。</strong></p>
+
+  <figure class="fig">
+    <div class="ladder">
+      <div class="rung tier-top">
+        <div class="rn">四大天王（四张王）<span class="pwr">天花板</span></div>
+        <div class="rd">两副牌的大王小王凑齐，压一切。因为极难得，一般不该留成一张「纪念品」，用不出去的天花板等于没有。</div>
+      </div>
+      <div class="rung tier-hi">
+        <div class="rn">6 张及以上炸弹<span class="pwr">顺位 2</span></div>
+        <div class="rd">炸弹比大小先看张数：6 张炸连同花顺都压得住。两副牌里 6 炸 7 炸并不罕见，中局记着「谁的炸更大」。</div>
+      </div>
+      <div class="rung tier-hi">
+        <div class="rn">同花顺<span class="pwr">顺位 3</span></div>
+        <div class="rd">五张同花色顺子，压一切 4 张、5 张炸弹；两个同花顺之间比点数。注意：它压不过 6 张以上的炸弹。</div>
+      </div>
+      <div class="rung">
+        <div class="rn">5 张炸弹</div>
+        <div class="rd">五张同点。张数就是正义：5 炸 &gt; 任何 4 炸。</div>
+      </div>
+      <div class="rung">
+        <div class="rn">4 张炸弹</div>
+        <div class="rd">最小的炸。同是 4 炸比点数，<b>级牌炸弹最大</b>（级牌点数高于 A）。</div>
+      </div>
+      <div class="rung">
+        <div class="rn">七种基本型</div>
+        <div class="rd">单张、对子、三同张、三带二（民间叫「夯」）、顺子（固定 5 张）、三连对（木板）、三同连张（钢板，如 333444）。同型比点数，异型互不相干。</div>
+      </div>
+    </div>
+    <figcaption><b>图 3 · 牌型天梯（官方序）。</b>天王炸 &gt; 6 张以上炸弹 &gt; 同花顺 &gt; 5 炸 &gt; 4 炸 &gt; 七种基本型。民间玩法偶有「6 炸不压同花顺」等变体，开局问一句「同花顺压不压多炸」。</figcaption>
+  </figure>
+
+  <h3>级牌：8 张「准大王」</h3>
+  <p>当前级别的牌就是级牌（打 2 时所有 2），两副共 8 张，大小排在 A 之上、小王之下。级牌的三件事必须门儿清：</p>
+  <ol class="steps">
+    <li><span class="stt">它是单张里的大牌</span><div class="stx">单张对比：级牌压 A。打 2 时，单张「2」是全场第四大的牌（仅次于大王、小王）。</div></li>
+    <li><span class="stt">它能按自身点数进结构</span><div class="stx">级牌可以进顺子、三连对、钢板——而且占的是「比 A 还大」的那个位置。打 2 时 J·Q·K·A·2 是合法顺子，且是最大顺子。</div></li>
+    <li><span class="stt">红桃级牌是逢人配</span><div class="stx">红桃花色的级牌是万能配牌，见下。</div></li>
+  </ol>
+
+  <div class="rulebox">
+    <span class="blabel">逢人配（红桃级牌）· 用法与身价</span>
+    <p>官方规则：红桃级牌可以替代任意牌张（大小王除外）参与组合牌型——顺子、连对、钢板、三带二都可以；按总局规则它<em>也可以参与炸弹</em>（部分平台和地方玩法禁止，以约定为准）。注意两点：它不能替代王；单独打出时它只是一张普通级牌，没有任何万能效果。</p>
+    <p><strong>身价排序（从高到低）：</strong>① 补长顺、补钢板这类能明显减手数的结构；② 造同花顺；③ 按约定进炸弹凑张数；④ 实在没去处，才当普通级牌单出。反过来，为了配一张牌拆掉现成结构，多数时候是亏的。</p>
+  </div>
+
+  <h3>牌力三层：节点、结构、牌路</h3>
+  <p>「牌好」是个废词。高手的起手评估把牌力拆成三层，各干各的活：</p>
+  <div class="cheat" style="grid-template-columns:repeat(3,1fr)">
+    <div class="c-box">
+      <h5>节点牌</h5>
+      <p>大王、级牌、A 这类单张大点。用途：<b>拿回牌权</b>。单张控制权是中局的硬通货，双王拆开用比绑成王对更灵活（四张王另说）。</p>
+    </div>
+    <div class="c-box">
+      <h5>结构牌</h5>
+      <p>炸弹、同花顺、王对。用途：<b>翻转节奏</b>。它们不用于日常接牌，是关键时刻的「换牌权」武器——平时藏着，出手就要连本带利收回来。</p>
+    </div>
+    <div class="c-box">
+      <h5>牌路牌</h5>
+      <p>顺子、连对、钢板里的中小牌。用途：<b>走量</b>。它们几乎没有压制力，价值全在「一次走一大把」。小牌的唯一出路是抱团。</p>
+    </div>
+  </div>
+
+  <div class="warn">
+    <span class="blabel">两个新手盲区</span>
+    <p><strong>① 把王对当宝。</strong>大小王凑一对确实是一手牌，但拆开当两个单张节点，往往比一个对子值钱：能在两圈里各赢一次。只有凑齐四王（或确定要走王对冲刺）才考虑绑死。</p>
+    <p><strong>② 小牌单张死囤。</strong>「顺子对子是优势，单张和夯是弱势」。单张小牌走不脱也防不住，留着手数最亏。两个以上的小单张要在中局主动处理掉（出单、垫进结构都行），别留到残局变成对手的口粮。</p>
+  </div>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>组牌就是压缩手数：能成顺的单张不单出，能进结构的对子不拆散；级牌压 A 别忘，红桃级牌是橡皮泥，用在刀刃上。</strong></p>
+  </div>
+</section>
+<!-- ═══════════ 第三章 起手30秒 ═══════════ -->
+<section class="chapter" id="ch3">
+  <div class="ch-head">
+    <div class="ch-label">第 三 章</div>
+    <h2 class="ch-title">起手 30 秒：评估手牌，定下角色</h2>
+    <p class="ch-thesis">拿到牌先干什么？高手的顺序是固定的：组牌、数手数、找牌路、定角色。30 秒做完，这局的打法就已经确定了七成。</p>
+  </div>
+
+  <h3>第一步：组牌——用压缩率思考</h3>
+  <p>组牌只有一个目标：<em>减手数</em>。下面这手 17 张的牌（打 2，红桃 2 是逢人配），用三种组法走一遍，你就能看见「组牌」到底值多少钱：</p>
+
+  <figure class="fig">
+    <div class="hand" style="gap:4px">
+      <div class="pc sm joker blk"><span class="r">大王</span><span class="s">★</span></div>
+      <div class="pc sm joker red"><span class="r">小王</span><span class="s">★</span></div>
+      <div class="pc sm red wild"><span class="r">2</span><span class="s">♥</span></div>
+      <div class="pc sm blk"><span class="r">2</span><span class="s">♠</span></div>
+      <div class="pc sm red"><span class="r">A</span><span class="s">♥</span></div>
+      <div class="pc sm blk"><span class="r">A</span><span class="s">♠</span></div>
+      <div class="pc sm blk"><span class="r">K</span><span class="s">♠</span></div>
+      <div class="pc sm red"><span class="r">Q</span><span class="s">♥</span></div>
+      <div class="pc sm blk"><span class="r">J</span><span class="s">♠</span></div>
+      <div class="pc sm red"><span class="r">10</span><span class="s">♦</span></div>
+      <div class="pc sm blk"><span class="r">10</span><span class="s">♣</span></div>
+      <div class="pc sm red"><span class="r">9</span><span class="s">♥</span></div>
+      <div class="pc sm blk"><span class="r">8</span><span class="s">♠</span></div>
+      <div class="pc sm red"><span class="r">7</span><span class="s">♥</span></div>
+      <div class="pc sm red"><span class="r">7</span><span class="s">♦</span></div>
+      <div class="pc sm blk"><span class="r">6</span><span class="s">♣</span></div>
+      <div class="pc sm blk"><span class="r">5</span><span class="s">♠</span></div>
+    </div>
+    <p class="handlab">你的 17 张（示例截取自一手 27 张的核心部分）</p>
+
+    <div class="vs" style="margin-top:18px">
+      <div class="col lose">
+        <div class="ct">组法 A · 新手直觉 <span class="badge red">14 手</span></div>
+        <p>大王、小王、红桃 2、黑桃 2 各出各的；凑出对 A、对 10、对 7；剩下 K、Q、J、9、8、6、5 七张散单。</p>
+        <p>没有顺子、没有王对、逢人配裸奔——<b>每张牌都在，但什么都没发生。</b></p>
+      </div>
+      <div class="col win">
+        <div class="ct">组法 B · 会找顺子 <span class="badge">8 手</span></div>
+        <div class="hand">
+          <div class="pc sm blk"><span class="r">6</span><span class="s">♣</span></div><div class="pc sm red"><span class="r">7</span><span class="s">♥</span></div><div class="pc sm blk"><span class="r">8</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">9</span><span class="s">♥</span></div><div class="pc sm red"><span class="r">10</span><span class="s">♦</span></div>
+        </div>
+        <div class="hand">
+          <div class="pc sm blk"><span class="r">10</span><span class="s">♣</span></div><div class="pc sm blk"><span class="r">J</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">Q</span><span class="s">♥</span></div><div class="pc sm blk"><span class="r">K</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">A</span><span class="s">♥</span></div>
+        </div>
+        <div class="hand">
+          <div class="pc sm joker blk"><span class="r">大王</span><span class="s">★</span></div><div class="pc sm joker red"><span class="r">小王</span><span class="s">★</span></div>
+        </div>
+        <p>两条顺子 + 王对，吃掉 12 张；剩红桃 2、2、A、7、5 五个散单。</p>
+        <p><b>同样的牌，少打 6 手。</b>这一步不需要任何牺牲，只是「看见了」。</p>
+      </div>
+    </div>
+
+    <div class="vs">
+      <div class="col win">
+        <div class="ct">组法 C · 级牌进顺 + 逢人配补结构 <span class="badge">6 手</span></div>
+        <div class="hand">
+          <div class="pc sm blk"><span class="r">J</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">Q</span><span class="s">♥</span></div><div class="pc sm blk"><span class="r">K</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">A</span><span class="s">♥</span></div><div class="pc sm blk pick"><span class="r">2</span><span class="s">♠</span></div>
+        </div>
+        <p class="handlab">J·Q·K·A·<b>2</b>：级牌按自身点数占顺子最高位（第二章讲过）</p>
+        <div class="hand">
+          <div class="pc sm blk"><span class="r">5</span><span class="s">♠</span></div><div class="pc sm blk"><span class="r">6</span><span class="s">♣</span></div><div class="pc sm red"><span class="r">7</span><span class="s">♥</span></div><div class="pc sm blk"><span class="r">8</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">9</span><span class="s">♥</span></div>
+        </div>
+        <div class="hand">
+          <div class="pc sm joker blk"><span class="r">大王</span><span class="s">★</span></div><div class="pc sm joker red"><span class="r">小王</span><span class="s">★</span></div>
+          <div class="pc sm red"><span class="r">A</span><span class="s">♥</span></div><div class="pc sm blk"><span class="r">A</span><span class="s">♠</span></div>
+          <div class="pc sm red"><span class="r">10</span><span class="s">♦</span></div><div class="pc sm blk"><span class="r">10</span><span class="s">♣</span></div>
+        </div>
+        <div class="hand">
+          <div class="pc sm red wild"><span class="r">2</span><span class="s">♥</span></div><div class="pc sm red"><span class="r">7</span><span class="s">♥</span></div>
+        </div>
+        <p class="handlab">王对 · 对 A · 对 10 · 对 7（红桃 2 补成对 7）</p>
+        <p>散单只剩一个 A。<b>14 手的路，走成了 6 手。</b></p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--ink-soft)">三步各省在哪</div>
+        <p><b>A → B（−6）：</b>看见两条顺子，散单抱团；双王从两个单张并成一手王对。</p>
+        <p><b>B → C（−2）：</b>① 让级牌 2 进顺子占最高位，把 J·Q·K·A 用到头，黑桃 2 不再单飞；② 逢人配不当裸牌，补成对 7。</p>
+        <p><b>6 手基本到头了。</b>再抠就是抠「质量」：哪手先出、哪手回收，那是第四章的事。</p>
+      </div>
+    </div>
+    <figcaption><b>图 4 · 手数三部曲。</b>牌面完全相同，路程差了一倍多。起手组牌图的就是把 27 张压到尽量少的手，跟大牌没关系。这张图值得记住。</figcaption>
+  </figure>
+
+  <h3>第二步：拆牌判据——什么时候该拆</h3>
+  <p>组牌一定会遇到取舍：拆一对去补一条顺，值不值？判据只有一条：</p>
+  <div class="key">
+    <span class="blabel">拆牌判据</span>
+    <p><strong>拆东补西，只有当净手数减少、或牌质明显提高（多出一条大牌路 / 造出炸弹）时才拆。</strong>数一遍拆前拆后的手数，答案就在纸上。</p>
+    <p>两个红线：① 三个三同张绝不能拆走一张——一张三飞了，剩下两张各成散单，一手变三手；② 组「差一张的小顺」要冷静：顺子是最容易被中途抽断的结构，为它拆掉能日常使用的对子，经常亏。</p>
+  </div>
+
+  <h3>第三步：定角色——主攻、助攻、埋伏</h3>
+  <p>手数数完，看一眼三个判据，你的角色就定了。定下的角色约束这一局的一举一动：</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 388" role="img" aria-label="角色判定流程图">
+      <rect class="sn-dark" x="250" y="14" width="260" height="44" rx="9"/>
+      <text class="st st-b st-w" x="380" y="42" text-anchor="middle">起手组牌完成，数出手数</text>
+      <line class="sv-line" x1="380" y1="58" x2="380" y2="84" marker-end="url(#ar3)"/>
+      <!-- 三个判据 -->
+      <rect class="sn2" x="34" y="90" width="212" height="72" rx="9"/>
+      <text class="st st-b" x="140" y="118" text-anchor="middle">判据一：手数领先吗？</text>
+      <text class="st st-s" x="140" y="142" text-anchor="middle">你的手数 ≤ 对家手数</text>
+      <rect class="sn2" x="274" y="90" width="212" height="72" rx="9"/>
+      <text class="st st-b" x="380" y="118" text-anchor="middle">判据二：手里有炸吗？</text>
+      <text class="st st-s" x="380" y="142" text-anchor="middle">炸弹 / 同花顺 ≥ 1 个</text>
+      <rect class="sn2" x="514" y="90" width="212" height="72" rx="9"/>
+      <text class="st st-b" x="620" y="118" text-anchor="middle">判据三：进手张够吗？</text>
+      <text class="st st-s" x="620" y="142" text-anchor="middle">能赢圈的牌 ≥ 2 张</text>
+      <line class="sv-line" x1="140" y1="162" x2="140" y2="196" marker-end="url(#ar3)"/>
+      <line class="sv-line" x1="380" y1="162" x2="380" y2="196" marker-end="url(#ar3)"/>
+      <line class="sv-line" x1="620" y1="162" x2="620" y2="196" marker-end="url(#ar3)"/>
+      <!-- 三个角色 -->
+      <rect class="sn" x="34" y="202" width="212" height="166" rx="9"/>
+      <text class="st st-b st-g" x="140" y="230" text-anchor="middle">三条全占 → 主攻</text>
+      <text class="st" x="52" y="258" font-size="13">· 走自己设计好的牌路</text>
+      <text class="st" x="52" y="282" font-size="13">· 大胆要牌：让队友喂你的牌型</text>
+      <text class="st" x="52" y="306" font-size="13">· 每手出牌前想「谁给我回手」</text>
+      <text class="st" x="52" y="330" font-size="13">· 炸弹留给自己冲刺的那一圈</text>
+      <rect class="sn" x="274" y="202" width="212" height="166" rx="9"/>
+      <text class="st st-b st-g" x="380" y="230" text-anchor="middle">三条全空、队友更强 → 助攻</text>
+      <text class="st" x="292" y="258" font-size="13">· 心法三个字：坚决、坚决</text>
+      <text class="st" x="292" y="282" font-size="13">· 三件事：送牌、顶牌、让路（第四章）</text>
+      <text class="st" x="292" y="306" font-size="13">· 不抢主攻的节奏和牌权</text>
+      <text class="st" x="292" y="330" font-size="13">· 你的 KPI = 队友的名次</text>
+      <rect class="sn" x="514" y="202" width="212" height="166" rx="9"/>
+      <text class="st st-b st-g" x="620" y="230" text-anchor="middle">中间状态 → 埋伏</text>
+      <text class="st" x="532" y="258" font-size="13">· 先跟打小牌，不表态</text>
+      <text class="st" x="532" y="282" font-size="13">· 观察谁在主攻、谁有炸</text>
+      <text class="st" x="532" y="306" font-size="13">· 中局定型后再选边</text>
+      <text class="st" x="532" y="330" font-size="13">· 唯一禁忌：两头摇摆</text>
+      <text class="st st-s" x="380" y="378" text-anchor="middle">「每把牌都想当头游，是对掼蛋高手最大的讽刺。」主攻是打出来的</text>
+      <defs><marker id="ar3" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 5 · 角色判定。</b>「进手张」指能赢下一圈的牌：大王、级牌、大对、炸弹都算。组完牌有 2 个以上进手张，才撑得起主攻，否则拿了牌权也走不动。</figcaption>
+  </figure>
+
+  <div class="warn">
+    <span class="blabel">新手最常见的角色病</span>
+    <p><strong>助攻手痒抢牌权。</strong>你把队友的主攻节奏打断，他接不到想要的牌型，你们俩一起卡死。助攻照样要干活，只是干在三件具体的事上：队友要单张你送单张、敌方下家要走你顶住、打不过的圈干脆让掉。第八章有完整的配合手册。</p>
+  </div>
+
+  <details class="check">
+    <summary>自检：给你一手牌，30 秒内你能报出手数吗？</summary>
+    <div class="ans">练法：起手后强迫自己默数一遍——「王对一手、顺子两手、对 A 一手……共 9 手」。头 10 局会数得慢，之后会变成直觉。数完手数再抬头看牌桌，你已经领先桌上大半人了。</div>
+  </details>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>先组牌、后数手、再定角色；拆牌先算净手数，助攻坚决不抢戏。</strong></p>
+  </div>
+</section>
+<!-- ═══════════ 第四章 牌权与位置 ═══════════ -->
+<section class="chapter" id="ch4">
+  <div class="ch-head">
+    <div class="ch-label">第 四 章</div>
+    <h2 class="ch-title">牌权与位置：顶、让、送</h2>
+    <p class="ch-thesis">你跟四个座位的关系各不相同：对下家要顶，对上家可让，对对家要送。同一张牌该不该出，先看位置。</p>
+  </div>
+
+  <h3>先搞懂时间差</h3>
+  <p>出牌顺序就是决策顺序。<strong>上家出完牌，就轮到你决策</strong>——你是守门员，他这圈能不能过，你说了算（接或者过）。<strong>你出完牌，下家来决策</strong>——你是出题人，他想要牌权，得先过你这一关。</p>
+  <p>所以：对上家，你永远有后手，他出的小牌不必次次去压，这叫<em>让</em>，省下节点牌留给关键圈。对下家，你不顶他就能白走，所以要<em>顶</em>，尤其他出的小单张（6 以下必顶），一压就把节奏按死。对对家，没有博弈只有配合，一个字：<em>送</em>。</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 470" role="img" aria-label="座位作战图">
+      <!-- 牌桌 -->
+      <rect class="sn2" x="255" y="178" width="190" height="108" rx="14"/>
+      <text class="st st-b" x="350" y="224" text-anchor="middle" fill="#5a645e">牌 桌</text>
+      <text class="st st-s" x="350" y="250" text-anchor="middle">每一圈都是一次牌权竞拍</text>
+      <!-- 上家 -->
+      <rect class="sn" x="48" y="180" width="150" height="104" rx="9"/>
+      <text class="st st-b st-g" x="123" y="206" text-anchor="middle">上家（左）</text>
+      <text class="st st-b" x="123" y="232" text-anchor="middle" font-size="16" fill="#96762f">让</text>
+      <text class="st" x="62" y="256" font-size="12.5">他出小牌不必次次压</text>
+      <text class="st" x="62" y="274" font-size="12.5">省下节点牌等关键圈</text>
+      <!-- 下家 -->
+      <rect class="sn-red" x="502" y="180" width="150" height="104" rx="9"/>
+      <text class="st st-b st-r" x="577" y="206" text-anchor="middle">下家（右）</text>
+      <text class="st st-b" x="577" y="232" text-anchor="middle" font-size="16">顶</text>
+      <text class="st" x="516" y="256" font-size="12.5">小单必顶（6 以下必顶）</text>
+      <text class="st" x="516" y="274" font-size="12.5">不让他白拿牌权</text>
+      <!-- 对家 -->
+      <rect class="sn" x="255" y="28" width="190" height="104" rx="9"/>
+      <text class="st st-b st-g" x="350" y="54" text-anchor="middle">对家 · 队友</text>
+      <text class="st st-b" x="350" y="80" text-anchor="middle" font-size="16" fill="#96762f">送</text>
+      <text class="st" x="270" y="104" font-size="12.5">喂他要的牌型；他接牌权 = 宣告主攻</text>
+      <text class="st" x="270" y="122" font-size="12.5">你让路、补位，不当第二主角</text>
+      <!-- 你 -->
+      <rect class="sn-dark" x="255" y="330" width="190" height="104" rx="9"/>
+      <text class="st st-b st-w" x="350" y="356" text-anchor="middle">你</text>
+      <text class="st" x="270" y="380" font-size="12.5" style="fill:#dcebe1">出牌前问三遍：几手？牌权？帮谁？</text>
+      <text class="st" x="270" y="398" font-size="12.5" style="fill:#dcebe1">你对三个座位，是三种关系</text>
+      <!-- 箭头 -->
+      <line class="sv-line" x1="198" y1="232" x2="249" y2="232" marker-end="url(#ar4)" stroke="#96762f"/>
+      <line class="sv-line" x1="502" y1="232" x2="451" y2="232" marker-end="url(#ar4)" stroke="#b23a30"/>
+      <line class="sv-line" x1="350" y1="132" x2="350" y2="172" marker-end="url(#ar4)" stroke="#96762f"/>
+      <line class="sv-line" x1="350" y1="330" x2="350" y2="292" marker-end="url(#ar4)"/>
+      <text class="st st-s" x="350" y="462" text-anchor="middle">冲刺期例外：谁报牌想头游，矛头就对准谁——位置原则让位于终点原则</text>
+      <defs><marker id="ar4" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 6 · 座位作战图。</b>「上家让、下家顶、对家送」是中局默认设置。让牌省下的是进手张和大牌消耗，顶牌挡住的是下家白走一手的免费路。</figcaption>
+  </figure>
+
+  <h3>接队友的牌：三条正当理由</h3>
+  <p>掼蛋圈公认「轻易不接对家牌」：他压住一圈多半有战术意图，你手痒一接，整条链路就断了。但下面三种情况，接是你的义务：</p>
+  <ol class="steps">
+    <li><span class="stt">他在给你喂牌</span><div class="stx">队友出的是你能稳稳收下的牌型（他特意放的），这是明示「你来主导」。接。</div></li>
+    <li><span class="stt">危急时刻</span><div class="stx">队友被死死压制、或对手即将双下，这圈不接就要出事。接，不惜代价。</div></li>
+    <li><span class="stt">你是主攻，这型正好是你的路</span><div class="stx">队友的牌型就是你设计好的下一手。接，并且记住义务：<b>接完回传他要的牌型</b>。</div></li>
+  </ol>
+  <p>对应地，<strong>队友接了你的牌权之后</strong>，如果他回头给你回传同一种牌型，意思是「继续喂我」——这时候不接没道理，直到他走完或变招。</p>
+
+  <h3>首出语言：第一手就是宣言</h3>
+  <p>起手第一圈出什么，既是技术选择，也是给队友的信号。通行读法：</p>
+  <table class="t">
+    <tr><th style="width:30%">你的首出</th><th>队友读到的信息</th></tr>
+    <tr><td><b>情况不明，对子先行</b></td><td>牌力中性的默认选项：对子进可攻退可守，不暴露底细。不知道出什么时，出对子永远不算大错。</td></tr>
+    <tr><td><b>有王打单张</b></td><td>手里有大王坐镇单张——我敢控场，牌强。队友可以放心喂单。</td></tr>
+    <tr><td><b>无王打一夯</b></td><td>没有单张控制力，就打三带二一次走 5 张，压缩手数、避开单张缠斗。</td></tr>
+    <tr><td>开局迟迟不出牌（组牌慢）</td><td>在理结构：多半有顺子或同花顺要组。队友耐心等，别催。</td></tr>
+  </table>
+
+  <h3>牌路设计：倒数第二大的先出</h3>
+  <p>同一个牌型里有好几手可出时，出哪手？口诀：<em>倒数第二大的先出</em>。比如手里有 4、10、Q 三张散单：</p>
+
+  <figure class="fig">
+    <div class="vs" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="col lose">
+        <div class="ct">✗ 先出 4</div>
+        <div class="hand"><div class="pc red bad"><span class="r">4</span><span class="s">♥</span></div></div>
+        <p>最小的牌去探路，任何人都能白压你一手——白白送出一圈牌权，4 的信息价值是零。</p>
+      </div>
+      <div class="col win">
+        <div class="ct">✓ 先出 10（倒数第二）</div>
+        <div class="hand">
+          <div class="pc red good"><span class="r">10</span><span class="s">♥</span></div>
+          <span style="align-self:center;color:var(--ink-soft)">→</span>
+          <div class="pc blk"><span class="r">Q</span><span class="s">♠</span></div>
+          <span style="align-self:center;color:var(--ink-soft)">→</span>
+          <div class="pc red"><span class="r">4</span><span class="s">♥</span></div>
+        </div>
+        <p>中张探路：被 K、A 压掉不亏（他们花了大牌）；没人压就白走一圈。之后 Q 收圈、4 垫底，攻守都在。</p>
+      </div>
+      <div class="col lose">
+        <div class="ct">✗ 先出 Q</div>
+        <div class="hand">
+          <div class="pc blk bad"><span class="r">Q</span><span class="s">♠</span></div>
+          <span style="align-self:center;color:var(--ink-soft)">→</span>
+          <div class="pc red"><span class="r">10</span><span class="s">♥</span></div>
+          <span style="align-self:center;color:var(--ink-soft)">→</span>
+          <div class="pc red"><span class="r">4</span><span class="s">♥</span></div>
+        </div>
+        <p>大牌过早暴露：Q 被 A 一压，你剩下的 10、4 就再无威慑力。收尾的牌先出完，尾局拿什么控场？</p>
+      </div>
+    </div>
+    <figcaption><b>图 7 · 倒数第二大的先出。</b>原理：中间张「进可收圈、退可试探」，最大的一张留作收尾节点，最小的留给队友接应或垫圈。对子、三张同理。</figcaption>
+  </figure>
+
+  <h3>回手设计：主攻的核心素养</h3>
+  <p>主攻每出一手牌，都要回答「<strong>这手被压了，谁给我回手？</strong>」能赢回一圈的牌叫进手张（大王、级牌、大对、炸弹），起手数出来的进手张就是你的回手预算。预算花完之前，牌路必须已经走完；预算还有富余，才允许提前花在中局缠斗上。</p>
+  <p>一个经典的回手配合：你（主攻）手里有 K 三张和对 Q，缺一手进手。你出一张<b>中张小单</b>，队友若能收到牌权，立刻<b>回传对子</b>，你用对 Q 接，再领出三带 K 走人。两手的路，一手喂牌就盘活了。助攻看见这种信号，要毫不犹豫地成全。</p>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>上家让、下家顶、对家的牌想明白；情况不明对子先行，倒数第二大先出；接队友必回传。</strong></p>
+  </div>
+
+  <details class="check">
+    <summary>自检：上家出了个小对 5，你手里有对 2，压不压？</summary>
+    <div class="ans">默认<b>不压</b>。对 2 是节点牌，留给能兑换头游的圈。三种情况例外：①下家或上家报牌，这圈很关键；②你是主攻且正需要牌权起牌路；③对 2 已确认是全场最大的对（两个 2 你都有，级牌对比之外的对子里封顶）。除此之外，让。</div>
+  </details>
+</section>
+<!-- ═══════════ 第五章 炸弹 ═══════════ -->
+<section class="chapter" id="ch5">
+  <div class="ch-head">
+    <div class="ch-label">第 五 章</div>
+    <h2 class="ch-title">炸弹：节奏武器，不是情绪武器</h2>
+    <p class="ch-thesis">炸弹是一笔钱，买下一圈的绝对牌权。高手炸不炸，只看这笔钱能不能兑换成手数。炸完走不动，等于把存折撕了。</p>
+  </div>
+
+  <h3>炸弹的真实价值</h3>
+  <p>压任何牌型、必赢一圈、附带领出权，这是炸弹仅有的三重价值。<strong>它不能直接得分，必须兑换成手数才有意义。</strong>所以「一个炸弹改变不了局面，两个炸弹才能」：单炸换一圈，双炸连兑才改写节奏。据此，炸与不炸只看两张支票：</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 500" role="img" aria-label="炸弹决策流程图">
+      <rect class="sn-dark" x="250" y="12" width="260" height="44" rx="9"/>
+      <text class="st st-b st-w" x="380" y="40" text-anchor="middle">被压住了，手在炸弹上——先别动</text>
+      <line class="sv-line" x1="380" y1="56" x2="380" y2="82" marker-end="url(#ar5)"/>
+      <rect class="sn" x="150" y="88" width="460" height="46" rx="9"/>
+      <text class="st st-b st-g" x="380" y="117" text-anchor="middle">支票一：不炸的代价是什么？</text>
+      <line class="sv-line" x1="150" y1="134" x2="110" y2="176" marker-end="url(#ar5)"/>
+      <line class="sv-line" x1="295" y1="134" x2="275" y2="176" marker-end="url(#ar5)"/>
+      <line class="sv-line" x1="465" y1="134" x2="485" y2="176" marker-end="url(#ar5)"/>
+      <line class="sv-line" x1="610" y1="134" x2="650" y2="176" marker-end="url(#ar5)"/>
+      <g>
+        <rect class="sn-red" x="14" y="182" width="176" height="92" rx="9"/>
+        <text class="st st-b st-r" x="102" y="208" text-anchor="middle">对手报牌冲刺</text>
+        <text class="st" x="24" y="232" font-size="12.5">他要头游 / 对面要双下</text>
+        <text class="st st-b st-r" x="102" y="260" text-anchor="middle">→ 必炸</text>
+      </g>
+      <g>
+        <rect class="sn" x="202" y="182" width="176" height="92" rx="9"/>
+        <text class="st st-b st-g" x="290" y="208" text-anchor="middle">炸完即收尾</text>
+        <text class="st" x="212" y="232" font-size="12.5">炸后剩牌能连走一两手</text>
+        <text class="st st-b st-g" x="290" y="260" text-anchor="middle">→ 必炸</text>
+      </g>
+      <g>
+        <rect class="sn2" x="390" y="182" width="176" height="92" rx="9"/>
+        <text class="st st-b" x="478" y="208" text-anchor="middle">队友主攻正顺</text>
+        <text class="st" x="400" y="232" font-size="12.5">他的节奏不要乱带</text>
+        <text class="st st-b" x="478" y="260" text-anchor="middle">→ 不炸</text>
+      </g>
+      <g>
+        <rect class="sn2" x="578" y="182" width="168" height="92" rx="9"/>
+        <text class="st st-b" x="662" y="208" text-anchor="middle">只是不爽被压</text>
+        <text class="st" x="588" y="232" font-size="12.5">情绪弹 = 大钱买废纸</text>
+        <text class="st st-b" x="662" y="260" text-anchor="middle">→ 不炸</text>
+      </g>
+      <line class="sv-line" x1="380" y1="274" x2="380" y2="300" marker-end="url(#ar5)"/>
+      <rect class="sn" x="150" y="306" width="460" height="46" rx="9"/>
+      <text class="st st-b st-g" x="380" y="335" text-anchor="middle">支票二：炸完这圈，剩下的牌能连走两手吗？</text>
+      <line class="sv-line" x1="270" y1="352" x2="220" y2="394" marker-end="url(#ar5)"/>
+      <line class="sv-line" x1="490" y1="352" x2="540" y2="394" marker-end="url(#ar5)"/>
+      <rect class="sn" x="110" y="400" width="220" height="78" rx="9"/>
+      <text class="st st-b st-g" x="220" y="426" text-anchor="middle">能 → 组合拳，炸</text>
+      <text class="st" x="126" y="450" font-size="12.5">炸弹买来的牌权立刻变现，</text>
+      <text class="st" x="126" y="468" font-size="12.5">一口气把手数走完</text>
+      <rect class="sn2" x="430" y="400" width="220" height="78" rx="9"/>
+      <text class="st st-b" x="540" y="426" text-anchor="middle">不能 → 缓炸，攒拳</text>
+      <text class="st" x="446" y="450" font-size="12.5">等一个「炸完能走完」的窗口，</text>
+      <text class="st" x="446" y="468" font-size="12.5">炸多而乱的人常打末游</text>
+      <defs><marker id="ar5" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 8 · 炸弹决策流程。</b>两张支票都兑现不了时，再记三条纪律：第二家非逼炸局面先放过；上家逼炸先看队友手里有没有炸（有就让他炸，你留对位资本）；对手剩 4 张时慎炸，他大概率自己也握着炸。</figcaption>
+  </figure>
+
+  <h3>炸后组合拳：牌权要立刻变现</h3>
+  <p>炸弹兑换来的那一圈领出权是全场唯一的「免费窗口」——四家都得看着你出。这个窗口里必须走<em>结构牌</em>，把张数甩出去：</p>
+
+  <figure class="fig">
+    <ol class="steps">
+      <li><span class="stt">炸弹开路</span><div class="stx">压掉当前圈，拿回领出权。窗口开启。</div></li>
+      <li><span class="stt">大牌续攻</span><div class="stx">出大王或级牌再收一圈——对手刚被炸过，心理上还在观望，这两圈最容易走。</div></li>
+      <li><span class="stt">结构甩量</span><div class="stx">长顺、连对、钢板，一把五六张地走。这是整个组合拳的目的。</div></li>
+      <li><span class="stt">报牌冲刺</span><div class="stx">剩两三手时主动报牌（剩 ≤10 张必须声明），用对子收尾——「双贡出单张，头游响当当」。</div></li>
+    </ol>
+    <figcaption><b>图 9 · 炸后组合拳。</b>炸→王→结构→收尾，四拍打完。最忌炸完出一手散单——窗口一关，你比别人少一个炸弹，局势反而更差。</figcaption>
+  </figure>
+
+  <h3>什么时候出炸弹：三个窗口，三笔账</h3>
+  <p>图 8 给了判定流程，这里把「什么时候」说穿。炸弹的价值不是常数：同一颗四炸，在不同时刻能买到三种不同的东西。它随局面变，出不出，先看现在处在哪个窗口——</p>
+  <div class="cheat" style="grid-template-columns:repeat(3,1fr)">
+    <div class="c-box">
+      <h5>早期 · 结构成型前</h5>
+      <p>炸对手甩出的第一把小顺、第一副夯，买的是<strong>他的路</strong>：第二把大顺从此组不齐。适用条件见第九章早炸定理。</p>
+    </div>
+    <div class="c-box">
+      <h5>中局 · 节奏转换点</h5>
+      <p>对手连收两三圈、或队友被压得喘不过气时出手，买的是<strong>节奏</strong>：把牌权抢回来，让全队透一口气。</p>
+    </div>
+    <div class="c-box">
+      <h5>残局 · 兑现窗口</h5>
+      <p>你或队友炸完能连走两手以上时出手，买的是<strong>名次</strong>：头游、二游、双下，全在这一下。</p>
+    </div>
+  </div>
+  <p>三个窗口之外还想炸，先过三问：<strong>炸完我能连走几手？对手还剩几颗炸？这一圈不炸会丢什么？</strong>三问答不上两个，把炸放回兜里。下面三笔账，一笔一笔算给你看。</p>
+
+  <figure class="fig">
+    <p style="font-size:14px;margin:4px 0 10px"><strong>例一 · 兑现弹：大王保头游</strong>（打 2）。前提：三王已现、四副炸全现、两副同花顺也已打出、比 8 更大的三同张也已现尽——这些都数得出来；下家刚报牌剩 5 张。你剩 9 张：</p>
+    <div class="hand">
+      <div class="pc joker blk"><span class="r">大王</span><span class="s">★</span></div>
+      <div class="pc blk"><span class="r">2</span><span class="s">♠</span></div><div class="pc red"><span class="r">2</span><span class="s">♥</span></div>
+      <div class="pc blk"><span class="r">8</span><span class="s">♠</span></div><div class="pc red"><span class="r">8</span><span class="s">♥</span></div><div class="pc blk"><span class="r">8</span><span class="s">♣</span></div>
+      <div class="pc red"><span class="r">5</span><span class="s">♥</span></div><div class="pc red"><span class="r">5</span><span class="s">♦</span></div>
+      <div class="pc blk"><span class="r">3</span><span class="s">♠</span></div>
+    </div>
+    <ol class="steps">
+      <li><span class="stt">下家领出单 K</span><div class="stx">他也在走倒数第二大的路。此刻不压，他下一手结构走完就头游，你最好也就争个二游。</div></li>
+      <li><span class="stt">大王压 K</span><div class="stx">全场再无单张能管你。这是最后的火力，出手即是收网。</div></li>
+      <li><span class="stt">领出 888 → 对 2 → 55 → 3</span><div class="stx">炸与同花顺已尽、大对与更大的三同张已耗，三家只能干看着。出完即走——头游。队友争二游，双下可期。</div></li>
+    </ol>
+    <figcaption><b>图 10 · 兑现弹。</b>一颗大王压住收官权，后面四手全部无敌——这是炸弹能买到的最贵的东西。敢这么炸的底气全在前提：王、炸、同花顺、更大的三同张，四样都数清了。这正是三问里「对手还剩几颗炸」的完整答案：答不清，就没有这手棋。</figcaption>
+  </figure>
+
+  <h4>例二 · 情绪弹的反面：4444 换零手</h4>
+  <div class="vs">
+    <div class="col lose">
+      <div class="ct">✗ 火气上头，当场炸掉</div>
+      <p>局面：上家的对 J 刚压掉队友的对 9，你火气上来了，手里正好有 4444（你剩：4444、对 2、K、10、6、3，共 10 张）。炸！然后领出——领什么？剩 5 手全是散牌加对 2，一手都连不走。单 K 出门就被级牌压回，领出权转头还给对手，对手没动过的那颗炸还盯着你的散牌。一颗四炸，买到的牌权只值一手 K。</p>
+    </div>
+    <div class="col win">
+      <div class="ct">✓ 让过，4444 揣着等窗口</div>
+      <p>对 J 让过，一分力气不费。4444 在兜里就是两张支票：对手谁报牌剩 5，它是拦路的炸；队友冲刺被对手的炸压住，它就是对位的炸。同一颗炸，从情绪武器变回节奏武器，差的只是等一个窗口。</p>
+    </div>
+  </div>
+  <p>这笔账的核算是：<strong>炸完只省一手散牌、牌权没留下，就等于白炸。</strong>例二里的你，炸前 6 手，炸后 5 手，可一次领出权都没兑现成第二手。</p>
+
+  <h4>例三 · 双下弹：一颗炸值一个级差</h4>
+  <p>队友已经头游，你接风领出，二游之争。对手（下家）剩 6 张约两手，他的炸已在前面兑现完，剩牌里既没有大对、也没有大过你 9 和 8 的单张（记牌可知）；你剩 7777、55、9、8，共 8 张。此刻 7777 直接领出，55、9、8 跟上，四手连走，一张都不给对手碰的机会——二游到手，双下，本局升 3 级。</p>
+  <p>要省这颗炸也行：把 7777 拆成两副对子出，你从 4 手变 5 手。这局多半还是你二游，但「多半」在牌桌上不值钱——你为省一颗不知道哪局才用得上的炸，赌掉一个确定的级差。高手的算法很简单：<strong>确定的双下 ＞ 多半的二游 ＞ 省一颗炸。</strong></p>
+
+  <h3>王的用法</h3>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>大王是单张天花板，留给最关键的一圈。</strong>它收下的那一圈，要保证能连走两手以上。</li>
+    <li style="margin:8px 0"><strong>双王默认拆开用。</strong>两个单张节点在两圈里各赢一次，比绑成一手王对灵活；王对只在残局冲刺（对家报双、你送对）时才是首选。</li>
+    <li style="margin:8px 0"><strong>凑齐四张王，别舍不得。</strong>天王炸看着风光，但憋一整局的天花板就是四张废牌。除非结构牌也已齐整、确实有「炸完走完」的组合拳，否则早拆早受益。</li>
+  </ul>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>炸弹是炸的不是藏的；炸完要接组合拳；一个炸弹换一圈，两个炸弹换局势。</strong></p>
+  </div>
+</section>
+
+<!-- ═══════════ 第六章 算牌 ═══════════ -->
+<section class="chapter" id="ch6">
+  <div class="ch-head">
+    <div class="ch-label">第 六 章</div>
+    <h2 class="ch-title">算牌：信息就是牌力</h2>
+    <p class="ch-thesis">你看得见 27 张（自己的）加桌面明牌，其余的靠记和推。每确认一条信息，对手的牌力就缩水一分。记牌不需要好记性，只需要纪律：只记五类关键牌。</p>
+  </div>
+
+  <h3>最小记牌集：五类</h3>
+  <p>不用记全 108 张。高手盘面里常驻的只有五类，一个模拟「记牌盘」长这样：</p>
+
+  <figure class="fig">
+    <table class="t" style="margin-top:4px">
+      <tr><th style="width:22%">记什么</th><th style="width:44%">盘面示例（打 2）</th><th>这条信息怎么用</th></tr>
+      <tr><td><b>① 大小王</b><span class="num">（4 张）</span></td><td>大王已现 1 张、小王已现 2 张 → 剩 1 大 0 小，且那张大王多半在左手第一人手里</td><td>单张收尾的天花板还在不在？我的 A、级牌还能不能封顶？</td></tr>
+      <tr><td><b>② 级牌</b><span class="num">（8 张）</span></td><td>2 已现 5 张，其中红桃 2（逢人配）尚未出现</td><td>红桃 2 没露面 = 顺子、连对里都可能藏着它；级牌炸还有 3 张基数</td></tr>
+      <tr><td><b>③ 我的断张</b></td><td>我一张 J、一张 7 都没有</td><td>断张点数全在别人手里——是炸弹与「最后一手」的高发区（见下图）</td></tr>
+      <tr><td><b>④ 各家报牌</b></td><td>下家剩 11、上家剩 7、对家剩 9（剩 ≤10 必报）</td><td>推各家还剩几手；剩 5 出对、剩 6 出三不带（第七章详表）</td></tr>
+      <tr><td><b>⑤ 已出的炸弹</b></td><td>盘面已现 2 个 4 炸、1 个 5 炸</td><td>估算剩余炸弹在谁那边——决定我自己的炸要不要留作对位</td></tr>
+    </table>
+    <figcaption><b>图 11 · 记牌盘。</b>记不住五类就先记三类：王、级牌、报牌。入门捷径：先保证「记上家的牌」+「多记小牌张」，这两样最便宜，信息量却最大。</figcaption>
+  </figure>
+
+  <h3>断张推理：看不见的牌在说话</h3>
+  <p><strong>断张</strong>就是你一张都没有的点数。它的推理解法是一盘水磨功夫，但每一步都很简单：</p>
+
+  <figure class="fig">
+    <ol class="steps">
+      <li><span class="stt">清点自己的断张</span><div class="stx">你手里一张 3 都没有。两副牌共 8 张 3，全部在场外。</div></li>
+      <li><span class="stt">盘点桌面已现的张数</span><div class="stx">回忆盘面：对 3 出过一副、夯 333 带 44 走过一手、后面又见过对 3 ——累计 7 张。</div></li>
+      <li><span class="stt">锁定缺口</span><div class="stx">8 − 7 = 1：全场只剩最后一张 3，且出过小单 3、此后再没碰 3 的，只有上家。那张 3 大概率在他手里。</div></li>
+      <li><span class="stt">推成打法</span><div class="stx">残局上家报单时，那 1 张多半就是 3 → 你领出比 3 大的任意单张都能镇住他；他若出 3 挣扎，你随手就压。断张从「我不知道」变成了「我盈利」。</div></li>
+    </ol>
+    <figcaption><b>图 12 · 断张推理链。</b>同一套推理还挂着一个警报器：断张点数是炸弹的高发区。你断 5、盘面只见 4 张 5 → 剩 4 张 5 可能整整齐齐在一个人手里，他报牌时你的小炸要掂量。</figcaption>
+  </figure>
+
+  <h3>两条频率排除</h3>
+  <p><strong>同花顺排除：</strong>你已见到两张红桃 8 → 红桃 6-7-8-9-10 的同花顺已不存在，警惕范围缩小。<strong>炸弹排除：</strong>级牌已现 6 张 → 级牌炸弹（至少 4 张）已无可能。桌面信息做减法，对手的手牌越算越薄。</p>
+
+  <h3>读行为：不出牌也是信息</h3>
+  <table class="t">
+    <tr><th style="width:38%">他做了什么</th><th>多半意味着</th></tr>
+    <tr><td>开局迟迟不接牌、不出牌</td><td>在理结构——手里有顺子/同花顺要组</td></tr>
+    <tr><td>起手就出顺子</td><td>后面往往还有一两手顺——他在清小牌</td></tr>
+    <tr><td>中局突然放同花顺</td><td>大牌结构已齐，还留着大炸，他在亮肌肉</td></tr>
+    <tr><td>空放小牌逼你出大牌，你压了他又不跟</td><td>有炸不炸，在等更大的目标——你的大牌慎出手</td></tr>
+    <tr><td><b>三家全都不要</b></td><td>有人在憋一手，专等你这圈结束接风——你白得一次领出，赶紧走最想走的那手；同时提防他下一手的大动作</td></tr>
+  </table>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>记五类：王、级牌、断张、报牌、炸；10 和 5 出得差不多了，顺子基本绝迹；三家不要，白赚一手，想清楚再走。</strong></p>
+  </div>
+</section>
+<!-- ═══════════ 第七章 残局 ═══════════ -->
+<section class="chapter" id="ch7">
+  <div class="ch-head">
+    <div class="ch-label">第 七 章</div>
+    <h2 class="ch-title">残局：倒推、喂牌与防翻盘</h2>
+    <p class="ch-thesis">残局可以清算：每家剩几张、可能是什么结构、下一手谁能走完，全都算得出来。新手输掉的局，一半是在最后十张牌里送出去的。</p>
+  </div>
+
+  <h3>残局第一课：一手牌值四个级</h3>
+  <p>先看一盘真实的残局。打 2，你是助攻。你刚赢下一圈，拿到领出权。四家剩牌如下：</p>
+
+  <figure class="fig">
+    <div class="vs" style="grid-template-columns:repeat(4,1fr)">
+      <div class="col win">
+        <div class="ct" style="color:var(--felt)">你 · 助攻</div>
+        <div class="hand"><div class="pc sm blk pick"><span class="r">2</span><span class="s">♠</span></div><div class="pc sm red pick"><span class="r">2</span><span class="s">♥</span></div></div>
+        <div class="hand"><div class="pc sm blk"><span class="r">5</span><span class="s">♠</span></div><div class="pc sm red"><span class="r">5</span><span class="s">♥</span></div></div>
+        <p style="font-size:12.5px">对 2、对 5，共 4 张。<b>领出权在你。</b></p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--felt)">对家 · 主攻</div>
+        <div class="hand"><div class="pc sm red"><span class="r">A</span><span class="s">♥</span></div><div class="pc sm blk"><span class="r">A</span><span class="s">♠</span></div></div>
+        <p style="font-size:12.5px">报双（剩 2 张）。</p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--red)">上家</div>
+        <div class="hand"><div class="pc sm blk"><span class="r">A</span><span class="s">♣</span></div><div class="pc sm red"><span class="r">6</span><span class="s">♦</span></div><div class="pc sm blk"><span class="r">6</span><span class="s">♣</span></div><div class="pc sm blk"><span class="r">7</span><span class="s">♠</span></div></div>
+        <p style="font-size:12.5px">A、对 6、单 7。</p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--red)">下家</div>
+        <div class="hand"><div class="pc sm red"><span class="r">6</span><span class="s">♥</span></div></div>
+        <p style="font-size:12.5px">报单（剩 1 张 6）。他的 6 是毒药——你领出任何比 6 小的单张，他就头游。</p>
+      </div>
+    </div>
+
+    <div class="vs">
+      <div class="col lose">
+        <div class="ct">✗ 错误线：领出单 5 <span class="badge red">对手升 1 级</span></div>
+        <ol class="steps" style="margin:8px 0 4px">
+          <li><span class="stt">你领 单 5</span><div class="stx">想试探一下。下家等的就是这个：单 6 压上，出完——<b>下家头游</b>。</div></li>
+          <li><span class="stt">局面急转</span><div class="stx">对手拿到头游。你和对家拼命也只是把二游抢回来，本局对手升 1 级。</div></li>
+        </ol>
+      </div>
+      <div class="col win">
+        <div class="ct">✓ 正确线：对 2 开路 <span class="badge">我方升 3 级</span></div>
+        <ol class="steps" style="margin:8px 0 4px">
+          <li><span class="stt">领 对 2</span><div class="stx">级牌对子，全场无敌。下家（单张）跟不了，对家不压你，上家对 6 压不住。剩对 5。</div></li>
+          <li><span class="stt">领 对 5</span><div class="stx">这是你的最后两张——<b>出完即走，哪怕被压你也已经头游</b>。上家对 6 压了你，但你先走了。</div></li>
+          <li><span class="stt">上家领 7，对家单 A 压住</span><div class="stx">对家把手里的对 A 拆开用：先出一张收下这圈，剩一张 A。</div></li>
+          <li><span class="stt">对家领 A，无人压</span><div class="stx">对家二游。<b>头游 + 二游 = 双下</b>，本局我方升 3 级。</div></li>
+        </ol>
+      </div>
+    </div>
+    <figcaption><b>图 13 · 残局推演。</b>同样的四张牌，一手之差，等级摆动四位（对方升 1 级 ↔ 我方升 3 级）。三个教训：①报单的人定义了你的「非法单张」——比他大的单才能领；②「出完即走」：领出最后一手被压，你也已经走了，别不敢走最后一把；③领出前先数自己的手数，两手无敌直线就一口气走完。</figcaption>
+  </figure>
+
+  <h3>张数应对表：他剩几张，你出什么</h3>
+  <p>报牌规则：手中剩 ≤10 张必须声明。听到报牌，你的出牌结构立刻切换：</p>
+  <table class="t">
+    <tr><th style="width:18%">对手剩</th><th style="width:38%">他大概率是什么结构</th><th>你的动作</th></tr>
+    <tr><td class="num"><b>1（报单）</b></td><td>一张单张</td><td>比他小的单张一张都不能领；要领就领镇得住的大单。对子、结构随便走。</td></tr>
+    <tr><td class="num"><b>2（报双）</b></td><td>一对（也可能拆成两张单）</td><td>喂对要喂他收不下的大对；他一旦出对，必须压，防他连走。</td></tr>
+    <tr><td class="num"><b>4</b></td><td><b>很可能是炸弹</b></td><td>不炸他对位（炸五不炸四）：你的炸留着，出结构牌试水，逼他先亮。</td></tr>
+    <tr><td class="num"><b>5</b></td><td>夯、顺子这类核心结构</td><td><b>可炸</b>——炸断他的骨架，他立刻残废。炸五不炸四。</td></tr>
+    <tr><td class="num"><b>6</b></td><td>三带一、连对之类</td><td>出三不带，拆他骨架；不给对子。</td></tr>
+    <tr><td class="num"><b>7–8</b></td><td>顺子或多手散牌</td><td>出顺、出夯走量对冲；慎炸（炸七不炸八）——张数多，炸了也未必拦得住。</td></tr>
+  </table>
+
+  <h3>喂队友：从大到小，要单留对</h3>
+  <p>队友报牌后，你的牌就从「武器」变成「弹药」，配送顺序有讲究：</p>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>队友报双 → 喂对；队友报单 → 喂单。</strong>喂的必须是<em>他收得下</em>的：镇不住全场的大单喂出去等于资敌。</li>
+    <li style="margin:8px 0"><strong>自己留牌配合队友：</strong>队友要单，你就把对子留着自用、单张攒着喂；队友要对，反过来。你的手数结构要和队友的剩牌咬合。</li>
+    <li style="margin:8px 0"><strong>喂牌从大到小：</strong>先喂大牌型的圈，把对手的压制力耗光，最后喂小——顺序反了，队友接不住第一口。</li>
+    <li style="margin:8px 0"><strong>双下冲刺不计成本：</strong>头游已定，二游之争是升 3 级和升 1 级的差别。此时你的炸弹、大牌全部开仓。助攻在这个时刻吝啬，是全队最贵的浪费。</li>
+  </ul>
+
+  <h3>防翻盘：先逼炸，再冲刺</h3>
+  <p>你要冲头游、而对手疑似握炸（断张 + 报牌对得上）时，倒数第二手用大牌逼他出炸：他炸了，你最后一手小牌没人管，照样头游；他不炸，你的大牌直接收尾。这一手假冲刺花的是中张，保的是整局。<strong>顺序千万不能反</strong>：先亮真牌再被炸，等于把头游拱手让人。</p>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>出完即走，被压也算；炸五不炸四，炸七不炸八；剩五出对剩六出三；送队友要送他收得下的牌。</strong></p>
+  </div>
+</section>
+
+<!-- ═══════════ 第八章 队友语言 ═══════════ -->
+<section class="chapter" id="ch8">
+  <div class="ch-head">
+    <div class="ch-label">第 八 章</div>
+    <h2 class="ch-title">队友语言：不出声的沟通</h2>
+    <p class="ch-thesis">牌桌没有聊天频道，但每一次接、让、回传都在说话。默契就是两个人对「正当出牌选择」的理解一致，用不着暗号。</p>
+  </div>
+
+  <h3>信号对照表</h3>
+  <table class="t">
+    <tr><th style="width:32%">他做了什么</th><th style="width:34%">通常在说</th><th>你该做什么</th></tr>
+    <tr><td>首出就压小单张</td><td>「我有王，敢控场」</td><td>大胆喂单，他收得住</td></tr>
+    <tr><td>首发对子、迟迟不出单</td><td>「牌力平平，别指望我」</td><td>降低期待，随时准备转助攻</td></tr>
+    <tr><td>接了你的牌权，回头回传同牌型</td><td>「继续喂我这个型」</td><td>接着送，直到他走完或变招</td></tr>
+    <tr><td>突然接走你的牌权</td><td>「这局我主攻」</td><td>让路 + 补位，不当第二主角</td></tr>
+    <tr><td>出牌明显变慢</td><td>在组同花顺 / 在算炸</td><td>别催，稳住节奏等他成型</td></tr>
+    <tr><td>中局放着敌方小牌不压</td><td>在保节点牌或憋炸</td><td>别替他「着急」乱顶，他有安排</td></tr>
+    <tr><td>死顶下家、放过上家</td><td>「我要冲头游」</td><td>全力控住另两个对手</td></tr>
+    <tr><td>打上家、放下家（炸上家、放过下家）</td><td>「我在给你护航」</td><td>放心主攻，别分他的神</td></tr>
+    <tr><td>报双后你喂对，他不要</td><td>他剩的不是对</td><td>立刻改喂单，别按旧剧本硬塞</td></tr>
+  </table>
+
+  <h3>喂牌手册：把牌送到队友手里</h3>
+  <p>第七章讲的是残局喂法（从大到小、要单留对），这里补全程的送法。喂牌的总纲只有一条：<strong>送队友接得住的牌。</strong>接得住与否，先看张数。</p>
+  <div class="key">
+    <span class="blabel">张数对表（民间流传的投送口诀）</span>
+    <p><strong>队友剩 14 / 9 / 5 张 → 送五张型</strong>（三带二、顺子）。这几个张数恰好拆得开：14 = 5+5+4、9 = 5+4，5 本身就是一手结构——五张型送过去接得上、不卡壳。</p>
+    <p><strong>队友剩 3 / 2 / 1 张 → 按张数送</strong>单、对、单。<strong>其余张数 → 只送单和对。</strong>张数对不上就硬塞大结构，队友接不住，还白送对手一圈截胡。对手剩这些张数时反过来封堵，那就是第七章的张数应对表。</p>
+  </div>
+
+  <figure class="fig">
+    <svg viewBox="0 0 760 330" role="img" aria-label="喂牌的两条通道示意图">
+      <text class="st st-s" x="20" y="24">出牌顺序固定：你 → 下家 → 对家（队友）→ 上家，你的牌永远要先过下家这道闸</text>
+      <rect class="sn-dark" x="20" y="38" width="80" height="34" rx="6"/><text class="st st-b st-w" x="60" y="60" text-anchor="middle">你</text>
+      <line class="sv-line" x1="100" y1="55" x2="132" y2="55" marker-end="url(#ar8)"/>
+      <rect class="sn-red" x="138" y="38" width="104" height="34" rx="6"/><text class="st st-b st-r" x="190" y="60" text-anchor="middle">下家 · 对手</text>
+      <line class="sv-line" x1="242" y1="55" x2="274" y2="55" marker-end="url(#ar8)"/>
+      <rect class="sn" x="280" y="38" width="104" height="34" rx="6"/><text class="st st-b st-g" x="332" y="60" text-anchor="middle">对家 · 队友</text>
+      <line class="sv-line" x1="384" y1="55" x2="416" y2="55" marker-end="url(#ar8)"/>
+      <rect class="sn-red" x="422" y="38" width="104" height="34" rx="6"/><text class="st st-b st-r" x="474" y="60" text-anchor="middle">上家 · 对手</text>
+      <!-- 通道 A -->
+      <text class="st st-b st-g" x="20" y="112">通道 A · 你领出喂牌：牌要过下家这道闸 —— 大先小后</text>
+      <rect x="24" y="128" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="39" y="155" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">J</text>
+      <text class="st st-s" x="62" y="153">先出 J：下家接走要花大单，不接你白走</text>
+      <rect x="300" y="128" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="315" y="155" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">8</text>
+      <text class="st st-s" x="338" y="153">他火力花掉后，8 才安全到队友手里</text>
+      <text class="st st-s" x="20" y="192">手里单 8、单 J：先扔 J 再视情况出 8，顺序反了，两张都半路被截</text>
+      <!-- 通道 B -->
+      <text class="st st-b st-g" x="20" y="232">通道 B · 对家领小牌被上家压：你小跟，别抬梯子</text>
+      <rect x="24" y="248" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="39" y="275" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#b23a30">9</text>
+      <text class="st st-s" x="62" y="273">上家用 9 压住对家的小单</text>
+      <rect x="300" y="248" width="30" height="42" rx="4" fill="#fffdf6" stroke="#bcb7a2"/><text x="315" y="275" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="15" fill="#272d33">10</text>
+      <text class="st st-s" x="338" y="273">你小跟 10（高 1~3 个点）</text>
+      <text class="st st-s" x="20" y="312">对手再压就得花真货；放行，你用一张中张接回牌权——下一手直接喂对家</text>
+      <defs><marker id="ar8" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path class="sv-arr" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+    </svg>
+    <figcaption><b>图 14 · 喂牌的两条通道。</b>通道 A 解决「怎么把牌送过去」：喂牌先出下家难受的那张，用大张开路、小张到家。通道 B 解决「接不接、怎么接」：对家的小牌被压，宁跟三不跟四——小跟 1~3 个点，要么白走一手，要么用中张接回牌权；千万别拿 A、王去硬抬，烧掉节点牌还把单张梯子抬到队友够不着的高度。两条合起来，就是「上家让、下家顶、对家送」里「送」的全部几何学。</figcaption>
+  </figure>
+
+  <h4>喂什么型：三个口径</h4>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>他展示过什么，就送什么。</strong>对家打过对子→送对；对家首出小单（说明有王）→送单。他亮过的牌型就是他的订单。</li>
+    <li style="margin:8px 0"><strong>张数对不上，别送大结构。</strong>三带二、双飞、长顺这些五张型，只有张数对表对得上时才送（见上方 key 框），否则就是给对手递刀。</li>
+    <li style="margin:8px 0"><strong>残局喂之前先「打明」。</strong>你剩一条顺加一张单，先出顺子、把单张留到最后——队友一眼就知道该送单，不用猜。</li>
+  </ul>
+
+  <h4>垫牌四则</h4>
+  <p>队友主攻、你跟不了只能垫的时候，垫牌本身就是半个喂牌动作：</p>
+  <ol class="steps">
+    <li><span class="stt">不接 ≠ 不垫</span><div class="stx">接是抢牌权，垫是顺牌，两回事。垫牌照垫，唯一前提是不挡对家的路。</div></li>
+    <li><span class="stt">小对别顺手套掉</span><div class="stx">队友在对子路上时，你手里的小对是以后的喂牌弹药，现在套掉就没了。</div></li>
+    <li><span class="stt">跟小不跟大</span><div class="stx">队友出小对，你只跟自己的小对。大对收着，那是关键圈的进手张。</div></li>
+    <li><span class="stt">垫枪即逼炸</span><div class="stx">手里多出的小炸，垫出去清牌兼逼对手表态，一举两得。</div></li>
+  </ol>
+
+  <h4>喂还是冲：两把尺子</h4>
+  <p>自己也快走完时，喂牌和自走开始打架，按两把尺子判：</p>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>让牌定律：</strong>队友明显更快，就让。该让不让，两头落空——你堵了他的路，自己的路又不够短。</li>
+    <li style="margin:8px 0"><strong>八成把握：</strong>接队友回头的牌，八成以上把握走完才接；接不住就继续喂，把手数优势留在队里。</li>
+  </ul>
+  <p>参照系是统计数字：头游平均 9.6 手走完，二游 10.6 手。起手数完两边手数（第三章），你的手数不占优，喂就是最优解。冲不动的时候还有第三条路：<strong>保平争胜</strong>——放一个对手先走，合队友之力抓另一个，输 1 分好过输 3 分。</p>
+
+  <figure class="fig">
+    <p style="font-size:14px;margin:4px 0 10px"><strong>投怀送抱：用不要的型，换要的型。</strong>你是助攻，剩 7 张：</p>
+    <div class="hand">
+      <div class="pc blk"><span class="r">3</span><span class="s">♠</span></div><div class="pc red"><span class="r">3</span><span class="s">♥</span></div><div class="pc blk"><span class="r">3</span><span class="s">♣</span></div>
+      <div class="pc red"><span class="r">5</span><span class="s">♥</span></div><div class="pc red"><span class="r">5</span><span class="s">♦</span></div>
+      <div class="pc blk"><span class="r">7</span><span class="s">♠</span></div><div class="pc blk"><span class="r">7</span><span class="s">♣</span></div>
+    </div>
+    <p class="handlab">全场最小的三同张 333，加两副小对。手里全是「喂牌弹药」，缺的是把对子送出去的通道。</p>
+    <ol class="steps">
+      <li><span class="stt">主动打出 333</span><div class="stx">三不带不是你要的型，主动送出去。这手几乎没人跟你抢小，被压了也不心疼。</div></li>
+      <li><span class="stt">两条路都通向对子主导权</span><div class="stx">没人压 333，你继续领出——直接领对子喂队友；被对手压走，他领牌后一旦出对子（你剩的全是对，顺接成本最低），你随手就接回来。</div></li>
+      <li><span class="stt">对子权到手，开喂</span><div class="stx">按张数对表和收官时的从大到小顺序送。对手偏不出对子也不亏：小对留作尾牌，等队友的送圈，别拆。你弃的是一手 3，换的是整条对子通道。</div></li>
+    </ol>
+    <figcaption><b>图 15 · 投怀送抱。</b>喂牌不畅时，别死等队友要的型落到你手里——主动把自己不要的型送出去，把牌局引到你要的牌型上。「敌人不要的都是我们喜欢的」反过来读，就是这句话。</figcaption>
+  </figure>
+
+  <h3>配合的四个崩盘现场</h3>
+  <table class="t">
+    <tr><th style="width:14%">现场</th><th style="width:38%">症状</th><th>正解</th></tr>
+    <tr><td><b>互相等</b></td><td>两人都放小牌，谁也不冲，头游白白落空</td><td>弱牌方坚决转助攻，炸弹留着送友走——两人都要脸，就是双输</td></tr>
+    <tr><td><b>抢一路</b></td><td>助攻中途接权变主攻，原主攻还在压，两人平行出牌露出空当</td><td>最新的信息视为更准确：原主攻立刻让位。一冲一守，永远</td></tr>
+    <tr><td><b>挡路</b></td><td>跟牌比被压方高出一大截，对家回收空间被堵死</td><td>宁跟三不跟四（图 14 通道 B）；「妨碍对家不急套，配合对家绝不套」</td></tr>
+    <tr><td><b>双弱牌</b></td><td>两人手数都长，硬冲必被双下</td><td>组大炸残局反打，或集中抓一家、放走另一家保小分</td></tr>
+  </table>
+  <p>崩盘现场还有一个通用纠错开关：<strong>对家连续放过两种牌型，他的需求就锁定了</strong>——果断开炸夺权，把他要的那型送过去。等他来适应你，不如你去适配他。</p>
+
+  <div class="key">
+    <span class="blabel">头游的遗产（双下冲刺专用）</span>
+    <p><strong>最后一手打大。</strong>走完前的最后一手用你最大的牌出。对手接不住，接风权归队友，他自由领出冲二游——头游走人前能给的最后一样东西，就是队友的领出权。</p>
+    <p><strong>空枪原则。</strong>别急着空手走人。太早头游等于把队友留在敌方两人包围里；哪怕多留一手威慑牌护送到二游，团队收益也更高。</p>
+    <p><strong>谁守谁冲，中局可换。</strong>第三章起手判的是静态角色，中局按实际战况重判：最有希望头游的那位专心冲，最走不动的那位留下来搏斗——顶牌、喂牌、留炸弹送人，全是他的活。</p>
+  </div>
+
+  <h3>固定搭档要约定的三件事</h3>
+  <ol class="steps">
+    <li><span class="stt">还贡习惯</span><div class="stx">收贡后还什么：给搭档还 5 以下小单（他好用），给对手还 5 以上的非单张结构（扎手）。开打前说一遍，一局省很多误会。</div></li>
+    <li><span class="stt">首出口径</span><div class="stx">统一按第四章的读法：小单=牌强、对子=中性、有王打单无王打夯。两人读法一致，第一手就完成情报交换。</div></li>
+    <li><span class="stt">残局喂牌方向</span><div class="stx">约定「报单喂单、报双喂对、从大到小」，以及谁主攻谁喂——残局最忌两个人同时客气。</div></li>
+  </ol>
+
+  <div class="warn">
+    <span class="blabel">两个边界，先说清楚</span>
+    <p><strong>① 默契的边界是「正当出牌」。</strong>上面所有信号都是出牌选择本身携带的信息，任何人看到同样的牌面都能读出同样的含义，这是技术。至于网上流传的「垫牌数字密码」之类暗号，是营销号编的；正式比赛里用密语串通更是违规。</p>
+    <p><strong>② 改变牌型只有三个正当理由。</strong>和同伴保持同一牌型是基本原则，只有三种情况可以变：同伴要的、要争头游、逼对方炸。除此之外的「灵感发挥」，都是在浪费队友的判断成本。</p>
+  </div>
+
+  <details class="check">
+    <summary>自检：队友接了你的牌权又回传对子，你手里一对 4、一对 K，送哪对？</summary>
+      <div class="ans">先送 <b>对 4</b>。他回传对子说明正在走对子路，你先用小的探——对手若压，K 对还在你手里当进手张；对手若不压，他白走一手，你的对 K 留着收尾。「喂牌从大到小」的反面就是「自留从大到小」。（和第七章的「从大到小」不矛盾：那是队友报牌后的收官喂法，喂的牌要顶住拦截；这里是中局走牌，队友在帮你压阵，小对先走正合适。）</div>
+  </details>
+</section>
+<!-- ═══════════ 第九章 实战技巧 ═══════════ -->
+<section class="chapter" id="ch9">
+  <div class="ch-head">
+    <div class="ch-label">第 九 章</div>
+    <h2 class="ch-title">实战技巧 · 场景手册</h2>
+    <p class="ch-thesis">前八章给原则，这一章给场景。每个场景都是牌桌上真实会卡住你的两难：局面摆出来，错路和正路各走一遍，最后落成一句可执行的话。</p>
+  </div>
+
+  <p>场景手册的正确用法：别顺着读结论，先把局面遮住，自己出一遍牌，再对答案。错了才记得住。本章牌例改写自公开的民间牌手实战分享，机制全部按第一章的规则口径复核过。</p>
+
+  <h3><span class="h3no">9.1</span>中局三例</h3>
+
+  <figure class="fig">
+    <div class="vs" style="grid-template-columns:repeat(3,1fr)">
+      <div class="col win">
+        <div class="ct" style="color:var(--felt)">你 · 助攻</div>
+        <div class="hand"><div class="pc sm red"><span class="r">8</span><span class="s">♥</span></div><div class="pc sm red"><span class="r">8</span><span class="s">♦</span></div><div class="pc sm blk"><span class="r">6</span><span class="s">♠</span></div><div class="pc sm blk"><span class="r">6</span><span class="s">♣</span></div><div class="pc sm red"><span class="r">3</span><span class="s">♥</span></div><div class="pc sm red"><span class="r">3</span><span class="s">♦</span></div></div>
+        <p style="font-size:12.5px">两副中对、一副小对，领出权在你。</p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--felt)">对家 · 主攻</div>
+        <div class="hand"><div class="pc sm red"><span class="r">5</span><span class="s">♥</span></div><div class="pc sm red"><span class="r">5</span><span class="s">♦</span></div></div>
+        <p style="font-size:12.5px">报双，剩一对 5，等一个能走的机会。</p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--red)">下家</div>
+        <div class="hand"><div class="pc sm back"></div><div class="pc sm back"></div><div class="pc sm back"></div><div class="pc sm back"></div></div>
+        <p style="font-size:12.5px">手握一副大对，身后还有一个炸。</p>
+      </div>
+    </div>
+    <ol class="steps">
+      <li><span class="stt">第一手：出对 8</span><div class="stx">比 5 大的中对先上。下家要么放过（你白走一手），要么动用大对——不管哪种，他「封死队友 55」的成本都提前付了。</div></li>
+      <li><span class="stt">第二手：出对 6</span><div class="stx">下家此刻只剩炸能压。为一对 6 开炸，亏到肉疼；不开，你对 6 又走一圈。</div></li>
+      <li><span class="stt">第三手：出对 3</span><div class="stx">这是你的最后两张——出完即走，哪怕被压，你也已经头游。下家火力见底，队友的对 5 随后收官，二游到手。</div></li>
+    </ol>
+    <figcaption><b>图 16 · 送对三部曲。</b>喂队友的本质是钓鱼：用你的对子把对手的封锁牌一张张钓出来。从小喂是白送：对 3 先出去，对手的对子和炸原封不动，正好留着收你队友的 55。前提是上家已无对子。两个分支都是赢：下家逐圈硬压，火力被钓空，你头游加队友二游，双下；下家全程让路，你三对连走出完，同样头游，队友保二游。若他赢圈后改出单张，别急——递对子的机会随后就到，三部曲讲的是递牌顺序，不必连着三圈。</figcaption>
+  </figure>
+
+  <h3>牌例二 · 强牌弱打，弱牌强打</h3>
+  <p>同样是跟一张单牌，强牌和弱牌的正确动作相反，先分清自己在哪个位置：</p>
+  <div class="vs">
+    <div class="col">
+      <div class="ct" style="color:var(--felt)">你是弱牌：拿大牌顶</div>
+      <p>组不成像样结构时，跟单别顺最小的。用单 K、单 A 去顶进上家下家，目标是把他们的级牌、大小王钓出来。你反正走不远，替队友清场就是你这局最大的产出。</p>
+    </div>
+    <div class="col">
+      <div class="ct" style="color:var(--felt)">你是强牌：拿小牌顺</div>
+      <p>结构齐整时，跟单出「跟得上的最小一张」，小牌顺路走掉，大牌全部留作控制权。你的大牌每一张都有正事要干，别浪费在探路上。</p>
+    </div>
+  </div>
+  <div class="warn">
+    <span class="blabel">反面教材</span>
+    <p>手痒拿大王去顶对手一张 4：大王换了张 4，下一圈对手的级牌安然通过。顶牌顶的是信息和火力侦察，跟牌跟的是效率，两件事别混。</p>
+  </div>
+
+  <h3>牌例三 · 封一手，换一路</h3>
+  <p>起手定的主攻路线被对手识破压制，是中局最常卡住的时刻。换挡有个三拍定式：</p>
+  <ol class="steps">
+    <li><span class="stt">先封后换</span><div class="stx">用该牌型里最大的一手封一次。比如对手用夯压着你走，你把最大的夯打出去吃回一圈——换挡的前提是先抢回一次领出权，硬切只会被接着压。</div></li>
+    <li><span class="stt">改打对手「不要」的牌型</span><div class="stx">对手连出对子，说明他大概率缺三同张；你控牌后就该改打夯。他缺什么你出什么，他的牌路就变成给你送牌。</div></li>
+    <li><span class="stt">和队友错开牌路</span><div class="stx">两人挤同一条路等于互相关门。助攻看到队友在对子路上，主动改走顺子或夯，两条路总有一条能走通。</div></li>
+  </ol>
+  <h3><span class="h3no">9.2</span>早炸定理</h3>
+  <p>对手开局甩出第一把小顺子（34567 这种），你手上有炸，别犹豫，直接炸。「有打有收」——能顺手甩小顺的人，手里多半还囤着大顺。第一把就炸，断的是他整条牌路；等他第二把成型再炸，只是多拦了一手。晚炸不如早炸。</p>
+  <div class="key">
+    <span class="blabel">和第五章不矛盾</span>
+    <p>第五章的两张支票管的是「你要不要为牌权炸」，这一条管的是「对手结构成型前拆不拆」。顺子路一旦跑起来，你省下的那颗炸，再也买不回节奏。早炸通常连不走两手，支票二不成立怎么办？这颗炸买的是对手的节奏，也是自己的安全：他第二把顺子永远组不齐，这本身就是收益。</p>
+  </div>
+
+  <h3>骗炸与找炸</h3>
+  <figure class="fig">
+    <div class="vs">
+      <div class="col">
+        <div class="ct" style="color:var(--felt)">例一 · 假冲刺钓炸（打 9，9 为级牌）</div>
+        <p style="font-size:13px;margin:6px 0">你剩 10 张：88833、9999、单 A。</p>
+        <ol class="steps" style="margin:8px 0 4px">
+          <li><span class="stt">出 88833</span><div class="stx">一手整整齐齐的夯，报牌变成 5 张——对手眼里的冲刺嫌疑拉满。</div></li>
+          <li><span class="stt">对手 AAAA 开炸</span><div class="stx">拦冲刺天经地义，他不知道你真正的货在后头。</div></li>
+          <li><span class="stt">你 9999 盖回去</span><div class="stx">级牌炸，正好压住 AAAA。领出单 A 收官——拦人的炸进了垃圾堆，你真正的货一张没伤。</div></li>
+        </ol>
+        <p style="font-size:13px;color:var(--ink-soft)">关键细节：手里捏着大王反而别先出。大王一亮，对手判断你在控场而非冲刺，就会省炸。假冲刺演的是「我快没了」。</p>
+      </div>
+      <div class="col">
+        <div class="ct" style="color:var(--felt)">例二 · 找炸的出牌次序</div>
+        <p style="font-size:13px;margin:6px 0">你炸少牌整，需要对手把炸浪费在无关紧要的圈里。出手次序有讲究：</p>
+        <ol class="steps" style="margin:8px 0 4px">
+          <li><span class="stt">少见的牌型先走</span><div class="stx">钢板、木板、顺子、夯、对子、单张，越少见的越先出。对手攥着炸看不清你的牌路，坐不住。</div></li>
+          <li><span class="stt">家常牌型垫后</span><div class="stx">单张、对子留到对手火力见底之后再走，那是你的安全路。</div></li>
+          <li><span class="stt">忌「先出 3 再用大王收回」</span><div class="stx">单张一出手就失控，你被迫先动唯一的炸——找炸变成了送炸。</div></li>
+        </ol>
+        <p style="font-size:13px;color:var(--ink-soft)">反过来用就是防找炸：单张圈被王反复顶，就是有人在钓你的炸——坐住，别白给。</p>
+      </div>
+    </div>
+    <figcaption><b>图 17 · 骗炸与找炸。</b>例一的前提是你有兑现能力：一颗更大的炸接得住。没有兑现能力的虚张声势叫送。剩 5 张是冲刺嫌疑最大的报牌数，对手的炸最容易在这个时刻被钓出来；例二的次序反过来读，就是防找炸的纪律。</figcaption>
+  </figure>
+
+  <h3>炸弹对位与多炸管理</h3>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>小炸贴身跟。</strong>对手开炸，你的炸只比他大一档，毫不犹豫跟——贴身跟炸是用最便宜的价格买回牌权。</li>
+    <li style="margin:8px 0"><strong>大炸留对位。</strong>中前期别拿大炸去压对手的小四炸。差着一截的大炸是你的对位保险，留给对手真冲刺的那一下。</li>
+    <li style="margin:8px 0"><strong>三枪首开花枪。</strong>手里三个以上炸，先开中等的那副。首枪开小炸拦不住什么，首枪开大炸后面压不住场。</li>
+    <li style="margin:8px 0"><strong>己方接力从小到大。</strong>你和队友的炸按从小到大的顺序出，别两人各攥一颗大炸互相谦让，最后全砸在手里。</li>
+    <li style="margin:8px 0"><strong>两枪抱一。</strong>两炸在手，要么连用（炸完接炸一口气收尾），要么全留着保命。单独一颗用在无关痛痒的圈，等于替对手拆了你的雷。</li>
+  </ul>
+
+  <h3>王的梯次</h3>
+  <p>大小王的单张控制力要按梯次花，别一次全梭：</p>
+  <ol class="steps">
+    <li><span class="stt">探：小王顶大王</span><div class="stx">中盘先用小王去顶对手的大王。小王换大王，怎么算都赚。</div></li>
+    <li><span class="stt">顶：级牌接位</span><div class="stx">对手大王出净，你的级牌升为单张节点，正常接圈。</div></li>
+    <li><span class="stt">盖：大王收网</span><div class="stx">对手拿级牌顶你的小王时，大王压上，把他的节点牌也请出来。</div></li>
+    <li><span class="stt">登基：级牌收官</span><div class="stx">王全出净后，级牌就是单张天花板。收官那一手永远留给它。</div></li>
+  </ol>
+  <p>两个变体：手里一大王两小王时，出单先出大王，两小王绑成对子留着登基；想诱炸就先用大王出单（装作火力见底的假象），想省手数就先用小王。收官阶段数清两大王已出尽，可以直接用小王逼炸定局。</p>
+
+  <h3><span class="h3no">9.3</span>同花顺攻防</h3>
+  <p><strong>憋顺的信号</strong>第二章和第六章讲过一半：开局组牌时间异常长、红桃级牌迟迟不露面。补一条排除法——某个点数见过两张，含该点的同花顺即不存在。</p>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>防守：断他的料。</strong>判断有人憋同花顺后，别再送中小单张和顺子——那是在给他递素材。改出对子、夯这种他难顺走的结构。</li>
+    <li style="margin:8px 0"><strong>不炸杂顺。</strong>上家出的顺子只要不是 10JQKA 封顶，别轻易炸——多半是他理牌时顺出来的杂牌路，炸它换不来关键收益，让对门去接。</li>
+    <li style="margin:8px 0"><strong>进攻：A2345 是暗雷。</strong>最小的同花顺压所有 5 张炸。手里 3345 这类残牌别急着扔，凑出 A2345 就是埋在残局的雷。</li>
+    <li style="margin:8px 0"><strong>自己憋顺要示弱。</strong>前期拿杂顺、连对正常打，别让同花顺的意图露出来；等对手报牌、你确认拦不住时再亮，一发入魂。</li>
+  </ul>
+
+  <h3><span class="h3no">9.4</span>逢人配的实战纪律</h3>
+  <ol class="steps">
+    <li><span class="stt">忌配五头炸</span><div class="stx">四张同点加一张配牌升五头：炸的数量没变，只涨一档大小，一张万能牌就这么烧掉了。同样的配牌去补一条顺子或同花顺，收益高得多。</div></li>
+    <li><span class="stt">首枪不配</span><div class="stx">第一次开炸别用配牌凑数。首枪就把万能牌烧掉，后面所有组合直接死一半。</div></li>
+    <li><span class="stt">不为配顺拆双炸</span><div class="stx">别为了组同花顺拆掉两个四头炸——紧急关头除外。炸的数量永远优先于炸的质量。</div></li>
+    <li><span class="stt">红桃级牌可以首出试探</span><div class="stx">结构齐整（比如两炸加王对）时，首出打红桃级牌单张：它当全场最大单张用，探对手单张控制的虚实，又不动任何组合。这是用最便宜的方式问对手最贵的问题。</div></li>
+  </ol>
+  <h3><span class="h3no">9.5</span>自己剩张首选表</h3>
+  <p>第七章那张表管「对手剩几张你出什么」，这张管「你自己剩几张该出什么」。残局卡壳的一大原因，是把结构出反了顺序：</p>
+  <table class="t">
+    <tr><th style="width:14%">你剩</th><th style="width:26%">首选</th><th style="width:22%">忌出</th><th>为什么</th></tr>
+    <tr><td class="num"><b>9–10 张</b></td><td>三同张（三不带）、对子</td><td>三带对、顺子、单张</td><td>先甩量，结构留到后程，别在开局就把路烧完</td></tr>
+    <tr><td class="num"><b>7–8 张</b></td><td>顺子、木板</td><td>单张</td><td>结构正好还能走两手，这是最后的黄金窗口</td></tr>
+    <tr><td class="num"><b>6 张</b></td><td>三不带、顺子</td><td>对子</td><td>一手走五张，直接把自己送进冲刺位</td></tr>
+    <tr><td class="num"><b>5 张</b></td><td>对子、三不带</td><td>拆成单张、三带对</td><td>报 5 出单等于广播「我卡住了」——对手放心炸你的队友</td></tr>
+    <tr><td class="num"><b>4 张</b></td><td>单张</td><td>小对</td><td>出单张保留「我可能是炸」的威慑，吓住对手不敢轻动</td></tr>
+    <tr><td class="num"><b>3 张</b></td><td>有大单发单，有大对发对</td><td>拆开乱出</td><td>最后一手只求一件事：谁也压不住</td></tr>
+  </table>
+
+  <h3>尾牌原理</h3>
+  <figure class="fig">
+    <p style="font-size:14px;margin:4px 0 10px">单张局收尾，你手里剩两张，领出权在你。设当前打 7，2 是普通小牌：</p>
+    <div class="vs">
+      <div class="col win">
+        <div class="ct">✓ 出 2 留 Q <span class="badge">赢面大</span></div>
+        <div class="hand"><div class="pc sm red"><span class="r">2</span><span class="s">♥</span></div><span style="align-self:center;color:var(--ink-soft)">先出</span><div class="pc sm red pick"><span class="r">Q</span><span class="s">♥</span></div><span style="align-self:center;color:var(--ink-soft)">留作尾牌</span></div>
+        <p>2 是全场几乎最小的牌，对手要么放过，要么花一张比 2 大的牌，怎么出都在替你清大单。等轮到 Q 收官时，场上的大单已经被这一路消耗得七七八八。</p>
+      </div>
+      <div class="col lose">
+        <div class="ct">✗ 先出 Q 留 2 <span class="badge red">输面大</span></div>
+        <div class="hand"><div class="pc sm red bad"><span class="r">Q</span><span class="s">♥</span></div><span style="align-self:center;color:var(--ink-soft)">先出</span><div class="pc sm red"><span class="r">2</span><span class="s">♥</span></div><span style="align-self:center;color:var(--ink-soft)">尾牌</span></div>
+        <p>Q 早早把压制力泄掉。轮到 2 收官时，对手手里随便一张中张都能把你按住。</p>
+      </div>
+    </div>
+    <figcaption><b>图 18 · 尾牌原理。</b>尾牌的任务是「最后一手压住全场」，所以永远留最大的那张；小单先走，还能顺手把对手的大单骗下来。对子局同理：先出小对，留大对收官。</figcaption>
+  </figure>
+
+  <h3>九张当五张打：算杀</h3>
+  <p>对手剩 9 张时，老牌手的算法是「九张当五张打」：九张牌大概率藏着一手五张结构——顺子、夯或同花顺；也可能是一颗炸加散牌，甚至两颗小炸。所以数牌数两条：四王未现，说明他凑不出天王炸；炸的颗数，靠已出的炸弹和断张去推。九张的容量就那么大，一手五张结构加一颗炸已经塞满。你所有领出只做一件事：让他最可能的那手大牌接不上，用单张反复逼，逼到他亲手拆自己的结构。数得清对手的火力上限，你就敢放冲。</p>
+
+  <h3>前顺后倒，倒数逼炸</h3>
+  <p>民间口诀讲得很全：「前面顺着出，最后倒着出；倒数一两手，逼牌逼炸弹。」中盘从小到大顺着走，省的是牌力；收尾前两三手反过来，先甩最大的——这时候甩大牌不为赢圈，为逼炸：对手不炸，你下一手小牌收官；炸了，你队友手里的牌全活了。这和第七章的「防翻盘先逼炸」是同一件事的两面，一个保你，一个保队友。</p>
+
+  <h3><span class="h3no">9.6</span>牌桌上的心理战</h3>
+  <p>出牌之外，人本身也在报牌。五个最常见的信号：</p>
+  <table class="t">
+    <tr><th style="width:44%">他…</th><th>你该读到的</th></tr>
+    <tr><td>组牌时间异常长</td><td>憋结构（长顺、同花顺）——早炸定理的适用前提</td></tr>
+    <tr><td>好牌时谈笑风生，烂牌时叹气皱眉</td><td>表情即报牌。反过来，管住自己的脸</td></tr>
+    <tr><td>出牌前在手里东抽西抽</td><td>单张多、助攻型打法，不是重点防守对象</td></tr>
+    <tr><td>出完牌习惯性把「准备压人的牌」提前抽出来攥着</td><td>无意识通风报信——记住那张牌的点数</td></tr>
+    <tr><td>残局出牌突然变快</td><td>整条收尾路已经想好，进入执行模式，警惕</td></tr>
+  </table>
+  <p><strong>反侦察</strong>就三条：好牌不喜形于色，坏牌不叹气，拆牌打的时候不吭声。把自己藏起来，让对手的判断失去数据源。</p>
+  <p><strong>主动烟幕</strong>有两手：强牌弱打，出牌装犹豫，喊穷骗对手把火力对准队友；弱牌强打，假装沉思然后果断出手，诱对手丢炸。助攻还有一招调虎离山：故意打凶悍的牌型，让对手误判你才是主攻——耗掉他三四个炸，你这局的任务就完成了。</p>
+  <p><strong>分型应对</strong>：性急型（先炸再说、控不住局面）放开打，他替全桌消耗；计划型（后发制人、残局必留炸）别送结构，逼他提前表态。对长期牌友，按性格建一份小档案，比多记十张牌管用。</p>
+  <div class="key">
+    <span class="blabel">连败纪律</span>
+    <p>手气差的时候，把目标降成「打平」：先送走一个对手、保住队友的游次，比赌气翻本现实得多。状态差就下桌——掼蛋不缺下一局，你的判断力缺休息。</p>
+  </div>
+
+  <h3><span class="h3no">9.7</span>上赛场、上线</h3>
+  <ul style="padding-left:22px">
+    <li style="margin:8px 0"><strong>赛场有钟。</strong>正式比赛每副限时 7 分钟，且不得少于时限的三分之二——消极拖延要扣分。组牌、算牌必须练成 30 秒反射，朋友局里「想一分钟再出」的习惯，在赛场就是白送分。</li>
+    <li style="margin:8px 0"><strong>纪律件。</strong>剩 ≤10 张放报牌卡，过牌出 PASS 卡，手机没关机直接扣分。赛场里闲聊摸对手底细这条路是断的，信息只能从出牌本身来。</li>
+    <li style="margin:8px 0"><strong>积分策略。</strong>积分制里双下升 3 级是追分工具：落后方必须搏双下，打法自然凶；领先方转控牌、保级差。朋友局无所谓输赢，积分赛里这就是战略核心。</li>
+    <li style="margin:8px 0"><strong>线上回线下要补课。</strong>平台的记牌器替你记了牌、系统自动报牌、一键理牌——这些便利在线下全部消失。回线下之前，把脑记五类、盯报牌、手动组牌速度各练十局。</li>
+  </ul>
+
+  <div class="tipbox">
+    <span class="blabel">本章口诀</span>
+    <p><strong>强牌弱打，弱牌强打；晚炸不如早炸；剩 5 张是骗炸的黄金数；前面顺着出，最后倒着出；尾牌留最大；对手的性格也是牌。</strong></p>
+  </div>
+</section>
+<!-- ═══════════ 第十章 十坑 ═══════════ -->
+<section class="chapter" id="ch10">
+  <div class="ch-head">
+    <div class="ch-label">第 十 章</div>
+    <h2 class="ch-title">新手村十坑：对号入座，逐个填平</h2>
+    <p class="ch-thesis">教学文章里被反复批评的坏习惯，收敛下来就是十个。每坑三个字段：症状、病根、处方。输了一局回来翻一遍，比打十局长进得快。</p>
+  </div>
+
+  <table class="t">
+    <tr><th style="width:5%">#</th><th style="width:20%">坑</th><th style="width:34%">症状与病根</th><th>处方</th></tr>
+    <tr><td>1</td><td><b>情绪炸</b></td><td>被压一手就掏炸解气。炸完走不动，等于白送对手一个对位优势。</td><td>过图 8 的两张支票：不炸什么代价？炸完能连走两手吗？都答不上来就让。</td></tr>
+    <tr><td>2</td><td><b>乱拆牌</b></td><td>为凑一手拆掉现成结构；三个三同张拆走一张，一手变三手。</td><td>拆前算净手数：减少才拆。三同张、炸弹永不拆散。</td></tr>
+    <tr><td>3</td><td><b>手痒接队友</b></td><td>把「能压」当「该压」，打断主攻节奏。</td><td>三条正当理由（喂牌、危急、自己主攻）之外一律让；接了必回传。</td></tr>
+    <tr><td>4</td><td><b>小单囤到底</b></td><td>几张散单从头留到尾，最后变成对手的口粮。单张小牌是最差的手数。</td><td>「两个小单张，不打不健康」——中局主动出掉或垫进结构。</td></tr>
+    <tr><td>5</td><td><b>顺着大小出</b></td><td>从小打到大按牌理被动出牌，没有路线设计。</td><td>倒数第二大的先出；最大的一张永远留作收尾节点。</td></tr>
+    <tr><td>6</td><td><b>无视报牌</b></td><td>对手报了单、报了双，你还按老剧本出。</td><td>听到报牌即切换张数应对表：剩 5 出对、剩 6 出三不带。</td></tr>
+    <tr><td>7</td><td><b>不记王和级牌</b></td><td>觉得 108 张记不住，干脆一张不记。</td><td>先只记两样：王（4 张）和级牌（8 张）。两局就能养成，信息量占一半。</td></tr>
+    <tr><td>8</td><td><b>上手乱出</b></td><td>好不容易赢一圈，随手出一张无关的牌，牌权白白蒸发。</td><td>上手第一手只有两种合法选择：队友要的牌型，或自己牌路的下一手。</td></tr>
+    <tr><td>9</td><td><b>硬挡</b></td><td>明明挡不住还拿大牌去顶，牌力漏光。「不挡不占」四个字是省出来的胜率。</td><td>挡不住就放：让对手走一圈，你留着的节点牌在关键圈更值钱。</td></tr>
+    <tr><td>10</td><td><b>把把想头游</b></td><td>角色错位：助攻抢主攻的戏，主攻不设计回手，全队一起卡死。</td><td>起手 30 秒定角色，然后坚决执行——「每把都想头游，是对高手最大的讽刺」。</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════ 第十一章 训练计划 ═══════════ -->
+<section class="chapter" id="ch11">
+  <div class="ch-head">
+    <div class="ch-label">第 十 一 章</div>
+    <h2 class="ch-title">出村训练计划：三阶段 + 自测</h2>
+    <p class="ch-thesis">技术只练「大概率事件」。每阶段只抓一个模块，用最少局数把它变成本能，再进下一阶段。这比「多打打」快得多。</p>
+  </div>
+
+  <h3>三阶段训练表</h3>
+  <table class="t">
+    <tr><th style="width:16%">阶段</th><th style="width:30%">只练一件事</th><th style="width:30%">怎么做</th><th>过关标准</th></tr>
+    <tr><td><b>一</b><br><span class="num">第 1–10 局</span></td><td>记牌 + 读张数</td><td>只记王、级牌、各家报牌三样；对手一报牌就默背张数应对表再出牌。其余一切照旧，不苛求。</td><td>一局结束，能说出剩几张王、级牌出过几张。</td></tr>
+    <tr><td><b>二</b><br><span class="num">第 11–30 局</span></td><td>起手 30 秒 + 角色执行</td><td>每局强迫自己完成：组牌→数手数→定角色。定成助攻就坚决助攻，把送牌、顶牌、让路各做满一次。</td><td>起手报得出手数；全局没接过一次不该接的队友。</td></tr>
+    <tr><td><b>三</b><br><span class="num">第 31 局起</span></td><td>炸弹时机 + 残局倒推</td><td>每次炸之前默念两张支票；残局每逢对手报牌，先倒推「他剩的牌能组几手」再出。找固定搭档，把第八章三件事约定下来。</td><td>炸弹每次使用都能说出理由；残局无「非法单张」失误。</td></tr>
+  </table>
+
+  <h3>每局复盘三问（两分钟）</h3>
+  <ol class="steps">
+    <li><span class="stt">这局我几手走完的？和起手数的一致吗？</span><div class="stx">差在哪几手，组牌或拆牌的问题就浮出来了。</div></li>
+    <li><span class="stt">胜负在哪一手转折？</span><div class="stx">那一手你换到了什么、付出了什么——用「牌权货币」的账本重新记一遍。</div></li>
+    <li><span class="stt">有没有一手在帮对手？</span><div class="stx">最扎心也最有用的一问：接错的牌权、喂错的结构、压错的对象，都在答案里。</div></li>
+  </ol>
+
+  <h3>出村考核表</h3>
+  <p>下面八条全部能做到，你就出村了。剩下的提升靠局数和复盘：</p>
+  <div class="cheat" style="grid-template-columns:1fr">
+    <div class="c-box">
+      <ul style="list-style:none;padding-left:2px">
+        <li>☐ 起手 30 秒内说出：手数、角色、进手张</li>
+        <li>☐ 全程知道场上还剩几张王、几张级牌</li>
+        <li>☐ 对手报牌后，你的出牌结构立刻改变</li>
+        <li>☐ 全局没接过一次不该接的队友牌权</li>
+        <li>☐ 炸弹不超过两次，且每次能说出两张支票怎么兑现</li>
+        <li>☐ 残局领出前，倒推过自己和对手的手数</li>
+        <li>☐ 输局能具体指出自己「帮对手」的那一手</li>
+        <li>☐ 队友头游的局里，你至少完成三次有效喂牌</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>最后：出村自测（10 题）</h3>
+  <p>每题一个实战场景，选完立即判分并给解析。8 题以上正确，可以正式出村。</p>
+
+  <div class="quiz" id="quiz">
+    <div class="q-item">
+      <div class="q-no">Q 01</div>
+      <div class="q-t">拿到 27 张牌，高手的第一个动作是？</div>
+      <label class="q-opt"><input type="radio" name="q1">先数有几个炸弹、有没有双王</label>
+      <label class="q-opt"><input type="radio" name="q1">组牌，然后数手数、找牌路</label>
+      <label class="q-opt"><input type="radio" name="q1">看级牌有几张在自己手里</label>
+      <label class="q-opt"><input type="radio" name="q1">想好自己怎么头游</label>
+      <div class="q-exp"><b>答案：组牌，数手数。</b>炸弹只是牌力的一部分，手数才是路程。第三章的 30 秒流程：组牌 → 数手数 → 找牌路 → 定角色。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 02</div>
+      <div class="q-t">上家出了个小对 5，你手里有对 2（级牌对），大多数时候应该？</div>
+      <label class="q-opt"><input type="radio" name="q2">必压，对 2 是最大的对</label>
+      <label class="q-opt"><input type="radio" name="q2">让过，把节点牌留给关键圈</label>
+      <label class="q-opt"><input type="radio" name="q2">拆开王去顶单张</label>
+      <label class="q-opt"><input type="radio" name="q2">看心情</label>
+      <div class="q-exp"><b>答案：让。</b>「上家让」是默认设置，省下的节点牌在能兑换头游的圈更值钱。例外：对手报牌的关键圈、或你主攻正需要这圈牌权。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 03</div>
+      <div class="q-t">下家报牌剩 5 张，你手里有个小炸弹，炸不炸？</div>
+      <label class="q-opt"><input type="radio" name="q3">不炸，留着以后用</label>
+      <label class="q-opt"><input type="radio" name="q3">炸——「炸五不炸四」，剩 5 多是核心结构，炸断他就残</label>
+      <label class="q-opt"><input type="radio" name="q3">等他报单再说</label>
+      <label class="q-opt"><input type="radio" name="q3">先出小对试试</label>
+      <div class="q-exp"><b>答案：炸。</b>张数口诀：炸五不炸四、炸七不炸八。剩 5 张多半是夯或顺子这类骨架，一炸就散；剩 4 张反而要慎炸，他大概率自己也握着炸。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 04</div>
+      <div class="q-t">你领出一张中张单，三家全都不要。最可能说明什么？</div>
+      <label class="q-opt"><input type="radio" name="q4">他们都断张了，别多想</label>
+      <label class="q-opt"><input type="radio" name="q4">有人在憋一手，专等你这圈结束接风</label>
+      <label class="q-opt"><input type="radio" name="q4">你的牌太大没人敢压</label>
+      <label class="q-opt"><input type="radio" name="q4">他们忘了出牌</label>
+      <div class="q-exp"><b>答案：有人憋一手。</b>「三家不要」同时意味着你白得一次领出，赶紧走自己最想走的一手，同时提防他下一手的大动作。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 05</div>
+      <div class="q-t">队友接了你的牌权之后，回头又回传对子给你。他在说？</div>
+      <label class="q-opt"><input type="radio" name="q5">他出错了</label>
+      <label class="q-opt"><input type="radio" name="q5">「继续喂我对子」</label>
+      <label class="q-opt"><input type="radio" name="q5">他在还你人情</label>
+      <label class="q-opt"><input type="radio" name="q5">让你准备头游</label>
+      <div class="q-exp"><b>答案：继续喂对。</b>接牌权后回传同牌型是标准的「要牌」信号，此时不接没道理，直到他走完或主动变招。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 06</div>
+      <div class="q-t">我方拿到头游，队友紧跟拿到二游（对方双下）。这局升几级？</div>
+      <label class="q-opt"><input type="radio" name="q6">1 级</label>
+      <label class="q-opt"><input type="radio" name="q6">2 级</label>
+      <label class="q-opt"><input type="radio" name="q6">3 级</label>
+      <label class="q-opt"><input type="radio" name="q6">直接过 A</label>
+      <div class="q-exp"><b>答案：3 级。</b>头游 + 二游（双下）升 3 级；头游 + 三游升 2 级；头游 + 末游升 1 级。所以头游已定后，全队资源要无保留地保二游。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 07</div>
+      <div class="q-t">下面哪种逢人配（红桃级牌）的用法最亏？</div>
+      <label class="q-opt"><input type="radio" name="q7">补进一条长顺，减两手</label>
+      <label class="q-opt"><input type="radio" name="q7">组同花顺</label>
+      <label class="q-opt"><input type="radio" name="q7">单独当一张普通级牌打出去</label>
+      <label class="q-opt"><input type="radio" name="q7">按桌约进炸弹凑张数</label>
+      <div class="q-exp"><b>答案：单独打出去。</b>逢人配的价值全在「万能」：单出时它就是一张普通级牌，万能属性归零。身价排序：补长顺/钢板 ≥ 组同花顺 &gt; 进炸弹（以约定为准）&gt; 裸出。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 08</div>
+      <div class="q-t">你剩大王、K、5 三张散单，下家报单（剩一张 3，已知）。领出顺序？</div>
+      <label class="q-opt"><input type="radio" name="q8">5 → K → 大王</label>
+      <label class="q-opt"><input type="radio" name="q8">大王 → 5 → K</label>
+      <label class="q-opt"><input type="radio" name="q8">K → 5 → 大王</label>
+      <label class="q-opt"><input type="radio" name="q8">随便，反正他只有 3</label>
+      <div class="q-exp"><b>答案：K → 5 → 大王。</b>倒数第二大的先出：K 探路（被压不亏），5 中场，大王收尾保底。你的单张全部大于 3，他永远接不走，所以你能从容排布。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 09</div>
+      <div class="q-t">对家主攻正顺，你手里只有一个小炸，最合理的使用时机？</div>
+      <label class="q-opt"><input type="radio" name="q9">立刻炸，抢节奏</label>
+      <label class="q-opt"><input type="radio" name="q9">留着，等对手要炸他家或关键圈再对位</label>
+      <label class="q-opt"><input type="radio" name="q9">拆了当对子出</label>
+      <label class="q-opt"><input type="radio" name="q9">永远不炸</label>
+      <div class="q-exp"><b>答案：留着。</b>队友主攻正顺时补炸是乱他节奏；你的炸是「对位资本」，对手对你们冲刺出手的那一刻，才是它的用武之地。</div>
+    </div>
+
+    <div class="q-item">
+      <div class="q-no">Q 10</div>
+      <div class="q-t">哪种情况可以抗贡（免进贡）？</div>
+      <label class="q-opt"><input type="radio" name="q10">手里有一张大王</label>
+      <label class="q-opt"><input type="radio" name="q10">进贡方合计拿到两张大王</label>
+      <label class="q-opt"><input type="radio" name="q10">手里有红桃级牌</label>
+      <label class="q-opt"><input type="radio" name="q10">手里有炸弹</label>
+      <div class="q-exp"><b>答案：进贡方合计两张大王。</b>一人独揽两张、或双贡时两人各一张都算。抗贡后由上游（头游方）先出牌。</div>
+    </div>
+
+    <div id="quiz-score">
+      <span>得分：<span class="sc-big" id="sc-num">0 / 10</span>　<span id="sc-verdict"></span></span>
+      <button type="button" id="sc-reset">重测一遍</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 附录 ═══════════ -->
+<section class="chapter" id="appendix">
+  <div class="ch-head">
+    <div class="ch-label">附 录</div>
+    <h2 class="ch-title">一页速查卡</h2>
+    <p class="ch-thesis">打印这一页放在手边。桌上的瞬间决策，全部浓缩在下面四个格子里。</p>
+  </div>
+
+  <div class="cheat">
+    <div class="c-box">
+      <h5>贯穿三问（每手必问）</h5>
+      <ol>
+        <li>我现在<strong>几手</strong>能走完？</li>
+        <li><strong>牌权</strong>在谁手里、值多少？</li>
+        <li>这一手在<strong>帮谁</strong>？</li>
+      </ol>
+    </div>
+    <div class="c-box">
+      <h5>牌型天梯（官方序）</h5>
+      <ol>
+        <li>四大天王</li>
+        <li>6 张以上炸弹</li>
+        <li>同花顺</li>
+        <li>5 张炸弹</li>
+        <li>4 张炸弹（级牌炸最大）</li>
+        <li>七种基本型：单 / 对 / 三 / 夯 / 顺 / 木板 / 钢板</li>
+      </ol>
+    </div>
+    <div class="c-box">
+      <h5>记牌五类 + 报牌应对</h5>
+      <p>王（4）· 级牌（8）· 断张 · 报牌 · 已出炸</p>
+      <p>剩 4 慎炸 · 剩 5 可炸 · 剩 6 出三不带 · 剩 7–8 出顺夯慎炸 · 报单不送小单 · 报双必压对</p>
+    </div>
+    <div class="c-box">
+      <h5>座位三动作</h5>
+      <p><strong>上家让 · 下家顶（小单必顶）· 对家送</strong></p>
+      <p>接队友仅限三条：喂牌、危急、自己主攻；接了必回传。</p>
+    </div>
+  </div>
+
+  <div class="cheat">
+    <div class="c-box" style="grid-column:1/-1">
+      <h5>口诀十条</h5>
+      <p>① 情况不明，对子先行　② 有王打单张，无王打一夯　③ 上家让、下家顶、对家的牌想明白　④ 倒数第二大的先出　⑤ 顺子对子是优势，单张和夯是弱势　⑥ 两个小单张，不打不健康　⑦ 炸弹是炸的不是藏的，炸完要接组合拳　⑧ 炸五不炸四，炸七不炸八　⑨ 轻易不接对家牌，接了必回传　⑩ 出完即走，被压也算</p>
+    </div>
+  </div>
+
+  <h3>术语表</h3>
+  <div class="glossary">
+    <div><b>头游（上游）</b>：最先出完手中牌的人，所在队伍升级。</div>
+    <div><b>二游 / 三游 / 末游（下游）</b>：按出完顺序的第二、三、四名。</div>
+    <div><b>双下</b>：一方包揽头游 + 二游，对手两人垫底；头游方升 3 级。</div>
+    <div><b>级牌</b>：点数等于当前级别的牌，每局 8 张，大小在 A 之上。</div>
+    <div><b>逢人配</b>：红桃级牌，可代替任意非王牌张参与组合；单出只是普通级牌。</div>
+    <div><b>夯</b>：三带二的民间叫法。</div>
+    <div><b>钢板</b>：两个相邻的三同张（如 333444）。</div>
+    <div><b>木板</b>：三连对（三对以上相邻）。</div>
+    <div><b>进贡 / 还贡</b>：输方向头游方贡手中最大单张（红桃级牌除外）；头游方还一张 ≤10 的牌。双下时两人各贡一张，大者归头游、小者归二游。</div>
+    <div><b>抗贡</b>：进贡方合计抓到两张大王则本轮免贡，由头游方先出牌。</div>
+    <div><b>接风</b>：头游或二游的最后一手无人压时，其搭档承接下一圈领出权（主流为对家接风）。</div>
+    <div><b>报牌</b>：手中剩 ≤10 张时须声明张数；剩 2 张俗称「报双」，剩 1 张俗称「报单」。</div>
+    <div><b>进手张</b>：能赢下一圈的牌（大王、级牌、大对、炸弹），主攻的「回手预算」。</div>
+    <div><b>断张</b>：自己一张都没有的点数；全场该点数的余牌都在别人手里，是炸弹高发区。</div>
+  </div>
+
+  <div class="warn">
+    <span class="blabel">开打前问一句：地方变体</span>
+    <p>这几处规则各地不一，开局前和牌友确认，避免中途扯皮：<strong>① 逢人配能不能进炸弹</strong>（官方规则可以，不少平台禁止）；<strong>② 过 A 条件</strong>（官方：头游且搭档不是末游即可过；民间严格版要求双上）；<strong>③ 接风方式</strong>（主流对家接风，老规则下家接）；<strong>④ 报牌张数</strong>（官方 ≤10 张，南京等地 ≤6 张）。</p>
+  </div>
+
+  <footer>
+    <p>规则事实依据：国家体育总局棋牌运动管理中心《竞技掼蛋竞赛规则（试行）》；技法综合自竞技掼蛋教学文章与牌手经验，已按本书体系重新组织。</p>
+    <p>读完了？下一局开始，只带三个问题上桌：几手？牌权？帮谁。</p>
+  </footer>
+</section>
+
+</main>
+<script>
+(function(){
+  var bar=document.getElementById('progress');
+  function upd(){var h=document.documentElement;var m=h.scrollHeight-h.clientHeight;bar.style.width=(m>0?(h.scrollTop/m*100):0)+'%';}
+  window.addEventListener('scroll',upd,{passive:true});upd();
+
+  var items=Array.prototype.slice.call(document.querySelectorAll('.q-item'));
+  var answers=[1,1,1,1,1,2,2,2,1,1];
+  var scoreBox=document.getElementById('quiz-score');
+  var answered=0,score=0;
+  function verdict(s){
+    if(s>=8)return '出村！剩下的提升靠局数和复盘。';
+    if(s>=5)return '半只脚在村口——回炉答错的对应章节。';
+    return '先回炉第一、三章，再战。';
+  }
+  function refresh(){
+    document.getElementById('sc-num').textContent=score+' / '+items.length;
+    document.getElementById('sc-verdict').textContent=(answered===items.length)?verdict(score):'已答 '+answered+' 题';
+    scoreBox.style.display=answered>0?'flex':'none';
+  }
+  items.forEach(function(item,ix){
+    var opts=Array.prototype.slice.call(item.querySelectorAll('.q-opt'));
+    opts.forEach(function(opt,i){
+      opt.addEventListener('click',function(){
+        if(item.classList.contains('done'))return;
+        item.classList.add('done');
+        answered++;
+        var ok=(i===answers[ix]);
+        if(ok)score++;
+        opt.classList.add(ok?'correct':'wrong');
+        opts[answers[ix]].classList.add('correct');
+        refresh();
+      });
+    });
+  });
+  var reset=document.getElementById('sc-reset');
+  if(reset)reset.addEventListener('click',function(){location.reload();});
+})();
+</script>
+</body>
+</html>

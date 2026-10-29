@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Splitwise 论文深度解读：阶段拆分、双层调度、逐层 KV-cache 传输、负载数据流与集群实验。">
+  <title>Splitwise 深度解读｜把一次推理解体，按阶段重组集群</title>
+  <script>
+    (() => {
+      const root = document.documentElement;
+      let saved = null;
+      try { saved = localStorage.getItem("splitwise-theme"); } catch (error) { saved = null; }
+      const preset = root.dataset.theme;
+      const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      root.dataset.theme = saved === "light" || saved === "dark"
+        ? saved
+        : (preset === "light" || preset === "dark" ? preset : (systemDark ? "dark" : "light"));
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: hsl(210 24% 97%);
+      --surface: hsl(0 0% 100%);
+      --surface-2: hsl(210 20% 94%);
+      --surface-3: hsl(210 18% 90%);
+      --text: hsl(222 29% 14%);
+      --text-soft: hsl(218 16% 29%);
+      --muted: hsl(215 11% 43%);
+      --faint: hsl(215 10% 55%);
+      --line: hsl(214 18% 82%);
+      --line-strong: hsl(214 16% 66%);
+      --topbar: hsl(210 24% 97% / 0.92);
+      --shadow: hsl(222 40% 20% / 0.12);
+      --prompt: hsl(202 84% 38%);
+      --prompt-strong: hsl(202 88% 30%);
+      --prompt-soft: hsl(199 60% 90%);
+      --token: hsl(153 58% 30%);
+      --token-strong: hsl(153 62% 24%);
+      --token-soft: hsl(151 42% 89%);
+      --mixed: hsl(270 46% 45%);
+      --mixed-soft: hsl(270 40% 92%);
+      --accent: hsl(39 88% 39%);
+      --accent-soft: hsl(42 80% 92%);
+      --danger: hsl(5 64% 46%);
+      --danger-soft: hsl(5 60% 93%);
+      --control: hsl(215 12% 48%);
+      --selection: hsl(202 84% 38% / 0.2);
+      --font-display: "DIN Alternate", "Avenir Next Condensed", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-body: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", "Cascadia Code", "Menlo", "Consolas", monospace;
+      --radius: 6px;
+      --content: 1120px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme]) {
+        color-scheme: dark;
+        --bg: hsl(222 19% 10%);
+        --surface: hsl(220 17% 13%);
+        --surface-2: hsl(218 15% 17%);
+        --surface-3: hsl(217 14% 22%);
+        --text: hsl(45 20% 92%);
+        --text-soft: hsl(210 15% 81%);
+        --muted: hsl(215 11% 68%);
+        --faint: hsl(215 10% 54%);
+        --line: hsl(216 13% 27%);
+        --line-strong: hsl(216 12% 40%);
+        --topbar: hsl(222 19% 10% / 0.92);
+        --shadow: hsl(222 60% 3% / 0.34);
+        --prompt: hsl(198 82% 66%);
+        --prompt-strong: hsl(198 88% 74%);
+        --prompt-soft: hsl(201 48% 20%);
+        --token: hsl(151 48% 62%);
+        --token-strong: hsl(151 56% 72%);
+        --token-soft: hsl(153 32% 18%);
+        --mixed: hsl(272 52% 73%);
+        --mixed-soft: hsl(271 28% 22%);
+        --accent: hsl(42 88% 65%);
+        --accent-soft: hsl(40 38% 19%);
+        --danger: hsl(5 72% 68%);
+        --danger-soft: hsl(5 35% 20%);
+        --control: hsl(215 11% 61%);
+        --selection: hsl(198 82% 66% / 0.24);
+      }
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: hsl(222 19% 10%);
+      --surface: hsl(220 17% 13%);
+      --surface-2: hsl(218 15% 17%);
+      --surface-3: hsl(217 14% 22%);
+      --text: hsl(45 20% 92%);
+      --text-soft: hsl(210 15% 81%);
+      --muted: hsl(215 11% 68%);
+      --faint: hsl(215 10% 54%);
+      --line: hsl(216 13% 27%);
+      --line-strong: hsl(216 12% 40%);
+      --topbar: hsl(222 19% 10% / 0.92);
+      --shadow: hsl(222 60% 3% / 0.34);
+      --prompt: hsl(198 82% 66%);
+      --prompt-strong: hsl(198 88% 74%);
+      --prompt-soft: hsl(201 48% 20%);
+      --token: hsl(151 48% 62%);
+      --token-strong: hsl(151 56% 72%);
+      --token-soft: hsl(153 32% 18%);
+      --mixed: hsl(272 52% 73%);
+      --mixed-soft: hsl(271 28% 22%);
+      --accent: hsl(42 88% 65%);
+      --accent-soft: hsl(40 38% 19%);
+      --danger: hsl(5 72% 68%);
+      --danger-soft: hsl(5 35% 20%);
+      --control: hsl(215 11% 61%);
+      --selection: hsl(198 82% 66% / 0.24);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: var(--selection); }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; }
+    a { color: var(--prompt-strong); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { color: var(--prompt); }
+    :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    h1, h2, h3, h4, p, ul, ol, dl, dd, figure { margin: 0; }
+    ul, ol { padding-left: 1.25rem; }
+    li + li { margin-top: 0.45rem; }
+    strong { font-weight: 650; }
+    code, .mono { font-family: var(--font-mono); }
+    svg { display: block; }
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 100;
+      padding: 8px 12px;
+      background: var(--surface);
+      color: var(--text);
+      transform: translateY(-160%);
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid var(--line);
+      background: var(--topbar);
+      backdrop-filter: blur(16px);
+    }
+    .topbar-inner {
+      width: min(1440px, 100%);
+      min-height: 64px;
+      margin: 0 auto;
+      padding: 10px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark { display: flex; gap: 3px; align-items: stretch; height: 24px; }
+    .brand-mark span { display: block; width: 8px; }
+    .brand-mark span:first-child { background: var(--prompt); }
+    .brand-mark span:last-child { background: var(--token); }
+    .brand-copy { display: grid; line-height: 1.15; }
+    .brand-copy strong { font-family: var(--font-display); letter-spacing: 0.08em; font-size: 15px; }
+    .brand-copy small { color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.09em; }
+    .topbar-actions { display: flex; align-items: center; gap: 12px; }
+    .topbar-link { color: var(--muted); font-size: 13px; text-decoration: none; }
+    .theme-toggle {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text-soft);
+      padding: 7px 12px;
+      cursor: pointer;
+    }
+    .theme-toggle:hover { border-color: var(--line-strong); background: var(--surface-2); }
+    .theme-toggle svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+    .theme-icon-sun, :root[data-theme="light"] .theme-icon-moon { display: none; }
+    :root[data-theme="light"] .theme-icon-sun { display: block; }
+
+    .shell {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+      display: grid;
+      grid-template-columns: 184px minmax(0, 1fr);
+      gap: 42px;
+      align-items: start;
+    }
+    .rail { position: sticky; top: 94px; min-width: 0; }
+    .rail-label {
+      color: var(--faint);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .rail-nav { display: grid; gap: 3px; }
+    .rail-nav a {
+      display: grid;
+      grid-template-columns: 25px 1fr;
+      gap: 7px;
+      padding: 7px 8px;
+      border-left: 2px solid transparent;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+    .rail-nav a span:first-child { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+    .rail-nav a:hover { color: var(--text); background: var(--surface-2); }
+    .rail-nav a[aria-current="location"] { color: var(--text); border-left-color: var(--accent); background: var(--surface); }
+    .rail-foot { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 11px; line-height: 1.65; }
+    .content { min-width: 0; max-width: var(--content); }
+    .section { padding: 62px 0; border-top: 1px solid var(--line); }
+    .hero { padding: 28px 0 52px; }
+    .section-head { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 28px; }
+    .section-index { padding-top: 6px; color: var(--accent); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; }
+    .section-kicker { color: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; margin-bottom: 5px; }
+    h2 { font-family: var(--font-display); font-size: clamp(28px, 3vw, 40px); line-height: 1.16; letter-spacing: -0.025em; text-wrap: balance; }
+    h3 { font-family: var(--font-display); font-size: 22px; line-height: 1.3; letter-spacing: -0.012em; text-wrap: balance; }
+    h4 { font-size: 15px; line-height: 1.4; }
+    .section-intro { max-width: 72ch; margin-top: 10px; color: var(--muted); font-size: 16px; }
+    .stack { display: grid; gap: 24px; min-width: 0; }
+    .stack-lg { display: grid; gap: 36px; min-width: 0; }
+    .stack > *, .stack-lg > *, .scenario-module > * { min-width: 0; }
+    .prose { display: grid; gap: 16px; max-width: 74ch; color: var(--text-soft); }
+    .source { color: var(--faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.02em; white-space: nowrap; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+    }
+    .tag-prompt { color: var(--prompt-strong); border-color: var(--prompt); background: var(--prompt-soft); }
+    .tag-token { color: var(--token-strong); border-color: var(--token); background: var(--token-soft); }
+    .tag-mixed { color: var(--mixed); border-color: var(--mixed); background: var(--mixed-soft); }
+    .tag-accent { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+    .engineer { color: var(--accent); font-weight: 650; }
+    .paper-claim { color: var(--prompt-strong); font-weight: 650; }
+
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(330px, 0.9fr); gap: 42px; align-items: center; }
+    .eyebrow { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; margin-bottom: 18px; }
+    .eyebrow::before { content: ""; width: 28px; height: 2px; background: var(--accent); }
+    .hero h1 { display: grid; gap: 10px; }
+    .title-word { font-family: var(--font-display); font-size: clamp(56px, 7vw, 88px); line-height: 0.94; letter-spacing: -0.055em; }
+    .title-cn { max-width: 16ch; font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 46px); line-height: 1.16; letter-spacing: -0.035em; text-wrap: balance; }
+    .thesis { max-width: 62ch; margin-top: 22px; color: var(--text-soft); font-size: 18px; line-height: 1.75; }
+    .thesis strong { color: var(--text); }
+    .paper-meta { margin-top: 20px; display: grid; gap: 8px; color: var(--muted); font-size: 12px; }
+    .paper-authors { max-width: 68ch; }
+    .metadata-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+    .metadata-links a { font-family: var(--font-mono); font-size: 11px; }
+
+    .phase-cutaway { border: 1px solid var(--line-strong); background: var(--surface); box-shadow: 0 20px 50px var(--shadow); }
+    .cutaway-head { display: flex; justify-content: space-between; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--line); color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; }
+    .cutaway-body { padding: 20px; display: grid; gap: 20px; }
+    .request-line { display: grid; grid-template-columns: 1.1fr 30px 1.7fr; align-items: center; gap: 6px; }
+    .request-block { min-height: 62px; display: grid; place-content: center; gap: 3px; text-align: center; border: 1px solid; font-family: var(--font-mono); font-size: 11px; }
+    .request-block strong { font-size: 13px; }
+    .request-prompt { color: var(--prompt-strong); border-color: var(--prompt); background: var(--prompt-soft); }
+    .request-token { color: var(--token-strong); border-color: var(--token); background: var(--token-soft); }
+    .request-arrow { color: var(--accent); font-family: var(--font-mono); text-align: center; }
+    .cutaway-caption { color: var(--faint); font-size: 10px; text-align: right; }
+    .resource-ledger { display: grid; gap: 10px; }
+    .resource-row { display: grid; grid-template-columns: 68px 1fr; gap: 12px; align-items: center; }
+    .resource-row > strong { font-family: var(--font-mono); font-size: 11px; }
+    .resource-row > div { display: grid; gap: 3px; }
+    .resource-row span { color: var(--muted); font-size: 12px; }
+    .resource-rule { height: 5px; }
+    .resource-rule.prompt { background: var(--prompt); }
+    .resource-rule.token { background: var(--token); }
+
+    .metric-strip { margin-top: 40px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
+    .metric { padding: 20px 18px; display: grid; gap: 5px; align-content: start; }
+    .metric + .metric { border-left: 1px solid var(--line); }
+    .metric-value { font-family: var(--font-display); font-size: clamp(28px, 3vw, 40px); font-weight: 650; line-height: 1; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; }
+    .metric-label { color: var(--text-soft); font-size: 12px; line-height: 1.45; }
+    .metric .source { margin-top: 4px; }
+
+    .phase-specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .phase-spec { padding: 22px; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid; display: grid; gap: 16px; }
+    .phase-spec.prompt { border-top-color: var(--prompt); }
+    .phase-spec.token { border-top-color: var(--token); }
+    .phase-spec-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .phase-spec p { color: var(--muted); font-size: 14px; }
+    .observation-list { display: grid; gap: 10px; padding: 0; list-style: none; }
+    .observation-list li { padding-top: 10px; border-top: 1px solid var(--line); color: var(--text-soft); font-size: 13px; }
+    .observation-list li + li { margin-top: 0; }
+    .observation-list strong { color: var(--text); }
+    .divide { height: 1px; background: var(--line); }
+    .insight-band { padding: 18px 20px; border-left: 3px solid var(--accent); background: var(--accent-soft); color: var(--text-soft); }
+    .insight-band strong { color: var(--text); }
+
+    .run {
+      position: relative;
+      padding: 20px 22px;
+      border: 1.5px dashed var(--accent);
+      background: var(--accent-soft);
+      display: grid;
+      gap: 14px;
+    }
+    .run-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .run-title { color: var(--accent); font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+    .run-body { color: var(--text-soft); font-size: 14px; }
+    .run-body ol, .run-body ul { display: grid; gap: 8px; }
+    .run-body li + li { margin-top: 0; }
+    .run-note { color: var(--muted); font-size: 11px; }
+    .run strong { color: var(--text); font-variant-numeric: tabular-nums; }
+    .mini-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mini-table th, .mini-table td { padding: 8px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .mini-table th { color: var(--muted); font-family: var(--font-mono); font-size: 10px; font-weight: 500; }
+    .mini-table td { font-variant-numeric: tabular-nums; }
+    .mini-table tr.selected { background: var(--surface); }
+
+    .table-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+    table.data-table { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 13px; }
+    .data-table th, .data-table td { padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .data-table th { background: var(--surface-2); color: var(--muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; font-weight: 500; }
+    .data-table tbody tr:last-child td { border-bottom: 0; }
+    .data-table td { color: var(--text-soft); }
+    .data-table td:first-child { color: var(--text); font-weight: 600; }
+    .data-table .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .data-table .emphasis { color: var(--prompt-strong); font-weight: 700; }
+
+    .diagram-frame { border: 1px solid var(--line-strong); background: var(--surface); }
+    .diagram-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    .diagram-head strong { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; }
+    .diagram-head span { color: var(--faint); font-size: 11px; }
+    .diagram-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+    .diagram-scroll svg { width: 100%; min-width: 820px; max-width: none; height: auto; }
+    .diagram-legend { display: flex; flex-wrap: wrap; gap: 10px 20px; padding: 12px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 7px; }
+    .legend-line { width: 28px; height: 0; border-top: 2px solid var(--text-soft); }
+    .legend-line.dashed { border-top-style: dashed; border-color: var(--control); }
+    .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .legend-dot.prompt { background: var(--prompt); }
+    .legend-dot.token { background: var(--token); }
+    .legend-dot.mixed { background: var(--mixed); }
+    .legend-dot.accent { background: var(--accent); }
+    .figure-caption { padding: 0 4px; color: var(--muted); font-size: 11px; }
+    .svg-label { fill: var(--text); font-family: var(--font-body); font-size: 16px; font-weight: 600; }
+    .svg-small { fill: var(--muted); font-family: var(--font-body); font-size: 12px; }
+    .svg-mono { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; }
+    .svg-faint { fill: var(--faint); font-family: var(--font-body); font-size: 11px; }
+    .svg-node { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1.4; }
+    .svg-node-prompt { fill: var(--prompt-soft); stroke: var(--prompt); stroke-width: 1.7; }
+    .svg-node-token { fill: var(--token-soft); stroke: var(--token); stroke-width: 1.7; }
+    .svg-node-mixed { fill: var(--mixed-soft); stroke: var(--mixed); stroke-width: 1.7; }
+    .svg-node-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+    .svg-text-prompt { fill: var(--prompt-strong); }
+    .svg-text-token { fill: var(--token-strong); }
+    .svg-text-mixed { fill: var(--mixed); }
+    .svg-text-accent { fill: var(--accent); }
+    .svg-gpu-prompt { fill: var(--prompt); }
+    .svg-gpu-token { fill: var(--token); }
+    .svg-gpu-mixed { fill: var(--mixed); }
+    .svg-line, .svg-control, .svg-data { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .svg-control { stroke: var(--control); stroke-width: 1.5; stroke-dasharray: 5 7; }
+    .svg-data { stroke: var(--text-soft); stroke-width: 2.1; }
+    .svg-data.prompt { stroke: var(--prompt); }
+    .svg-data.token { stroke: var(--token); }
+    .svg-data.mixed { stroke: var(--mixed); }
+    .svg-data.accent { stroke: var(--accent); }
+    .svg-sketch { fill: none; stroke: var(--line-strong); stroke-width: 0.7; opacity: 0.6; }
+    .svg-badge { font-family: var(--font-mono); font-size: 22px; font-weight: 700; }
+    .svg-badge.prompt { fill: var(--prompt-strong); }
+    .svg-badge.token { fill: var(--token-strong); }
+    .svg-badge.mixed { fill: var(--mixed); }
+    .svg-badge.accent { fill: var(--accent); }
+    .marker-neutral { fill: var(--text-soft); }
+    .marker-prompt { fill: var(--prompt); }
+    .marker-token { fill: var(--token); }
+    .marker-mixed { fill: var(--mixed); }
+    .marker-accent { fill: var(--accent); }
+    .marker-control { fill: var(--control); }
+
+    .stepper { border: 1px solid var(--line-strong); background: var(--surface); }
+    .step-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+    .step-tab {
+      min-width: 0;
+      padding: 13px 10px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      border-bottom: 3px solid transparent;
+      background: var(--surface);
+      color: var(--muted);
+      text-align: left;
+      cursor: pointer;
+      display: grid;
+      gap: 3px;
+    }
+    .step-tab:last-child { border-right: 0; }
+    .step-tab:hover { background: var(--surface-2); color: var(--text); }
+    .step-tab[aria-selected="true"] { color: var(--text); background: var(--surface-2); border-bottom-color: var(--accent); }
+    .step-tab .step-num { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+    .step-tab .step-name { font-size: 12px; font-weight: 600; line-height: 1.35; }
+    .step-panel { min-height: 310px; padding: 26px; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(230px, 0.7fr); gap: 30px; }
+    .step-panel-main { display: grid; gap: 15px; align-content: start; }
+    .step-panel-main p { color: var(--text-soft); }
+    .step-panel-main ul { color: var(--muted); font-size: 14px; }
+    .step-state { padding: 18px; background: var(--surface-2); border-left: 2px solid var(--accent); align-self: start; display: grid; gap: 10px; }
+    .step-state h4 { color: var(--accent); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; }
+    .step-state p { color: var(--text-soft); font-size: 13px; }
+    .step-state .source { margin-top: 5px; }
+
+    .scenario-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .scenario-tab {
+      min-height: 42px;
+      padding: 8px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .scenario-tab:hover { color: var(--text); border-color: var(--line-strong); }
+    .scenario-tab[aria-selected="true"] { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+    .scenario-module { display: grid; gap: 18px; }
+    .flow-line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .flow-line.prompt { stroke: var(--prompt); }
+    .flow-line.token { stroke: var(--token); }
+    .flow-line.mixed { stroke: var(--mixed); }
+    .flow-line.accent { stroke: var(--accent); }
+    .flow-line.neutral { stroke: var(--text-soft); }
+    .flow-regular { stroke-width: 2.4; }
+    .flow-strong { stroke-width: 5; }
+    .focus-ring { fill: none; stroke-width: 4; opacity: 0.55; }
+    .focus-ring.prompt { stroke: var(--prompt); }
+    .focus-ring.token { stroke: var(--token); }
+    .focus-ring.mixed { stroke: var(--mixed); }
+    .scenario-stage[data-scenario="coding"] [data-s]:not([data-s~="coding"]),
+    .scenario-stage[data-scenario="conversation"] [data-s]:not([data-s~="conversation"]),
+    .scenario-stage[data-scenario="batch"] [data-s]:not([data-s~="batch"]) { opacity: 0.12; }
+    .scenario-stage [data-s] { transition: opacity 180ms ease; }
+    .scenario-stage[data-scenario="coding"] .flow-line[data-s~="coding"],
+    .scenario-stage[data-scenario="conversation"] .flow-line[data-s~="conversation"],
+    .scenario-stage[data-scenario="batch"] .flow-line[data-s~="batch"] {
+      stroke-dasharray: 10 9;
+      animation: flow-dash 900ms linear infinite;
+    }
+    @keyframes flow-dash { to { stroke-dashoffset: -38; } }
+    .scenario-detail { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 24px; padding: 22px; border: 1px solid var(--line); background: var(--surface); }
+    .scenario-summary { display: grid; gap: 12px; align-content: start; }
+    .scenario-summary p { color: var(--muted); font-size: 14px; }
+    .scenario-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .scenario-stat { padding: 10px; background: var(--surface-2); display: grid; gap: 2px; }
+    .scenario-stat strong { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; }
+    .scenario-stat span { color: var(--muted); font-size: 10px; line-height: 1.35; }
+    .scenario-steps { display: grid; gap: 10px; padding: 0; list-style: none; counter-reset: scenario; }
+    .scenario-steps li { counter-increment: scenario; display: grid; grid-template-columns: 28px 1fr; gap: 10px; color: var(--text-soft); font-size: 13px; }
+    .scenario-steps li + li { margin-top: 0; }
+    .scenario-steps li::before { content: counter(scenario); width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); font-family: var(--font-mono); font-size: 11px; }
+
+    .decision-ledger { display: grid; gap: 20px; }
+    .decision-card { border: 1px solid var(--line); background: var(--surface); }
+    .decision-card-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 17px 20px; border-bottom: 1px solid var(--line); }
+    .decision-card-head h3 { font-size: 20px; }
+    .decision-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .decision-cell { padding: 18px 20px; display: grid; gap: 7px; align-content: start; }
+    .decision-cell:nth-child(odd) { border-right: 1px solid var(--line); }
+    .decision-cell:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    .decision-cell h4 { color: var(--faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .decision-cell p { color: var(--text-soft); font-size: 13px; }
+    .decision-cell.tradeoff { background: var(--accent-soft); }
+    .decision-cell.tradeoff h4 { color: var(--accent); }
+
+    .evidence-boundary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line-strong); }
+    .evidence-type { padding: 20px; display: grid; gap: 8px; background: var(--surface); }
+    .evidence-type + .evidence-type { border-left: 1px solid var(--line); }
+    .evidence-type p { color: var(--muted); font-size: 13px; }
+    .chart-block { display: grid; gap: 16px; padding: 22px; border: 1px solid var(--line); background: var(--surface); }
+    .chart-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .chart-head p { color: var(--muted); font-size: 12px; }
+    .bar-chart { display: grid; gap: 12px; }
+    .bar-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 64px; gap: 12px; align-items: center; }
+    .bar-label { color: var(--text-soft); font-size: 12px; }
+    .bar-track { height: 14px; background: var(--surface-2); overflow: hidden; }
+    .bar-fill { width: var(--value); height: 100%; background: var(--prompt); }
+    .bar-fill.token { background: var(--token); }
+    .bar-fill.accent { background: var(--accent); }
+    .bar-fill.neutral { background: var(--control); }
+    .bar-value { text-align: right; font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .chart-note { color: var(--faint); font-size: 11px; }
+    .result-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .result-note { padding: 16px; border-top: 2px solid var(--accent); background: var(--surface); display: grid; gap: 6px; }
+    .result-note strong { font-family: var(--font-display); font-size: 24px; }
+    .result-note span { color: var(--muted); font-size: 12px; }
+
+    .critique-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+    .critique-column { padding: 22px; border: 1px solid var(--line); background: var(--surface); display: grid; gap: 16px; align-content: start; }
+    .critique-column.reader { border-color: var(--accent); }
+    .critique-list { display: grid; gap: 14px; padding: 0; list-style: none; }
+    .critique-list li { padding-top: 12px; border-top: 1px solid var(--line); }
+    .critique-list li + li { margin-top: 0; }
+    .critique-list strong { display: block; margin-bottom: 4px; font-size: 14px; }
+    .critique-list p { color: var(--muted); font-size: 13px; }
+    .steal-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0; list-style: none; }
+    .steal-list li { padding: 16px; background: var(--surface-2); border-left: 2px solid var(--token); color: var(--text-soft); font-size: 13px; }
+    .steal-list li + li { margin-top: 0; }
+    .steal-list strong { color: var(--token-strong); }
+
+    .report-footer { padding: 34px 0 22px; border-top: 1px solid var(--line-strong); display: grid; gap: 20px; }
+    .footer-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 30px; }
+    .footer-grid p, .footer-grid li { color: var(--muted); font-size: 12px; }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 8px 16px; align-content: start; }
+    .footer-links a { font-family: var(--font-mono); font-size: 11px; }
+    .footer-bottom { display: flex; justify-content: space-between; gap: 16px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+
+    @media (max-width: 1180px) {
+      .shell { grid-template-columns: 1fr; gap: 18px; padding: 22px; }
+      .rail { position: static; }
+      .rail-label, .rail-foot { display: none; }
+      .rail-nav { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 5px; }
+      .rail-nav a { flex: 0 0 auto; display: flex; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 7px 11px; background: var(--surface); }
+      .rail-nav a[aria-current="location"] { border-color: var(--accent); background: var(--accent-soft); }
+      .content { max-width: none; }
+      .hero { padding-top: 16px; }
+    }
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: 1fr; gap: 30px; }
+      .phase-cutaway { max-width: 620px; }
+      .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
+      .metric:nth-child(4) { border-top: 1px solid var(--line); }
+      .step-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .step-tab:nth-child(3) { border-right: 0; }
+      .step-tab:nth-child(-n+3) { border-bottom-color: var(--line); }
+      .step-tab[aria-selected="true"] { border-bottom-color: var(--accent); }
+      .step-panel { grid-template-columns: 1fr; min-height: 0; }
+      .scenario-detail { grid-template-columns: 1fr; }
+      .result-notes { grid-template-columns: 1fr; }
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 15px; }
+      .topbar-inner { padding: 9px 16px; min-height: 58px; }
+      .topbar-link, .brand-copy small, .theme-label { display: none; }
+      .theme-toggle { padding: 7px 10px; min-height: 38px; }
+      .diagram-head > span { display: none; }
+      .diagram-head::after { content: "图可横向滚动 →"; color: var(--muted); font-size: 11px; white-space: nowrap; }
+      .shell { padding: 16px; }
+      .section { padding: 46px 0; }
+      .section-head { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+      .section-index { font-size: 10px; }
+      .title-word { font-size: 56px; }
+      .title-cn { font-size: 32px; }
+      .thesis { font-size: 16px; }
+      .metric { padding: 16px 12px; }
+      .metric-value { font-size: 30px; }
+      .phase-specs, .critique-grid, .evidence-boundary, .steal-list { grid-template-columns: 1fr; }
+      .evidence-type + .evidence-type { border-left: 0; border-top: 1px solid var(--line); }
+      .decision-grid { grid-template-columns: 1fr; }
+      .decision-cell:nth-child(odd) { border-right: 0; }
+      .decision-cell:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+      .step-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .step-tab:nth-child(3) { border-right: 1px solid var(--line); }
+      .step-tab:nth-child(even) { border-right: 0; }
+      .step-tab:nth-child(-n+4) { border-bottom-color: var(--line); }
+      .step-panel { padding: 20px; }
+      .scenario-stats { grid-template-columns: 1fr; }
+      .scenario-detail { padding: 17px; }
+      .bar-row { grid-template-columns: 90px minmax(0, 1fr) 50px; gap: 8px; }
+      .run { padding: 17px; }
+      .footer-bottom { display: grid; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+    @media print {
+      .topbar, .rail, .scenario-tabs, .step-tabs { display: none; }
+      .shell { display: block; padding: 0; }
+      .section { break-inside: avoid; }
+      .diagram-scroll, .table-scroll { overflow: visible; }
+      .diagram-scroll svg { min-width: 0; }
+      body { background: var(--surface); }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand" aria-label="Splitwise paper deep dive">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span></div>
+        <div class="brand-copy"><strong>SPLITWISE</strong><small>PAPER DEEP DIVE / ISCA 2024</small></div>
+      </div>
+      <div class="topbar-actions">
+        <a class="topbar-link" href="#architecture">直接看架构</a>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换颜色主题">
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z"/></svg>
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <span class="theme-label" id="theme-label">深色</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="rail" aria-label="报告目录">
+      <div class="rail-label">Reading map</div>
+      <nav class="rail-nav" id="rail-nav">
+        <a href="#problem"><span>01</span><span>问题定义</span></a>
+        <a href="#architecture"><span>02</span><span>架构总览</span></a>
+        <a href="#flow"><span>03</span><span>核心流程</span></a>
+        <a href="#workloads"><span>04</span><span>典型负载</span></a>
+        <a href="#decisions"><span>05</span><span>设计决策</span></a>
+        <a href="#evidence"><span>06</span><span>实验数据</span></a>
+        <a href="#critique"><span>07</span><span>批判性阅读</span></a>
+      </nav>
+      <div class="rail-foot">读者：推理系统 / 基础设施工程师<br>图均依据论文重绘；示例值与论文实测分开标注。</div>
+    </aside>
+
+    <main class="content" id="main">
+      <section class="hero" aria-labelledby="report-title">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow">ISCA 2024 · SYSTEMS FOR LLM INFERENCE</div>
+            <h1 id="report-title"><span class="title-word">Splitwise</span><span class="title-cn">把一次推理解体，按阶段重组集群</span></h1>
+            <p class="thesis"><strong>一句话 thesis：</strong>将计算密集的 prompt 阶段与显存密集的 token 阶段拆到不同机器，用逐层 KV-cache 传输隐藏交接开销，再用混合资源池吸收碎片，让每个阶段按自己的瓶颈调度。</p>
+            <div class="paper-meta">
+              <div class="paper-authors">Pratyush Patel、Esha Choukse、Chaojie Zhang、Aashaka Shah、Íñigo Goiri、Saeed Maleki、Ricardo Bianchini · University of Washington / Microsoft</div>
+              <div class="metadata-links">
+                <a href="https://arxiv.org/abs/2311.18677">arXiv:2311.18677</a>
+                <a href="https://github.com/vllm-project/vllm/pull/2809">vLLM 实现 PR</a>
+                <a href="https://github.com/Mutinifni/splitwise-sim">SplitwiseSim</a>
+                <a href="https://github.com/Azure/AzurePublicDataset/blob/master/AzureLLMInferenceDataset2023.md">Azure traces</a>
+              </div>
+            </div>
+          </div>
+
+          <figure class="phase-cutaway" aria-label="一个请求的两个资源剖面">
+            <div class="cutaway-head"><span>ONE REQUEST</span><span>TWO FOOTPRINTS</span></div>
+            <div class="cutaway-body">
+              <div>
+                <div class="request-line">
+                  <div class="request-block request-prompt"><strong>prompt</strong><span>并行处理输入</span></div>
+                  <div class="request-arrow">KV →</div>
+                  <div class="request-block request-token"><strong>token × N</strong><span>串行生成输出</span></div>
+                </div>
+                <div class="cutaway-caption">时序示意，色块宽度不代表耗时比例</div>
+              </div>
+              <div class="resource-ledger">
+                <div class="resource-row"><strong class="svg-text-prompt">PREFILL</strong><div><div class="resource-rule prompt"></div><span>吃 FLOPs · 决定 TTFT · 功耗随 batch 上升</span></div></div>
+                <div class="resource-row"><strong class="svg-text-token">DECODE</strong><div><div class="resource-rule token"></div><span>吃 HBM 带宽 / 容量 · 决定 TBT · 功耗较钝感</span></div></div>
+              </div>
+            </div>
+          </figure>
+        </div>
+
+        <div class="metric-strip" aria-label="论文关键数字">
+          <div class="metric"><span class="metric-value">2.35×</span><span class="metric-label">相同成本与功耗预算下，最高吞吐提升</span><span class="source">论文结论 · §IX</span></div>
+          <div class="metric"><span class="metric-value">1.76×</span><span class="metric-label">相同成本下吞吐提升，同时功耗低 15%</span><span class="source">论文结论 · §IX</span></div>
+          <div class="metric"><span class="metric-value">0.8%</span><span class="metric-label">优化 KV 传输对 E2E 延迟的影响</span><span class="source">实测 · Fig. 15 / §VI-A</span></div>
+          <div class="metric"><span class="metric-value">64% → 16.5%</span><span class="metric-label">第二 token 延迟开销：串行传输 → 逐层传输</span><span class="source">实测 · Fig. 15 / §VI-A</span></div>
+        </div>
+      </section>
+
+      <section class="section" id="problem" aria-labelledby="problem-title">
+        <div class="section-head">
+          <span class="section-index">01</span>
+          <div><div class="section-kicker">The mismatch</div><h2 id="problem-title">同一次推理，其实住着两种负载</h2><p class="section-intro">Splitwise 的出发点不是“GPU 不够快”，而是同机混合调度把两种资源剖面绑在一起：一边要算力，另一边要显存；一边影响首 token，另一边影响流式节奏。</p></div>
+        </div>
+        <div class="stack-lg">
+          <div class="phase-specs">
+            <article class="phase-spec prompt">
+              <div class="phase-spec-head"><div><span class="tag tag-prompt">PROMPT / PREFILL</span><h3>计算密集，怕排队与功率 cap</h3></div><span class="source">§III-B–G</span></div>
+              <p>所有输入 token 在一次迭代中并行计算，产生第一个输出 token 和注意力 KV-cache。</p>
+              <ul class="observation-list">
+                <li>TTFT 随 prompt 长度<strong>近似线性增长</strong>； batch 超过 <strong>2048 tokens</strong> 后吞吐下降。</li>
+                <li>功耗随 batch 增大而上升；功率 cap 会显著拉高 prompt 延迟。</li>
+                <li>更依赖新 GPU 的 compute / HBM 带宽，而非无限堆 batch。</li>
+              </ul>
+            </article>
+            <article class="phase-spec token">
+              <div class="phase-spec-head"><div><span class="tag tag-token">TOKEN / DECODE</span><h3>显存密集，靠大 batch 摊薄权重读取</h3></div><span class="source">§III-B–G</span></div>
+              <p>每步只输入上一 token，却读取截至目前的整段 KV-cache；输出严格串行，延迟体现在 TBT。</p>
+              <ul class="observation-list">
+                <li>batch 提到 <strong>64</strong>，TBT 仅约 <strong>2×</strong>；吞吐持续上升，直到 HBM 容量耗尽。</li>
+                <li>token 阶段功耗对 batch 不敏感；从 <strong>700W cap 到 350W</strong> 几乎无延迟影响。</li>
+                <li>conversation 中 <strong>60–70%</strong> 时间只有不超过 20 个 active tokens，算力经常闲置。</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="insight-band"><strong>与前人工作的分水岭：</strong>Orca 的 continuous batching 在每次 forward pass 前调度，但 batch 仍只含单一阶段；SARATHI 的 mixed batching 把 chunked prefill 与 decode 放在一起，缓解却没有消除相互拉长。Splitwise 则把两阶段放到不同机器，从根本上分开 batch 与硬件策略。<span class="source">§II-D、§VIII</span></div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>调度方式</th><th>一次 batch 里有什么</th><th>解决了什么</th><th>还留下什么</th></tr></thead>
+              <tbody>
+                <tr><td>Request-level</td><td>整批请求跑完才接新请求</td><td>实现简单</td><td>长 decode 阻塞新请求，TTFT / E2E 排队明显</td></tr>
+                <tr><td>Orca · continuous</td><td>仅 prompt 或仅 token；prompt 可抢占 token</td><td>缩短等待、改善 TTFT</td><td>抢占与单阶段 batch 可能拉高 TBT 尾部</td></tr>
+                <tr><td>SARATHI · mixed</td><td>chunked prefill 与 decode 同批</td><td>减少阶段切换与 TBT 影响</td><td>同批 prompt 仍会拉长该次 token 迭代</td></tr>
+                <tr><td class="emphasis">Splitwise</td><td>P / T 分池；高峰再启用 mixed pool</td><td>阶段独立 batch、硬件和功耗策略</td><td>引入 KV 跨机传输与资源池碎片问题</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <aside class="run">
+            <div class="run-head"><span class="run-title">▶ 跑一遍 · 输入很长，不代表 prefill 占大头</span><span class="tag">论文数值 + 算术</span></div>
+            <div class="run-body">
+              <ol>
+                <li>coding trace 的中位请求是 <strong>1500 输入 tokens / 13 输出 tokens</strong>，看起来应由 prompt 主导。<span class="source">Fig. 3</span></li>
+                <li>但在 BLOOM-176B 上，一次 <strong>1500-token prompt</strong> 的耗时，约等于仅 <strong>6 个输出 tokens</strong> 的生成阶段。<span class="source">§III-C</span></li>
+                <li>用论文的等价关系做量级演算：<strong>13 ÷ 6 ≈ 2.2</strong>。也就是说，不能凭“1500 ≫ 13”推断 prefill 支配 E2E；逐次 decode 的累计成本才是系统必须拆开的原因。</li>
+              </ol>
+              <p class="run-note">此处的 2.2 是帮助理解量级的工程师演算，不是论文报告的一个独立延迟比值；不同 batch 与硬件会改变比例。</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="architecture" aria-labelledby="architecture-title">
+        <div class="section-head">
+          <span class="section-index">02</span>
+          <div><div class="section-kicker">High-level design</div><h2 id="architecture-title">三类机器池，两级调度，一条 KV 数据面</h2><p class="section-intro">CLS 决定“去哪里”，MLS 决定“这台机器下一次迭代跑什么”。所有机器预加载模型；P / T 专职池保证隔离，mixed pool 在高峰回收因比例错配而闲置的容量。</p></div>
+        </div>
+        <div class="stack">
+          <figure class="diagram-frame" id="architecture-diagram">
+            <div class="diagram-head"><strong>SPLITWISE / CLUSTER MAP</strong><span>依据论文 Fig. 10 重绘</span></div>
+            <div class="diagram-scroll">
+              <svg viewBox="0 0 1000 570" role="img" aria-labelledby="hld-title hld-desc">
+                <title id="hld-title">Splitwise 高层架构</title>
+                <desc id="hld-desc">集群调度器以虚线控制三个机器池。请求进入 prompt 池，KV-cache 通过 InfiniBand 传到 token 池，混合池在高峰承接任一阶段。</desc>
+                <defs>
+                  <marker id="hld-arrow-neutral" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-neutral" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="hld-arrow-prompt" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-prompt" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="hld-arrow-token" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-token" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="hld-arrow-mixed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-mixed" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="hld-arrow-accent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-accent" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="hld-arrow-control" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path class="marker-control" d="M0 0L10 5L0 10Z"/></marker>
+                </defs>
+
+                <text x="30" y="34" class="svg-mono">CONTROL PLANE / DASHED</text>
+                <text x="745" y="34" class="svg-mono">DATA PLANE / SOLID</text>
+
+                <path class="svg-node" d="M30 238L42 226H154L166 238V304L154 316H42L30 304Z"/>
+                <path class="svg-sketch" d="M33 239L44 229H153L163 239"/>
+                <text x="98" y="260" text-anchor="middle" class="svg-label">Client</text>
+                <text x="98" y="283" text-anchor="middle" class="svg-small">arrival / stream</text>
+
+                <path class="svg-node-accent" d="M218 64L230 52H390L402 64V136L390 148H230L218 136Z"/>
+                <text x="310" y="84" text-anchor="middle" class="svg-label">Cluster-Level Scheduler</text>
+                <text x="310" y="108" text-anchor="middle" class="svg-small">JSQ · pool management · routing</text>
+                <text x="310" y="130" text-anchor="middle" class="svg-mono">QUEUE = PENDING TOKENS</text>
+
+                <path class="svg-data" d="M166 270H198V100H218" marker-end="url(#hld-arrow-neutral)"/>
+                <text x="174" y="247" class="svg-small">request</text>
+
+                <path class="svg-data prompt" d="M402 100H472V122H500" marker-end="url(#hld-arrow-prompt)"/>
+                <text x="424" y="88" class="svg-small">① route</text>
+
+                <path class="svg-control" d="M270 148V174H760V220" marker-end="url(#hld-arrow-control)"/>
+                <path class="svg-control" d="M310 148V212H570V360" marker-end="url(#hld-arrow-control)"/>
+                <path class="svg-control" d="M350 148V188H570" marker-end="url(#hld-arrow-control)"/>
+                <text x="329" y="174" class="svg-small">reserve P + T together</text>
+
+                <path class="svg-node-prompt" d="M500 62L512 50H722L734 62V190L722 202H512L500 190Z"/>
+                <text x="526" y="82" class="svg-label svg-text-prompt">Prompt pool</text>
+                <text x="526" y="103" class="svg-small">优化 TTFT / compute utilization</text>
+                <text x="526" y="124" class="svg-mono">MLS · FCFS · ΣPROMPT ≤ 2048</text>
+                <rect x="526" y="143" width="22" height="30" class="svg-gpu-prompt"/><rect x="555" y="143" width="22" height="30" class="svg-gpu-prompt"/><rect x="584" y="143" width="22" height="30" class="svg-gpu-prompt"/>
+                <text x="626" y="163" class="svg-small">8× GPU / machine</text>
+                <text x="526" y="190" class="svg-faint">model preloaded · TP within machine</text>
+
+                <path class="svg-node-token" d="M500 362L512 350H722L734 362V490L722 502H512L500 490Z"/>
+                <text x="526" y="382" class="svg-label svg-text-token">Token pool</text>
+                <text x="526" y="403" class="svg-small">优化 TBT / HBM bandwidth + capacity</text>
+                <text x="526" y="424" class="svg-mono">MLS · FCFS · BATCH UNTIL NEAR-OOM</text>
+                <rect x="526" y="443" width="22" height="30" class="svg-gpu-token"/><rect x="555" y="443" width="22" height="30" class="svg-gpu-token"/><rect x="584" y="443" width="22" height="30" class="svg-gpu-token"/>
+                <text x="626" y="463" class="svg-small">continuous batching</text>
+                <text x="526" y="490" class="svg-faint">each iteration grows KV-cache</text>
+
+                <path class="svg-data accent" d="M617 202V350" marker-end="url(#hld-arrow-accent)"/>
+                <path class="svg-sketch" d="M622 202V350"/>
+                <rect x="638" y="245" width="152" height="63" class="svg-node-accent"/>
+                <text x="714" y="266" text-anchor="middle" class="svg-label svg-text-accent">KV-cache</text>
+                <text x="714" y="286" text-anchor="middle" class="svg-small">per-layer async put</text>
+                <text x="714" y="302" text-anchor="middle" class="svg-mono">INFINIBAND + MSCCL++</text>
+                <text x="641" y="329" class="svg-small">② handoff / semaphore</text>
+
+                <path class="svg-node-mixed" d="M790 220L802 208H950L962 220V340L950 352H802L790 340Z"/>
+                <text x="876" y="242" text-anchor="middle" class="svg-label svg-text-mixed">Mixed pool</text>
+                <text x="876" y="263" text-anchor="middle" class="svg-small">高峰期消除 P/T 碎片</text>
+                <rect x="824" y="282" width="28" height="32" class="svg-gpu-prompt"/><rect x="858" y="282" width="28" height="32" class="svg-gpu-token"/><rect x="892" y="282" width="28" height="32" class="svg-gpu-mixed"/>
+                <text x="876" y="336" text-anchor="middle" class="svg-faint">drain → return to original pool</text>
+
+                <path class="svg-data mixed" d="M734 142H770V232H790" marker-end="url(#hld-arrow-mixed)"/>
+                <path class="svg-data mixed" d="M734 418H770V330H790" marker-end="url(#hld-arrow-mixed)"/>
+                <text x="742" y="130" class="svg-small">spillover</text>
+
+                <path class="svg-data token" d="M500 444H188V316" marker-end="url(#hld-arrow-token)"/>
+                <text x="254" y="432" class="svg-small">③ output token stream</text>
+
+                <text x="30" y="548" class="svg-faint">组件边界：CLS 不介入每次 forward；MLS 跟踪本地队列、HBM 与 batch。模型并行仍在单机 8 GPU 内完成。</text>
+              </svg>
+            </div>
+            <div class="diagram-legend">
+              <span class="legend-item"><span class="legend-line"></span>数据面：请求 / KV / 输出</span>
+              <span class="legend-item"><span class="legend-line dashed"></span>控制面：池管理与路由</span>
+              <span class="legend-item"><span class="legend-dot prompt"></span>prompt</span>
+              <span class="legend-item"><span class="legend-dot token"></span>token</span>
+              <span class="legend-item"><span class="legend-dot mixed"></span>mixed</span>
+              <span class="legend-item"><span class="legend-dot accent"></span>KV 交接</span>
+            </div>
+          </figure>
+          <figcaption class="figure-caption">依据论文 Figure 10 重绘；为突出控制面 / 数据面，布局与标注做了工程化重排。论文并未把 CLS 画成每次模型迭代的集中参与者。</figcaption>
+
+          <aside class="run">
+            <div class="run-head"><span class="run-title">▶ 跑一遍 · JSQ 同时给请求配好 P / T 两端</span><span class="tag tag-accent">示例值</span></div>
+            <div class="run-body">
+              <div class="table-scroll">
+                <table class="mini-table">
+                  <thead><tr><th>候选机器</th><th>pending tokens</th><th>JSQ 结果</th></tr></thead>
+                  <tbody><tr><td>P1</td><td>4096</td><td>不选</td></tr><tr class="selected"><td>P2</td><td>2048</td><td>选为 prompt 端</td></tr><tr class="selected"><td>T1</td><td>96</td><td>选为 token 端</td></tr><tr><td>T2</td><td>128</td><td>不选</td></tr></tbody>
+                </table>
+              </div>
+              <ol>
+                <li>CLS 看到的队列长度不是“请求条数”，而是<strong>待处理 token 数</strong>；因此示例选择 <strong>P2 + T1</strong>。</li>
+                <li>两端在 prefill 开始前就同时确定，后续才能在该请求的 prompt 计算期间，直接向已知目的地逐层发送 KV。</li>
+                <li>若队列超过阈值，CLS 先找 mixed pool，再从相反角色池借机器；论文没有给出统一阈值，不能把示例队列数当成论文配置。</li>
+              </ol>
+              <p class="run-note">机制依据 §IV-A；四个队列数字均为示例值。</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="flow" aria-labelledby="flow-title">
+        <div class="section-head">
+          <span class="section-index">03</span>
+          <div><div class="section-kicker">Request trace</div><h2 id="flow-title">跟着一个请求，从到达到释放</h2><p class="section-intro">点击步骤，或用左右方向键切换。重点不是六个框框，而是每一步由谁做决策、什么状态必须已经存在，以及延迟藏在哪一段。</p></div>
+        </div>
+        <div class="stack">
+          <div class="stepper" id="flow-stepper">
+            <div class="step-tabs" role="tablist" aria-label="请求处理步骤">
+              <button class="step-tab" id="step-tab-0" role="tab" aria-selected="true" aria-controls="step-panel" tabindex="0" data-step="0"><span class="step-num">01 / ROUTE</span><span class="step-name">配对 P + T</span></button>
+              <button class="step-tab" id="step-tab-1" role="tab" aria-selected="false" aria-controls="step-panel" tabindex="-1" data-step="1"><span class="step-num">02 / ADMIT</span><span class="step-name">组装 prompt batch</span></button>
+              <button class="step-tab" id="step-tab-2" role="tab" aria-selected="false" aria-controls="step-panel" tabindex="-1" data-step="2"><span class="step-num">03 / PREFILL</span><span class="step-name">算输入与首 token</span></button>
+              <button class="step-tab" id="step-tab-3" role="tab" aria-selected="false" aria-controls="step-panel" tabindex="-1" data-step="3"><span class="step-num">04 / HANDOFF</span><span class="step-name">迁移 KV-cache</span></button>
+              <button class="step-tab" id="step-tab-4" role="tab" aria-selected="false" aria-controls="step-panel" tabindex="-1" data-step="4"><span class="step-num">05 / DECODE</span><span class="step-name">连续生成输出</span></button>
+              <button class="step-tab" id="step-tab-5" role="tab" aria-selected="false" aria-controls="step-panel" tabindex="-1" data-step="5"><span class="step-num">06 / RELEASE</span><span class="step-name">释放与归还</span></button>
+            </div>
+            <div class="step-panel" id="step-panel" role="tabpanel" aria-labelledby="step-tab-0" tabindex="0" aria-live="polite">
+              <div class="step-panel-main"><span class="tag tag-prompt">CLS / CLUSTER LEVEL</span><h3>同时选定 prompt 与 token 机器</h3><p>请求到达后，CLS 用 Join the Shortest Queue 分别选择 P、T 两端；队列长度按 pending tokens 计算，而不是请求条数。</p><ul><li>机器定期上报队列与显存状态，不是每个 iteration 都同步。</li><li>在 prefill 前确定 token 端，是后续逐层异步传输的前置条件。</li><li>队列过长时，启用 mixed pool 或从相反角色池借机器。</li></ul></div>
+              <aside class="step-state"><h4>此步建立的不变量</h4><p>请求尚未开始计算，KV 的目的地已经可知。</p><span class="source">论文 §IV-A</span></aside>
+            </div>
+          </div>
+          <noscript><p>无 JavaScript 时的流程：CLS 配对 P/T → prompt MLS 组 batch → prefill 产生首 token 与 KV → KV 迁移 → token MLS 连续 decode → 释放显存并归还 mixed 机器。</p></noscript>
+
+          <aside class="run">
+            <div class="run-head"><span class="run-title">▶ 跑一遍 · 1500-token prompt 的逐层交接</span><span class="tag tag-accent">示例组合</span></div>
+            <div class="run-body">
+              <ol>
+                <li>取 coding trace 的中位输入 <strong>1500 tokens</strong>，放进 <strong>Llama2-70B / 80 layers</strong> 的心智算例；H100 上它超过论文的 <strong>512-token</strong> 小 prompt 边界，因此走 per-layer transfer。</li>
+                <li>第 1 层算完：异步发送 <strong>KV₁</strong>；GPU 不等网络，继续算第 2 层。重复为 <strong>KV₂ … KV₈₀</strong>。</li>
+                <li>所有层的 put 都已发出后，prompt 端通过同一 InfiniBand 连接发出 semaphore；token 端等待对应请求的 semaphore，而非对整个 batch 做一把大锁。</li>
+                <li>论文实测优化后未隐藏部分约 <strong>5ms（H100）</strong>；E2E 影响 <strong>0.8%</strong>，但第二 token 仍有 <strong>16.5%</strong> 延迟增幅。</li>
+              </ol>
+              <p class="run-note">1500 tokens 与 80 层来自论文不同位置，这里仅组合成机制算例，并非论文单列的一条实测请求。机制与开销见 §IV-C、§V-A、§VI-A。</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="workloads" aria-labelledby="workloads-title">
+        <div class="section-head">
+          <span class="section-index">04</span>
+          <div><div class="section-kicker">Workload dataflow</div><h2 id="workloads-title">同一张图，三条不同的关键路径</h2><p class="section-intro">切换负载，相关通路会高亮，图中 ①②③④ 与下方步骤一一对应。编程补全重 prefill，多轮对话重 decode；批量 / 高峰时，mixed pool 反而成为主角。</p></div>
+        </div>
+        <div class="scenario-module" id="scenario-module">
+          <div class="scenario-tabs" role="tablist" aria-label="典型负载场景">
+            <button class="scenario-tab" id="scenario-tab-coding" role="tab" aria-selected="true" aria-controls="scenario-detail" tabindex="0" data-scenario="coding">编程补全</button>
+            <button class="scenario-tab" id="scenario-tab-conversation" role="tab" aria-selected="false" aria-controls="scenario-detail" tabindex="-1" data-scenario="conversation">多轮对话</button>
+            <button class="scenario-tab" id="scenario-tab-batch" role="tab" aria-selected="false" aria-controls="scenario-detail" tabindex="-1" data-scenario="batch">批量 / 高峰</button>
+          </div>
+
+          <figure class="diagram-frame">
+            <div class="diagram-head"><strong id="scenario-diagram-title">CODING / PREFILL-HEAVY</strong><span>依据论文 Fig. 10、Fig. 16 重绘 / 示意</span></div>
+            <div class="diagram-scroll scenario-stage" id="scenario-stage" data-scenario="coding">
+              <svg viewBox="0 0 1000 500" role="img" aria-labelledby="scenario-svg-title scenario-svg-desc">
+                <title id="scenario-svg-title">Splitwise 负载数据流</title>
+                <desc id="scenario-svg-desc">可切换编程、多轮对话和批量高峰三种负载，查看 prompt、token 与 mixed pool 的关键路径。</desc>
+                <defs>
+                  <marker id="flow-arrow-neutral" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-neutral" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="flow-arrow-prompt" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-prompt" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="flow-arrow-token" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-token" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="flow-arrow-mixed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-mixed" d="M0 0L10 5L0 10Z"/></marker>
+                  <marker id="flow-arrow-accent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="marker-accent" d="M0 0L10 5L0 10Z"/></marker>
+                </defs>
+
+                <rect x="28" y="196" width="130" height="88" class="svg-node"/>
+                <text x="93" y="229" text-anchor="middle" class="svg-label">Requests</text>
+                <text x="93" y="253" text-anchor="middle" class="svg-small">arrival trace</text>
+                <rect x="218" y="196" width="174" height="88" class="svg-node-accent"/>
+                <text x="305" y="229" text-anchor="middle" class="svg-label">CLS / JSQ</text>
+                <text x="305" y="253" text-anchor="middle" class="svg-small">P + T assignment</text>
+                <path class="flow-line neutral flow-regular" d="M158 240H218" marker-end="url(#flow-arrow-neutral)"/>
+
+                <g data-s="coding conversation">
+                  <rect x="454" y="52" width="222" height="126" class="svg-node-prompt"/>
+                  <text x="565" y="84" text-anchor="middle" class="svg-label svg-text-prompt">Prompt pool</text>
+                  <text x="565" y="108" text-anchor="middle" class="svg-small">FCFS · 2048-token cap</text>
+                  <text x="565" y="132" text-anchor="middle" class="svg-mono">PREFILL + FIRST TOKEN</text>
+                  <text x="565" y="157" text-anchor="middle" class="svg-faint">compute / TTFT</text>
+                </g>
+                <g data-s="coding conversation">
+                  <rect x="454" y="322" width="222" height="126" class="svg-node-token"/>
+                  <text x="565" y="354" text-anchor="middle" class="svg-label svg-text-token">Token pool</text>
+                  <text x="565" y="378" text-anchor="middle" class="svg-small">continuous batching</text>
+                  <text x="565" y="402" text-anchor="middle" class="svg-mono">DECODE UNTIL EOS</text>
+                  <text x="565" y="427" text-anchor="middle" class="svg-faint">HBM / TBT</text>
+                </g>
+                <g data-s="batch">
+                  <rect x="760" y="184" width="204" height="144" class="svg-node-mixed"/>
+                  <text x="862" y="219" text-anchor="middle" class="svg-label svg-text-mixed">Mixed pool</text>
+                  <text x="862" y="245" text-anchor="middle" class="svg-small">all machines can join</text>
+                  <text x="862" y="270" text-anchor="middle" class="svg-mono">MIXED BATCHING</text>
+                  <text x="862" y="297" text-anchor="middle" class="svg-faint">high load → baseline-like</text>
+                </g>
+
+                <rect x="442" y="40" width="246" height="150" class="focus-ring prompt" data-s="coding"/>
+                <rect x="442" y="310" width="246" height="150" class="focus-ring token" data-s="conversation"/>
+                <rect x="748" y="172" width="228" height="168" class="focus-ring mixed" data-s="batch"/>
+
+                <path class="flow-line prompt flow-strong" data-s="coding" d="M392 240H420V114H454" marker-end="url(#flow-arrow-prompt)"/>
+                <path class="flow-line prompt flow-regular" data-s="conversation" d="M392 240H420V114H454" marker-end="url(#flow-arrow-prompt)"/>
+                <path class="flow-line mixed flow-strong" data-s="batch" d="M392 240H760" marker-end="url(#flow-arrow-mixed)"/>
+
+                <path class="flow-line accent flow-strong" data-s="coding conversation" d="M565 178V322" marker-end="url(#flow-arrow-accent)"/>
+                <rect x="583" y="220" width="134" height="56" class="svg-node-accent" data-s="coding conversation"/>
+                <text x="650" y="243" text-anchor="middle" class="svg-small svg-text-accent" data-s="coding conversation">KV / InfiniBand</text>
+                <text x="650" y="262" text-anchor="middle" class="svg-faint" data-s="coding conversation">per-layer overlap</text>
+
+                <path class="flow-line token flow-regular" data-s="coding" d="M676 386H716V420H964" marker-end="url(#flow-arrow-token)"/>
+                <path class="flow-line token flow-strong" data-s="conversation" d="M676 386H716V420H964" marker-end="url(#flow-arrow-token)"/>
+                <path class="flow-line mixed flow-strong" data-s="batch" d="M862 328V420H964" marker-end="url(#flow-arrow-mixed)"/>
+                <text x="826" y="449" class="svg-small">streamed output</text>
+
+                <text x="407" y="91" class="svg-badge prompt" data-s="coding">①</text>
+                <text x="493" y="72" class="svg-badge prompt" data-s="coding">②</text>
+                <text x="603" y="208" class="svg-badge accent" data-s="coding">③</text>
+                <text x="694" y="370" class="svg-badge token" data-s="coding">④</text>
+
+                <text x="407" y="91" class="svg-badge prompt" data-s="conversation">①</text>
+                <text x="493" y="72" class="svg-badge prompt" data-s="conversation">②</text>
+                <text x="603" y="208" class="svg-badge accent" data-s="conversation">③</text>
+                <text x="694" y="370" class="svg-badge token" data-s="conversation">④</text>
+
+                <text x="407" y="218" class="svg-badge mixed" data-s="batch">①</text>
+                <text x="786" y="205" class="svg-badge mixed" data-s="batch">②</text>
+                <text x="830" y="314" class="svg-badge mixed" data-s="batch">③</text>
+                <text x="930" y="370" class="svg-badge mixed" data-s="batch">④</text>
+
+                <text x="28" y="480" class="svg-faint">线宽表示该场景的重点路径，不代表实测流量或吞吐比例；动画仅用于追踪方向。</text>
+              </svg>
+            </div>
+            <div class="diagram-legend"><span class="legend-item"><span class="legend-line"></span>当前场景的数据通路</span><span class="legend-item">淡出元素仍保留，帮助定位全局</span><span class="legend-item">减少动态效果设置会关闭流动动画</span></div>
+          </figure>
+
+          <div class="scenario-detail" id="scenario-detail" role="tabpanel" aria-labelledby="scenario-tab-coding" aria-live="polite">
+            <div class="scenario-summary"><span class="tag tag-prompt">CODING TRACE</span><h3>长输入、短补全：把机器预算倾斜给 prompt</h3><p>代码上下文拉长了 prefill，而每次只补全少数 token。Splitwise-HH 在同功耗设计中配置 35P / 5T；长 prompt 使用逐层 KV 传输，短暂 decode 尽快完成。</p><div class="scenario-stats"><div class="scenario-stat"><strong>1500</strong><span>中位输入 tokens</span></div><div class="scenario-stat"><strong>13</strong><span>中位输出 tokens</span></div><div class="scenario-stat"><strong>35P / 5T</strong><span>Splitwise-HH · iso-power</span></div></div><span class="source">Fig. 3、Fig. 16a / §VI-B</span></div>
+            <ol class="scenario-steps"><li>长代码上下文到达，CLS 选择 P / T 两端。</li><li>prompt MLS 在 2048-token 预算内组 batch，优先控制 TTFT。</li><li>大 KV 随层异步发送，避免把完整传输串到 prefill 之后。</li><li>token 池只跑少量 decode 迭代，输出 13 个左右 token 后释放状态。</li></ol>
+          </div>
+          <figcaption class="figure-caption">架构依据论文 Figure 10 重绘；数据流强调与场景编号为解读性示意。机器配比是 Figure 16 的同功耗吞吐优化配置，不是所有负载下的固定推荐值。</figcaption>
+        </div>
+
+        <aside class="run">
+          <div class="run-head"><span class="run-title">▶ 跑一遍 · 负载形状如何改写 P / T 配比</span><span class="tag">论文配置</span></div>
+          <div class="run-body">
+            <div class="table-scroll">
+              <table class="mini-table">
+                <thead><tr><th>负载</th><th>输入 / 输出中位数</th><th>Splitwise-HH 配比</th><th>读法</th></tr></thead>
+                <tbody>
+                  <tr><td>coding</td><td>1500 / 13</td><td>35P + 5T</td><td>40 台中 35 台先服务 prompt</td></tr>
+                  <tr><td>conversation</td><td>1020 / 129</td><td>25P + 15T</td><td>decode 变长，token 池扩到 15 台</td></tr>
+                  <tr><td>batch / 极高负载</td><td>分布可不同</td><td>越来越多机器进入 mixed</td><td>隔离收益下降，最终接近 iso-count baseline</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p>同为 <strong>40 台 H100 的同功耗设计</strong>，仅输入 / 输出分布变化，就让 token 池从 <strong>5 → 15 台</strong>。这正是“按阶段供给”比“统一买最快 GPU”更有操作空间的地方。</p>
+            <p class="run-note">配比来自 Fig. 16 / §VI-B；batch 行为来自 §VI-E。35P/5T 与 25P/15T 不是动态调度的每秒快照，而是面向对应 trace 的 provisioned cluster。</p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section" id="decisions" aria-labelledby="decisions-title">
+        <div class="section-head">
+          <span class="section-index">05</span>
+          <div><div class="section-kicker">Engineering decision records</div><h2 id="decisions-title">真正值得学的，是六次取舍</h2><p class="section-intro">每个决策都同时看备选路径、收益与代价。这里把“论文明确做的对照”和“工程师视角的归纳”分开，不把后见之明伪装成作者原话。</p></div>
+        </div>
+        <div class="stack">
+          <div class="decision-ledger" id="decision-ledger">
+            <article class="decision-card">
+              <div class="decision-card-head"><h3>按阶段拆机，而不是继续优化同机混合</h3><span class="tag tag-prompt">PHASE SPLIT</span></div>
+              <div class="decision-grid">
+                <div class="decision-cell"><h4>决策问题</h4><p>如何消除 prompt 与 token 同批执行造成的 TBT 干扰，并让两类资源分别扩张？</p></div>
+                <div class="decision-cell"><h4>备选路径 / 未采用</h4><p><strong>Orca</strong> 的 continuous batching 仍同机切换阶段；<strong>SARATHI</strong> 的 chunked prefill + decode piggyback 仍同批，论文认为它只能减轻、不能消除干扰。</p></div>
+                <div class="decision-cell"><h4>为什么这样选</h4><p>拆机后，prompt 端可限 batch 保 TTFT，token 端可尽量大 batch 提吞吐；还能分别选择 GPU 代际与 power cap。</p></div>
+                <div class="decision-cell tradeoff"><h4>代价 / 权衡</h4><p>把本地显存读取变成跨机状态迁移；同时引入 P/T 配比错误时的容量碎片，所以传输优化和 mixed pool 不是附属品，而是拆分成立的条件。</p></div>
+              </div>
+            </article>
+
+            <article class="decision-card">
+              <div class="decision-card-head"><h3>两级调度 + 第三资源池，避免静态分区 stranded capacity</h3><span class="tag tag-mixed">ELASTIC POOLS</span></div>
+              <div class="decision-grid">
+                <div class="decision-cell"><h4>决策问题</h4><p>集群路由需要全局视野，batch 又需要本地实时状态；固定 P/T 配比遇到负载漂移怎么办？</p></div>
+                <div class="decision-cell"><h4>备选路径 / 未采用</h4><p>纯静态 Splitwise-AA / HH 分区会在负载偏离预期时空置一侧；<strong>Orca</strong> 式迭代调度解决单机 batch，却不负责跨池容量。论文也未让 CLS 每次 iteration 都同步。</p></div>
+                <div class="decision-cell"><h4>为什么这样选</h4><p>CLS 用 JSQ 管池与路由，MLS 用本地队列 / HBM 管每次 forward；高峰把机器借入 mixed pool，反向队列清空后再归还原池。</p></div>
+                <div class="decision-cell tradeoff"><h4>代价 / 权衡</h4><p>CLS 可能成为大集群瓶颈；定期状态上报意味着路由基于近似状态。高负载下越来越多机器 mixed 后，系统会退回接近普通 baseline 的行为。</p></div>
+              </div>
+            </article>
+
+            <article class="decision-card">
+              <div class="decision-card-head"><h3>两端都用 FCFS，但 batch 策略故意不对称</h3><span class="tag tag-prompt">BATCHING</span></div>
+              <div class="decision-grid">
+                <div class="decision-cell"><h4>决策问题</h4><p>同一种“越大越好”的 batch 规则，为什么不能同时服务 prefill 与 decode？</p></div>
+                <div class="decision-cell"><h4>备选路径 / 未采用</h4><p>默认 <strong>request-level batching</strong> 让新请求等整批结束；<strong>SARATHI</strong> mixed batch 与无限 prompt batch 都会让长 prefill 影响单次迭代；Orca 的 prompt 抢占又可能伤 TBT。</p></div>
+                <div class="decision-cell"><h4>为什么这样选</h4><p>prompt 端总输入限制为 <strong>2048 tokens</strong>，因为之后吞吐下降；token 端则持续合批，直到接近 HBM 耗尽再排队，因为 TBT 对 batch 相对不敏感。</p></div>
+                <div class="decision-cell tradeoff"><h4>代价 / 权衡</h4><p>2048 是特定模型 / 硬件的 profiling 结果，论文明确说可配置，不是跨模型常数；token 端“尽量大”也把准入控制与显存预估变成正确性关键。</p></div>
+              </div>
+            </article>
+
+            <article class="decision-card">
+              <div class="decision-card-head"><h3>大 prompt 逐层传，小 prompt 反而串行传</h3><span class="tag tag-accent">KV HANDOFF</span></div>
+              <div class="decision-grid">
+                <div class="decision-cell"><h4>决策问题</h4><p>如何隐藏 KV-cache 跨机传输，同时不让细粒度通信反过来拖慢 prefill？</p></div>
+                <div class="decision-cell"><h4>备选路径 / 未采用</h4><p>naive Splitwise 在 prefill 完成后一次性串行传 KV；<strong>Ray / Dryad</strong> 等通用 dataflow 能表达两阶段图，却不是为这种逐层 GPU 状态交接专门设计。</p></div>
+                <div class="decision-cell"><h4>为什么这样选</h4><p>每层 KV 生成后立即用 <strong>MSCCL++ zero-copy one-sided put</strong> 异步发送，与下一层计算重叠；小 KV 没必要承担干扰，因此选择串行。</p></div>
+                <div class="decision-cell tradeoff"><h4>代价 / 权衡</h4><p>需要每层同步、每请求 semaphore 与 vLLM block 连续性感知；H100 上 &lt;512 tokens 走串行这一边界来自本文环境，迁移系统时必须重新 profile。</p></div>
+              </div>
+            </article>
+
+            <article class="decision-card">
+              <div class="decision-card-head"><h3>把新算力给 prompt，把旧 GPU / 降功耗给 token</h3><span class="tag tag-token">HETEROGENEITY</span></div>
+              <div class="decision-grid">
+                <div class="decision-cell"><h4>决策问题</h4><p>H100 算力相对 A100 增长 3.43×，HBM 容量却没涨；怎样不把昂贵算力浪费在 decode 上？</p></div>
+                <div class="decision-cell"><h4>备选路径 / 未采用</h4><p>Splitwise-HH 全用 H100 简单同构；<strong>BigDL-LLM、Numenta</strong> 探索 CPU / 低算力设备，<strong>FlexGen</strong> 探索单 GPU offloading；它们降低资源门槛，但未采用本文的跨机 P/T 分池。</p></div>
+                <div class="decision-cell"><h4>为什么这样选</h4><p>Splitwise-HA 用 H100 跑 prompt、A100 跑 token；HHcap 给 token H100 降功耗。依据是 TBT 的代际敏感度低于 TTFT，且 token 对 power cap 较钝感。</p></div>
+                <div class="decision-cell tradeoff"><h4>代价 / 权衡</h4><p>数据中心 GPU 型号更碎；论文也承认 H100 ↔ A100 的 InfiniBand 配置未必现成。HA 在负载从 coding 切到 conversation 时有 7% 吞吐回落。</p></div>
+              </div>
+            </article>
+
+            <article class="decision-card">
+              <div class="decision-card-head"><h3>用性能模型 + 事件模拟搜集群，而不是拍脑袋定配比</h3><span class="tag">PROVISIONING</span></div>
+              <div class="decision-grid">
+                <div class="decision-cell"><h4>决策问题</h4><p>给定 trace、硬件、吞吐目标和 SLO，如何找到 P/T 台数，并把成本或功耗作为真正的优化目标？</p></div>
+                <div class="decision-cell"><h4>备选路径 / 未采用</h4><p>只按平均利用率或单点吞吐 provisioning，无法覆盖尾部；<strong>InferLine / MArk</strong> 是相关 provisioning 思路，但面向通用推理链路，未处理本文的 LLM 两阶段 batch 细节。</p></div>
+                <div class="decision-cell"><h4>为什么这样选</h4><p>piece-wise linear 性能模型预测 TTFT / TBT，事件模拟器搜索 P/T 台数；P50 / P90 / P99 × TTFT / TBT / E2E 共 <strong>9 个 SLO 必须全满足</strong>。</p></div>
+                <div class="decision-cell tradeoff"><h4>代价 / 权衡</h4><p>集群结论依赖 trace 与模型准确度；论文只优化 provisioned power，不是动态功耗。性能模型 MAPE &lt;3% 并不等价于所有大规模生产尾部都被真实验证。</p></div>
+              </div>
+            </article>
+          </div>
+
+          <aside class="run">
+            <div class="run-head"><span class="run-title">▶ 跑一遍 · 2048-token prompt batch 预算</span><span class="tag tag-accent">示例值 + 论文阈值</span></div>
+            <div class="run-body">
+              <ol>
+                <li>FCFS 队列依次是 <strong>1024、768、512、384</strong> 四个 prompt（示例值）。</li>
+                <li>装入前两个：<strong>1024 + 768 = 1792</strong>，仍低于 2048。</li>
+                <li>再装第三个会变成 <strong>2304 &gt; 2048</strong>，所以本批停在 1792；512 与 384 留给后续 batch。</li>
+                <li>同一时刻，token MLS 不套用 2048 规则：它继续吸纳 decode，直到接近 HBM 上限。两套策略来自两套瓶颈，而不是调度器实现不一致。</li>
+              </ol>
+              <p class="run-note">2048-token 上限来自 §IV-B / Fig. 6a；四个请求长度是示例值。论文也说明该上限应按模型与硬件重新配置。</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="evidence" aria-labelledby="evidence-title">
+        <div class="section-head">
+          <span class="section-index">06</span>
+          <div><div class="section-kicker">Evidence, not slogans</div><h2 id="evidence-title">哪些数字支撑论点，证据又走到哪一层</h2><p class="section-intro">先分清实测与模拟，再看运营点。论文的“最高多少倍”对应不同基线与约束；不能把一张图的吞吐、另一张图的成本和第三张图的功耗拼成不存在的配置。</p></div>
+        </div>
+        <div class="stack-lg">
+          <div class="evidence-boundary">
+            <article class="evidence-type"><span class="tag tag-prompt">REAL HARDWARE</span><h3>真实硬件：机制与校准</h3><p>A100 / H100 单机 characterization、两机 KV 传输、第二 token 与 E2E 开销。性能模型在 80:20 train:test 上达到 <strong>MAPE &lt;3%</strong>。</p><span class="source">§III、§V、§VI-A</span></article>
+            <article class="evidence-type"><span class="tag tag-mixed">EVENT SIMULATION</span><h3>集群规模：设计空间搜索</h3><p>事件驱动模拟器建模仿池、队列、HBM 与 KV 传输；用超过 <strong>50K iterations</strong> 的生产负载做端到端 fidelity 验证。大规模吞吐 / 成本 / 功耗结论主要在这一层。</p><span class="source">§V-B / Fig. 13</span></article>
+          </div>
+
+          <div class="chart-block">
+            <div class="chart-head"><div><h3>A100 → H100：算力 scaling 远快于显存</h3><p>H100 相对 A100 的比率；1× 表示没有变化</p></div><span class="source">Table I</span></div>
+            <div class="bar-chart" role="img" aria-label="H100 相对 A100：算力 3.43 倍，HBM 带宽 1.64 倍，HBM 容量 1 倍，功率 1.75 倍，机器成本 2.16 倍">
+              <div class="bar-row"><span class="bar-label">Compute / TFLOPs</span><div class="bar-track"><div class="bar-fill" style="--value:98%"></div></div><span class="bar-value">3.43×</span></div>
+              <div class="bar-row"><span class="bar-label">HBM bandwidth</span><div class="bar-track"><div class="bar-fill token" style="--value:47%"></div></div><span class="bar-value">1.64×</span></div>
+              <div class="bar-row"><span class="bar-label">HBM capacity</span><div class="bar-track"><div class="bar-fill token" style="--value:29%"></div></div><span class="bar-value">1.00×</span></div>
+              <div class="bar-row"><span class="bar-label">Power</span><div class="bar-track"><div class="bar-fill accent" style="--value:50%"></div></div><span class="bar-value">1.75×</span></div>
+              <div class="bar-row"><span class="bar-label">Cost / machine</span><div class="bar-track"><div class="bar-fill neutral" style="--value:62%"></div></div><span class="bar-value">2.16×</span></div>
+            </div>
+            <p class="chart-note">条形以 3.5× 为共同视觉刻度，保留所有精确值；这不是性能提升图，而是硬件规格比。它解释了为什么“所有阶段都买最新 GPU”未必有最佳 Perf/$ 或 Perf/W。</p>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>运营点 / 对照</th><th>Splitwise 结果</th><th>同时付出的代价或保持项</th><th>出处</th></tr></thead>
+              <tbody>
+                <tr><td>Iso-power · 吞吐优化<br>conversation</td><td class="num"><strong>AA：2.15×</strong> Baseline-A100<br><strong>HA：1.18×</strong> Baseline-A100</td><td>AA 同功耗、同成本；HA 同功耗、成本再低 10%</td><td>Fig. 18a / §VI-B</td></tr>
+                <tr><td>Iso-cost · 吞吐优化</td><td class="num"><strong>AA：1.4×</strong> Baseline-H100</td><td>同成本，但功耗高 25%、空间 2×</td><td>Fig. 18b / §VI-C</td></tr>
+                <tr><td>Iso-throughput · 功耗优化</td><td class="num"><strong>HHcap：同吞吐</strong> Baseline-H100</td><td>功耗低 25%，同成本、同空间</td><td>Fig. 19a / §VI-C</td></tr>
+                <tr><td>Iso-throughput · 成本优化</td><td class="num"><strong>AA：同吞吐</strong> Baseline-H100</td><td>成本低 25%</td><td>Fig. 19b / §VI-C</td></tr>
+                <tr><td>论文总结的另一组运营点</td><td class="num"><strong>1.76× 吞吐</strong><br><strong>2.35× 吞吐</strong></td><td>前者同成本且功耗低 15%；后者同成本、同功耗</td><td>§IX</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="result-notes">
+            <div class="result-note"><strong>&lt;7%</strong><span>KV 传输开销相对 prompt 计算时间；逐层未隐藏部分约 8ms（A100）/ 5ms（H100）。</span><span class="source">Fig. 14 / §VI-A</span></div>
+            <div class="result-note"><strong>0.8% E2E</strong><span>coding trace 两机、无 batch 实测；串行传输在大 prompt 下可到 3% E2E。</span><span class="source">Fig. 15 / §VI-A</span></div>
+            <div class="result-note"><strong>7% setback</strong><span>coding 优化的 HA / HHcap 改跑 conversation 时的吞吐回落；AA / HH 借 mixed pool 无此影响。</span><span class="source">Fig. 20a / §VI-D</span></div>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Llama2-70B · P50 · 无 batch</th><th>A100 → H100 / coding</th><th>A100 → H100 / conversation</th><th>为什么重要</th></tr></thead>
+              <tbody>
+                <tr><td>TTFT</td><td class="num">185 → 95ms（0.51×）</td><td class="num">155 → 84ms（0.54×）</td><td>H100 对 prompt 阶段加速最明显</td></tr>
+                <tr><td>TBT</td><td class="num">52 → 31ms（0.70×）</td><td class="num">40 → 28ms（0.70×）</td><td>token 阶段从新一代算力获益较小</td></tr>
+                <tr><td>E2E</td><td class="num">856 → 493ms（0.58×）</td><td class="num">4957 → 3387ms（0.68×）</td><td>负载形状决定端到端收益</td></tr>
+                <tr><td>Cost / Energy</td><td class="num">$0.42 → $0.52<br>1.37 → 1.37Whr</td><td class="num">$2.4 → $3.6<br>7.9 → 9.4Whr</td><td>A100 在本文测量中成本 / 能耗不差于 H100</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="figure-caption">上表逐项转录论文 Table IV。这里的 Cost 与 Energy 是表中 P50 请求指标，不要与集群级 iso-cost / iso-power 的约束混用。</p>
+
+          <aside class="run">
+            <div class="run-head"><span class="run-title">▶ 跑一遍 · 同一 provisioned-power 预算能放多少机器</span><span class="tag">论文数值 + 算术</span></div>
+            <div class="run-body">
+              <ol>
+                <li>Table V 把 DGX-A100 功率归一为 <strong>1×</strong>，DGX-H100 为 <strong>1.75×</strong>。</li>
+                <li>Baseline-H100 用 <strong>40 台</strong>：归一化功率预算为 <strong>40 × 1.75 = 70</strong>。</li>
+                <li>同一预算换 A100：<strong>70 ÷ 1 = 70 台</strong>，所以 Baseline-A100 是 70P/T；这正是论文的 40 台 H100 ↔ 70 台 A100。</li>
+                <li>但机器更多不等于每个维度都赢：占地、网络、调度和单机成本进入不同优化目标，因此论文分别报告 iso-power、iso-cost、iso-throughput，而非只报一个“总倍率”。</li>
+              </ol>
+              <p class="run-note">机器数与归一化功率来自 §VI-B / Table V；乘法为复核算术。论文使用 provisioned power，不是动态实耗或数据中心 PUE 后功耗。</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="critique" aria-labelledby="critique-title">
+        <div class="section-head">
+          <span class="section-index">07</span>
+          <div><div class="section-kicker">Read past the abstract</div><h2 id="critique-title">限制、追问，以及可以直接偷走的思想</h2><p class="section-intro">Splitwise 的贡献很扎实，但它不是“拆了就赢”。真正的适用条件是：两阶段资源剖面不同、KV 能高效交接、负载需要 SLO 隔离，而且混合池能回收比例错配的容量。</p></div>
+        </div>
+        <div class="stack-lg">
+          <div class="critique-grid">
+            <article class="critique-column">
+              <span class="tag tag-prompt">论文自认</span><h3>作者已经写明的边界</h3>
+              <ul class="critique-list">
+                <li><strong>可靠性与恢复未解决</strong><p>P 或 T 机器失败时从头重启请求；KV checkpoint 与恢复只是可能方向，安全高效的设计超出本文范围。<span class="source">§IV-E</span></p></li>
+                <li><strong>CLS 扩展性</strong><p>大集群中可能成为瓶颈；分区或复制调度被留作正交优化。<span class="source">§IV-E</span></p></li>
+                <li><strong>互连与异构可得性</strong><p>HA 的 H100 ↔ A100 InfiniBand 不一定现成；低带宽 RoCE / Ethernet、KV 压缩和其他硬件仍需验证。<span class="source">§VII</span></p></li>
+                <li><strong>功耗口径有限</strong><p>只考虑 provisioned power，不研究动态功耗；对话上下文缓存也可能改变 prompt 的显存行为。<span class="source">§IV-D、§VII</span></p></li>
+                <li><strong>原型验证范围</strong><p>附录明确写道，因硬件有限，artifact functionality 只对 traces 与 SplitwiseSim 做过测试。<span class="source">Appendix A</span></p></li>
+              </ul>
+            </article>
+            <article class="critique-column reader">
+              <span class="tag tag-accent">工程师视角</span><h3>落地前还应该追问</h3>
+              <ul class="critique-list">
+                <li><strong>集群尾部是否被模拟器充分覆盖？</strong><p>MAPE &lt;3% 是性能模型误差，不是生产集群所有尾延迟的保证。网络拥塞、状态陈旧、故障与多租户干扰仍需要独立压测。</p></li>
+                <li><strong>pending tokens 是否足够代表剩余工作时间？</strong><p>相同 token 数在不同输入长度、KV 体量与硬件上服务时间不同；JSQ 可能还需要纳入显存和预计 iteration time。</p></li>
+                <li><strong>短输出对第二 token 开销敏感吗？</strong><p>0.8% E2E 很漂亮，但 16.5% 的第二 token 增幅并非零。极短交互、严格 streaming SLO 应按自己的分布重测。</p></li>
+                <li><strong>前缀缓存与会话复用会改变多少收益？</strong><p>characterization 为安全考虑不做跨请求 KV 复用；若生产开启复用，prompt 工作量、KV 位置和跨机传输方向都要重算。</p></li>
+                <li><strong>模型覆盖面仍窄</strong><p>实测聚焦 BLOOM-176B / Llama2-70B、8-GPU TP、A100 / H100。作者对 MoE 等的适用性论证合理，但不是同等的实测证据。</p></li>
+              </ul>
+            </article>
+          </div>
+
+          <div>
+            <div class="section-kicker">Ideas worth stealing</div>
+            <h3>即使不实现 Splitwise，也可以直接拿走六件事</h3>
+            <ul class="steal-list">
+              <li><strong>分阶段 profiling。</strong>不要只看整请求 GPU utilization；分别记录 prefill / decode 的 FLOPs、HBM、功耗、TTFT 与 TBT。</li>
+              <li><strong>按瓶颈设相反 batch 策略。</strong>计算密集阶段限制迭代体量，显存带宽阶段用准入控制换取更大有效 batch。</li>
+              <li><strong>状态生产一层，就发送一层。</strong>任何跨阶段大状态交接，都可先问能否与后续计算 overlap，而非结束后一次性搬运。</li>
+              <li><strong>保留混合溢出池。</strong>专职池解决隔离，弹性 mixed 容量解决比例错配；两者不是二选一。</li>
+              <li><strong>把 SLO 写成向量。</strong>同时看 P50 / P90 / P99 的 TTFT、TBT、E2E，避免 averages 掩盖 streaming 尾部。</li>
+              <li><strong>先声明约束，再报倍率。</strong>iso-cost、iso-power、iso-throughput 是三种不同产品决策；机架空间与旧 GPU 可得性也应进入目标函数。</li>
+            </ul>
+          </div>
+
+          <aside class="run">
+            <div class="run-head"><span class="run-title">▶ 跑一遍 · 同一个 256-token prompt，何时不该逐层传</span><span class="tag">256 为示例值 · 512 为论文边界</span></div>
+            <div class="run-body">
+              <ol>
+                <li>在本文 H100 设置中，<strong>&lt;512 tokens</strong> 被当作小 prompt；因此 <strong>256-token</strong> 输入走 serialized KV transfer。</li>
+                <li>原因不是“串行永远更快”，而是小 KV 的总传输量很小，逐层 overlap 能隐藏的绝对延迟有限，却可能带来同步与计算干扰。</li>
+                <li>同一个 256-token 请求若处于极高负载、放松延迟 SLO 的批量集群，还可能进入 mixed pool；此时系统逐渐接近普通 mixed-batching baseline。</li>
+                <li><span class="engineer">工程判断：</span>不要把“512”复制成全局配置。正确做法是分别测 serial 与 per-layer 的 TTFT / 第二 token / E2E 曲线，再按模型、硬件、网络和 batch 选阈值。</li>
+              </ol>
+              <p class="run-note">512-token 边界与 mixed 行为来自 §VI-A、§VI-E；最后一条是基于论文机制的工程建议，不是论文新增的实验结果。</p>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <footer class="report-footer">
+        <div class="footer-grid">
+          <div class="prose">
+            <h3>证据索引与重绘说明</h3>
+            <p>主论文：Splitwise: Efficient Generative LLM Inference Using Phase Splitting，arXiv:2311.18677v2，2024-05-20。架构依据 Fig. 10、KV 时序依据 Fig. 11、负载配比依据 Fig. 16；所有 SVG 均为重绘 / 示意，没有直接嵌入论文位图。</p>
+            <p>报告中的“论文数值”均可在对应图、表或章节找到；“示例值”“工程师视角”“算术”用于标识非论文原始结论。阅读实验时优先保留原有基线与约束。</p>
+          </div>
+          <div class="footer-links">
+            <a href="https://arxiv.org/abs/2311.18677">论文 / arXiv</a>
+            <a href="https://doi.org/10.5281/zenodo.11003049">Artifact / Zenodo</a>
+            <a href="https://github.com/vllm-project/vllm/pull/2809">KV transfer / vLLM PR</a>
+            <a href="https://github.com/Mutinifni/splitwise-sim">Simulator / SplitwiseSim</a>
+            <a href="https://github.com/microsoft/mscclpp">MSCCL++</a>
+            <a href="https://github.com/Azure/AzurePublicDataset/blob/master/AzureLLMInferenceDataset2023.md">Azure LLM Inference Trace 2023</a>
+          </div>
+        </div>
+        <div class="footer-bottom"><span>SPLITWISE / ENGINEERING DEEP DIVE</span><span>SELF-CONTAINED HTML · NO NETWORK DEPENDENCY</span></div>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.documentElement;
+      const params = new URLSearchParams(window.location.search);
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      const themeButton = document.getElementById("theme-toggle");
+      const themeLabel = document.getElementById("theme-label");
+      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+
+      function paintTheme(theme) {
+        root.dataset.theme = theme;
+        const next = theme === "dark" ? "light" : "dark";
+        themeButton.setAttribute("aria-label", `切换到${next === "dark" ? "深色" : "浅色"}主题`);
+        themeLabel.textContent = theme === "dark" ? "深色" : "浅色";
+      }
+      paintTheme(root.dataset.theme);
+
+      themeButton.addEventListener("click", () => {
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        paintTheme(next);
+        try { localStorage.setItem("splitwise-theme", next); } catch (error) { /* Theme still works without storage. */ }
+      });
+      systemTheme.addEventListener("change", event => {
+        let saved = null;
+        try { saved = localStorage.getItem("splitwise-theme"); } catch (error) { saved = null; }
+        if (!saved) paintTheme(event.matches ? "dark" : "light");
+      });
+
+      const navLinks = Array.from(document.querySelectorAll("#rail-nav a"));
+      const sections = navLinks.map(link => document.querySelector(link.getAttribute("href"))).filter(Boolean);
+      if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver(entries => {
+          const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+          if (!visible.length) return;
+          const activeId = `#${visible[0].target.id}`;
+          navLinks.forEach(link => {
+            if (link.getAttribute("href") === activeId) link.setAttribute("aria-current", "location");
+            else link.removeAttribute("aria-current");
+          });
+        }, { rootMargin: "-12% 0px -70% 0px", threshold: [0, 0.05] });
+        sections.forEach(section => observer.observe(section));
+      }
+
+      const steps = [
+        {
+          tag: "CLS / CLUSTER LEVEL", tone: "prompt", title: "同时选定 prompt 与 token 机器",
+          body: "请求到达后，CLS 用 Join the Shortest Queue 分别选择 P、T 两端；队列长度按 pending tokens 计算，而不是请求条数。",
+          bullets: ["机器定期上报队列与显存状态，不是每个 iteration 都同步。", "在 prefill 前确定 token 端，是后续逐层异步传输的前置条件。", "队列过长时，启用 mixed pool 或从相反角色池借机器。"],
+          invariant: "请求尚未开始计算，KV 的目的地已经可知。", source: "论文 §IV-A"
+        },
+        {
+          tag: "PROMPT MLS / ADMISSION", tone: "prompt", title: "FCFS 组 batch，但给总输入设上限",
+          body: "prompt MLS 按先到先服务组织输入，把多个 prompt 的总 token 数限制在 2048；超过后就停止向本批添加。",
+          bullets: ["2048 来自 Fig. 6a 的吞吐拐点，不是任意请求数上限。", "阈值可配置，模型或硬件改变后需要重新 profile。", "mixed 机器若需执行 prompt，会优先处理新 prompt 以保 TTFT。"],
+          invariant: "一次 prompt iteration 的计算量被显式约束，避免大 batch 反噬吞吐与 TTFT。", source: "论文 §IV-B / Fig. 6a"
+        },
+        {
+          tag: "PREFILL / MODEL EXECUTION", tone: "prompt", title: "并行算完输入，产生首 token 与逐层 KV",
+          body: "模型在单机 8-GPU tensor parallelism 配置内执行 forward；所有输入 token 并行通过各层，注意力上下文写入 KV-cache，并产生第一个输出 token。",
+          bullets: ["每层结束就得到该层可发送的 KV，不必等整个 prompt 完成。", "批内请求可被路由到不同 token 机器，因此每请求使用独立 semaphore。", "Splitwise 不改变模型参数或数值状态，论文据此声明不影响 accuracy。"],
+          invariant: "第 L 层 KV 已生成时，第 L+1 层计算与第 L 层通信可以同时进行。", source: "论文 §II-B、§IV-E、§V-A"
+        },
+        {
+          tag: "KV HANDOFF / DATA PLANE", tone: "accent", title: "按 prompt 大小选择串行或逐层迁移",
+          body: "小 prompt 用 serialized transfer，大 prompt 用 per-layer async transfer；实现基于 MSCCL++ 的 zero-copy one-sided put，经 InfiniBand 直接写入 token 端。",
+          bullets: ["所有层 put 发出后，prompt 端发送 semaphore，token 端等待对应信号。", "vLLM KV block 按连续性与 semaphore 聚合，减少传输次数。", "优化的是未隐藏延迟，不是让网络传输凭空消失。"],
+          invariant: "token 端只有在对应请求 KV 到齐后才能安全继续；通信与同步共享 InfiniBand 连接。", source: "论文 §IV-C、§V-A、§VI-A"
+        },
+        {
+          tag: "TOKEN MLS / CONTINUOUS BATCHING", tone: "token", title: "持续 decode，尽量合批直到接近 OOM",
+          body: "token MLS 以 FCFS 组织 decode，每个 iteration 继续合批；当 HBM 接近耗尽时，新 token 请求开始排队。",
+          bullets: ["每个活跃请求每步生成一个 token，并让自己的 KV-cache 继续增长。", "大 batch 提高 token throughput，TBT 增长相对温和。", "mixed 机器上的 prompt 可抢占 token；通过 aging 与抢占次数上限避免饿死。"],
+          invariant: "batch 扩张受 HBM 容量约束，而不是套用 prompt 的 2048-token 计算预算。", source: "论文 §IV-B / Fig. 6b、Fig. 7"
+        },
+        {
+          tag: "RELEASE / POOL RETURN", tone: "mixed", title: "释放请求状态，mixed 机器排空后归还原池",
+          body: "响应完成后释放 token 端 KV 状态；若机器曾从 P 或 T 池借入 mixed pool，它会保留原身份，直到相反阶段队列清空再返回。",
+          bullets: ["长期负载分布偏离时，CLS 低频执行更粗粒度 re-purposing。", "论文称池切换没有可察觉延迟，但大改配并不频繁发生。", "P/T 任一端故障时当前实现从头重启请求；KV checkpoint 恢复留作未来工作。"],
+          invariant: "混合是临时的弹性状态，不是让原池身份永久消失；故障恢复仍是未完成边界。", source: "论文 §IV-A、§IV-E"
+        }
+      ];
+
+      const stepTabs = Array.from(document.querySelectorAll(".step-tab"));
+      const stepPanel = document.getElementById("step-panel");
+      let currentStep = 0;
+
+      function setStep(index, focus = false) {
+        currentStep = Math.max(0, Math.min(steps.length - 1, index));
+        const step = steps[currentStep];
+        stepTabs.forEach((tab, tabIndex) => {
+          const active = tabIndex === currentStep;
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        stepPanel.setAttribute("aria-labelledby", `step-tab-${currentStep}`);
+        stepPanel.innerHTML = `<div class="step-panel-main"><span class="tag tag-${step.tone}">${step.tag}</span><h3>${step.title}</h3><p>${step.body}</p><ul>${step.bullets.map(item => `<li>${item}</li>`).join("")}</ul></div><aside class="step-state"><h4>此步建立的不变量</h4><p>${step.invariant}</p><span class="source">${step.source}</span></aside>`;
+        if (focus) stepTabs[currentStep].focus();
+      }
+      stepTabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => setStep(index));
+        tab.addEventListener("keydown", event => {
+          let next = null;
+          if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % steps.length;
+          if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + steps.length) % steps.length;
+          if (event.key === "Home") next = 0;
+          if (event.key === "End") next = steps.length - 1;
+          if (next !== null) { event.preventDefault(); setStep(next, true); }
+        });
+      });
+
+      const scenarios = {
+        coding: {
+          label: "CODING TRACE", tone: "prompt", diagram: "CODING / PREFILL-HEAVY",
+          title: "长输入、短补全：把机器预算倾斜给 prompt",
+          body: "代码上下文拉长了 prefill，而每次只补全少数 token。Splitwise-HH 在同功耗设计中配置 35P / 5T；长 prompt 使用逐层 KV 传输，短暂 decode 尽快完成。",
+          stats: [["1500", "中位输入 tokens"], ["13", "中位输出 tokens"], ["35P / 5T", "Splitwise-HH · iso-power"]],
+          source: "Fig. 3、Fig. 16a / §VI-B",
+          steps: ["长代码上下文到达，CLS 选择 P / T 两端。", "prompt MLS 在 2048-token 预算内组 batch，优先控制 TTFT。", "大 KV 随层异步发送，避免把完整传输串到 prefill 之后。", "token 池只跑少量 decode 迭代，输出 13 个左右 token 后释放状态。"]
+        },
+        conversation: {
+          label: "CONVERSATION TRACE", tone: "token", diagram: "CONVERSATION / DECODE-HEAVY",
+          title: "输出拉长：token 池扩容，连续 batching 成为主角",
+          body: "对话请求的输出中位数达到 129 tokens，decode 在 E2E 中更重。Splitwise-HH 把配置改为 25P / 15T；HHcap 在这一负载上尤其有利，因为 token 端对 power cap 较钝感。",
+          stats: [["1020", "中位输入 tokens"], ["129", "中位输出 tokens"], ["25P / 15T", "Splitwise-HH · iso-power"]],
+          source: "Fig. 3、Fig. 16b / §VI-B",
+          steps: ["对话上下文到达，CLS 仍为请求同时指定 P / T 两端。", "prompt 池完成 prefill，但机器配比比 coding 少，避免 prompt 侧闲置。", "KV 交接后，长 decode 在扩容后的 token 池中持续合批。", "连续输出直到 EOS；HHcap 可在 token 端降低功率而尽量保住延迟。"]
+        },
+        batch: {
+          label: "BATCH / HIGH LOAD", tone: "mixed", diagram: "BATCH / MIXED-POOL TAKEOVER",
+          title: "放松交互 SLO：隔离退位，全员 mixed 提高利用率",
+          body: "批量作业更关心 token throughput，不必保留严格的交互延迟余量。极高负载下，越来越多机器进入 mixed pool，Splitwise 最终接近同机 mixed-batching baseline。",
+          stats: [["0.89 RPS/$", "A100 / AA 最佳吞吐成本"], ["0.75 RPS/$", "H100 / HH 吞吐成本"], ["≈ baseline", "全员 mixed 后的行为"]],
+          source: "§VI-E",
+          steps: ["高到达率填满专职 P / T 队列，CLS 开始寻找可用混合容量。", "原 prompt / token 机器进入 mixed pool，同机执行 mixed continuous batching。", "所有机器逐渐参与混合负载，阶段隔离与专用硬件收益被稀释。", "输出继续流式返回；系统行为接近 iso-count Baseline，而非始终保留拆分优势。"]
+        }
+      };
+
+      const scenarioTabs = Array.from(document.querySelectorAll(".scenario-tab"));
+      const scenarioStage = document.getElementById("scenario-stage");
+      const scenarioDetail = document.getElementById("scenario-detail");
+      const scenarioDiagramTitle = document.getElementById("scenario-diagram-title");
+      let currentScenario = "coding";
+
+      function setScenario(name, focus = false) {
+        if (!scenarios[name]) name = "coding";
+        currentScenario = name;
+        const scenario = scenarios[name];
+        scenarioStage.dataset.scenario = name;
+        scenarioDiagramTitle.textContent = scenario.diagram;
+        scenarioTabs.forEach(tab => {
+          const active = tab.dataset.scenario === name;
+          tab.setAttribute("aria-selected", String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        scenarioDetail.setAttribute("aria-labelledby", `scenario-tab-${name}`);
+        scenarioDetail.innerHTML = `<div class="scenario-summary"><span class="tag tag-${scenario.tone}">${scenario.label}</span><h3>${scenario.title}</h3><p>${scenario.body}</p><div class="scenario-stats">${scenario.stats.map(stat => `<div class="scenario-stat"><strong>${stat[0]}</strong><span>${stat[1]}</span></div>`).join("")}</div><span class="source">${scenario.source}</span></div><ol class="scenario-steps">${scenario.steps.map(item => `<li>${item}</li>`).join("")}</ol>`;
+        if (focus) scenarioTabs.find(tab => tab.dataset.scenario === name).focus();
+      }
+      scenarioTabs.forEach((tab, index) => {
+        tab.addEventListener("click", () => setScenario(tab.dataset.scenario));
+        tab.addEventListener("keydown", event => {
+          let next = null;
+          if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % scenarioTabs.length;
+          if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + scenarioTabs.length) % scenarioTabs.length;
+          if (event.key === "Home") next = 0;
+          if (event.key === "End") next = scenarioTabs.length - 1;
+          if (next !== null) { event.preventDefault(); setScenario(scenarioTabs[next].dataset.scenario, true); }
+        });
+      });
+
+      const requestedStep = Number.parseInt(params.get("step") || "1", 10);
+      setStep(Number.isFinite(requestedStep) ? requestedStep - 1 : 0);
+      setScenario(params.get("scenario") || "coding");
+
+      function writeAudit() {
+        if (!params.has("audit")) return;
+        const ids = ["architecture-diagram", "flow-stepper", "scenario-module", "decision-ledger", "evidence", "critique"];
+        const rects = {};
+        ids.forEach(id => {
+          const element = document.getElementById(id);
+          if (!element) return;
+          const rect = element.getBoundingClientRect();
+          rects[id] = { x: Math.max(0, rect.left), y: Math.max(0, rect.top + window.scrollY), width: rect.width, height: rect.height };
+        });
+        const intentional = ".diagram-scroll, .table-scroll, .rail-nav, .metadata-links, .footer-links";
+        const overflow = [];
+        document.querySelectorAll("body *").forEach(element => {
+          if (element.closest(intentional) || element.hidden || element.id === "layout-audit") return;
+          const rect = element.getBoundingClientRect();
+          if (rect.width > 0 && (rect.right > window.innerWidth + 1 || rect.left < -1)) {
+            overflow.push({ tag: element.tagName, id: element.id, class: String(element.className).slice(0, 80), left: Math.round(rect.left), right: Math.round(rect.right) });
+          }
+        });
+        const payload = {
+          viewport: window.innerWidth,
+          height: document.documentElement.scrollHeight,
+          bodyScrollWidth: document.body.scrollWidth,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          overflow: overflow.slice(0, 20),
+          step: currentStep + 1,
+          scenario: currentScenario,
+          reducedMotion: reducedMotion.matches,
+          rects
+        };
+        const output = document.createElement("pre");
+        output.id = "layout-audit";
+        output.hidden = true;
+        output.textContent = JSON.stringify(payload);
+        document.body.appendChild(output);
+      }
+      writeAudit();
+    })();
+  </script>
+</body>
+</html>

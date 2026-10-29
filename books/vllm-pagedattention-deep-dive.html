@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PagedAttention 深度解读 · vLLM 论文 Deep-Dive</title>
+<style>
+/* ============ tokens ============ */
+:root{
+  --bg:#0b0f13; --bg-elev:#11171e; --bg-inset:#070a0e; --bg-hover:#161e27;
+  --ink:#d9e0e8; --ink-dim:#8592a0; --ink-faint:#5a6673;
+  --line:#212a34; --line-strong:#33404e;
+  --accent:#e8b13c; --accent-soft:rgba(232,177,60,.13); --accent-ink:#171208;
+  --c-logical:#6aa9e8; --c-token:#4cc38a; --c-shared:#9a86e8; --c-swap:#55c2d8; --c-waste:#e0615f;
+  --c-logical-soft:rgba(106,169,232,.14); --c-token-soft:rgba(76,195,138,.14);
+  --c-shared-soft:rgba(154,134,232,.16); --c-swap-soft:rgba(85,194,216,.14); --c-waste-soft:rgba(224,97,95,.14);
+  --shadow:0 8px 28px rgba(0,0,0,.42);
+  --font-body:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --bg:#f3f5f7; --bg-elev:#ffffff; --bg-inset:#e9edf1; --bg-hover:#eef2f5;
+    --ink:#1b2430; --ink-dim:#55626f; --ink-faint:#8a96a3;
+    --line:#d8dfe6; --line-strong:#b8c2cc;
+    --accent:#a96f06; --accent-soft:rgba(169,111,6,.10); --accent-ink:#fffaf0;
+    --c-logical:#2b6cb0; --c-token:#1e7f52; --c-shared:#6a54c4; --c-swap:#0e7f96; --c-waste:#c2403e;
+    --c-logical-soft:rgba(43,108,176,.10); --c-token-soft:rgba(30,127,82,.10);
+    --c-shared-soft:rgba(106,84,196,.11); --c-swap-soft:rgba(14,127,150,.10); --c-waste-soft:rgba(194,64,62,.10);
+    --shadow:0 8px 24px rgba(30,45,60,.10);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f13; --bg-elev:#11171e; --bg-inset:#070a0e; --bg-hover:#161e27;
+  --ink:#d9e0e8; --ink-dim:#8592a0; --ink-faint:#5a6673;
+  --line:#212a34; --line-strong:#33404e;
+  --accent:#e8b13c; --accent-soft:rgba(232,177,60,.13); --accent-ink:#171208;
+  --c-logical:#6aa9e8; --c-token:#4cc38a; --c-shared:#9a86e8; --c-swap:#55c2d8; --c-waste:#e0615f;
+  --c-logical-soft:rgba(106,169,232,.14); --c-token-soft:rgba(76,195,138,.14);
+  --c-shared-soft:rgba(154,134,232,.16); --c-swap-soft:rgba(85,194,216,.14); --c-waste-soft:rgba(224,97,95,.14);
+  --shadow:0 8px 28px rgba(0,0,0,.42);
+}
+:root[data-theme="light"]{
+  --bg:#f3f5f7; --bg-elev:#ffffff; --bg-inset:#e9edf1; --bg-hover:#eef2f5;
+  --ink:#1b2430; --ink-dim:#55626f; --ink-faint:#8a96a3;
+  --line:#d8dfe6; --line-strong:#b8c2cc;
+  --accent:#a96f06; --accent-soft:rgba(169,111,6,.10); --accent-ink:#fffaf0;
+  --c-logical:#2b6cb0; --c-token:#1e7f52; --c-shared:#6a54c4; --c-swap:#0e7f96; --c-waste:#c2403e;
+  --c-logical-soft:rgba(43,108,176,.10); --c-token-soft:rgba(30,127,82,.10);
+  --c-shared-soft:rgba(106,84,196,.11); --c-swap-soft:rgba(14,127,150,.10); --c-waste-soft:rgba(194,64,62,.10);
+  --shadow:0 8px 24px rgba(30,45,60,.10);
+}
+/* ============ base ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15.5px;line-height:1.72;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent);color:var(--accent-ink)}
+a{color:var(--c-logical);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd{font-family:var(--font-mono);font-size:.88em;background:var(--bg-inset);border:1px solid var(--line);border-radius:4px;padding:.08em .38em}
+h1,h2,h3,h4{line-height:1.25;text-wrap:balance;letter-spacing:-.015em}
+p{max-width:70ch}
+p+p{margin-top:.7em}
+strong{font-weight:650}
+.num{font-variant-numeric:tabular-nums}
+/* ============ topbar ============ */
+.topbar{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topbar-in{max-width:1240px;margin:0 auto;padding:0 24px;height:52px;display:flex;align-items:center;gap:14px}
+.topbar .brand{font-family:var(--font-mono);font-size:12.5px;letter-spacing:.14em;color:var(--ink-dim);text-transform:uppercase}
+.topbar .brand b{color:var(--accent);font-weight:600}
+.topbar .sp{flex:1}
+.theme-btn{font-family:var(--font-mono);font-size:12px;color:var(--ink-dim);background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:6px;padding:5px 12px;cursor:pointer;display:flex;align-items:center;gap:7px}
+.theme-btn:hover{color:var(--ink);border-color:var(--accent)}
+.theme-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* ============ layout ============ */
+.wrap{max-width:1240px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:44px}
+.toc{position:sticky;top:76px;align-self:start;padding:26px 0 60px;max-height:calc(100vh - 76px);overflow:auto}
+.toc-title{font-family:var(--font-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:12px}
+.toc a{display:flex;gap:9px;align-items:baseline;padding:6px 10px;border-radius:6px;color:var(--ink-dim);font-size:13.5px;border-left:2px solid transparent;text-decoration:none}
+.toc a .no{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint)}
+.toc a:hover{background:var(--bg-hover);color:var(--ink)}
+.toc a.on{color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}
+.toc a.on .no{color:var(--accent)}
+.content{min-width:0;padding-bottom:90px}
+section{margin-top:74px;scroll-margin-top:72px}
+.eyebrow{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:26px}
+.sec-no{font-family:var(--font-mono);font-size:13px;color:var(--ink-faint);border:1px solid var(--line-strong);border-radius:5px;padding:2px 8px}
+h2{font-size:25px;font-weight:750}
+h3{font-size:17px;font-weight:700;margin:30px 0 12px}
+.lede{font-size:16.5px;color:var(--ink);max-width:68ch}
+.dim{color:var(--ink-dim)}
+.small{font-size:13px}
+/* ============ hero ============ */
+.hero{padding:64px 0 10px}
+.hero-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);border:1px solid var(--line-strong);border-radius:999px;padding:3px 11px}
+.tag.hot{color:var(--accent);border-color:var(--accent)}
+.hero h1{font-size:clamp(30px,4.6vw,46px);font-weight:800;letter-spacing:-.025em;max-width:20ch}
+.hero .thesis{margin-top:18px;font-size:17px;max-width:66ch;color:var(--ink)}
+.hero .thesis b{color:var(--accent);font-weight:700}
+.meta-row{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px 26px;font-family:var(--font-mono);font-size:12.5px;color:var(--ink-dim)}
+.meta-row span b{color:var(--ink);font-weight:600}
+.stat-strip{margin-top:34px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{background:var(--bg-elev);border:1px solid var(--line);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.stat .v{font-family:var(--font-mono);font-size:26px;font-weight:700;color:var(--accent);letter-spacing:-.02em}
+.stat .k{font-size:12.5px;color:var(--ink-dim);margin-top:5px;line-height:1.45}
+/* ============ calc box ============ */
+.calc{margin:26px 0;border:1.5px dashed var(--accent);border-radius:10px;background:var(--accent-soft);padding:18px 20px}
+.calc-title{font-family:var(--font-mono);font-size:12.5px;font-weight:700;letter-spacing:.08em;color:var(--accent);margin-bottom:12px}
+.calc ol{list-style:none;counter-reset:step;display:grid;gap:8px}
+.calc ol li{counter-increment:step;position:relative;padding-left:32px;font-size:14px}
+.calc ol li::before{content:counter(step);position:absolute;left:0;top:2px;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.calc .f{display:block;font-family:var(--font-mono);font-size:13px;background:var(--bg-inset);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:5px 0;overflow-x:auto;white-space:nowrap}
+.calc .res{color:var(--accent);font-weight:700}
+.calc .note{font-size:12px;color:var(--ink-faint);margin-top:10px;font-family:var(--font-mono)}
+/* ============ figures ============ */
+.fig{margin:28px 0;background:var(--bg-elev);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.fig-head{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);font-family:var(--font-mono);font-size:12px;color:var(--ink-dim)}
+.fig-head .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.fig-body{padding:20px;overflow-x:auto}
+.fig-cap{padding:12px 18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-faint)}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;padding:0 18px 14px;font-size:12px;color:var(--ink-dim)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.lg-control i{border:1.5px dashed var(--ink-dim);background:transparent}
+/* ============ waste bars ============ */
+.wbars{display:grid;gap:14px;min-width:520px}
+.wbar-row{display:grid;grid-template-columns:118px 1fr 64px;gap:14px;align-items:center}
+.wbar-row .who{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-dim);text-align:right}
+.wbar-row .who b{color:var(--ink);font-weight:600}
+.wbar{height:26px;border-radius:5px;overflow:hidden;display:flex;background:var(--bg-inset);border:1px solid var(--line)}
+.wbar span{display:block;height:100%}
+.wbar .s-tok{background:var(--c-token)}
+.wbar .s-rsv{background:var(--c-swap)}
+.wbar .s-int{background:var(--c-waste)}
+.wbar .s-ext{background:var(--ink-faint)}
+.wbar .pct{font-family:var(--font-mono);font-size:12.5px;color:var(--c-token);font-weight:700}
+/* ============ os map table ============ */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--bg-elev)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px}
+th{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);text-align:left;padding:10px 14px;border-bottom:1px solid var(--line-strong);background:var(--bg-inset)}
+td{padding:9px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td:first-child{font-family:var(--font-mono);font-size:12.5px;color:var(--c-logical);white-space:nowrap}
+tr.hl td{background:var(--accent-soft)}
+/* ============ stepper ============ */
+.stepper{margin:26px 0;border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);overflow:hidden}
+.step-tabs{display:flex;flex-wrap:wrap;gap:0;border-bottom:1px solid var(--line);background:var(--bg-inset)}
+.step-tabs button{flex:1 1 auto;min-width:104px;font-family:var(--font-mono);font-size:12px;color:var(--ink-dim);background:transparent;border:none;border-bottom:2px solid transparent;padding:12px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+.step-tabs button .sn{font-size:14px;font-weight:700;color:var(--ink-faint)}
+.step-tabs button:hover{background:var(--bg-hover);color:var(--ink)}
+.step-tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);background:var(--accent-soft)}
+.step-tabs button[aria-selected="true"] .sn{color:var(--accent)}
+.step-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.step-panel{padding:22px 24px}
+.step-panel h4{font-size:16px;margin-bottom:8px}
+.step-panel .mono-line{font-family:var(--font-mono);font-size:12.5px;background:var(--bg-inset);border:1px solid var(--line);border-radius:6px;padding:9px 13px;margin-top:12px;color:var(--c-token);overflow-x:auto;white-space:pre}
+.step-nav{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--line)}
+.step-nav button{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-dim);background:var(--bg-inset);border:1px solid var(--line-strong);border-radius:6px;padding:7px 16px;cursor:pointer}
+.step-nav button:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+.step-nav button:disabled{opacity:.35;cursor:default}
+/* ============ scenario ============ */
+.scn-bar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px}
+.scn-btn{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-dim);background:var(--bg-elev);border:1px solid var(--line-strong);border-radius:8px;padding:9px 16px;cursor:pointer;text-align:left}
+.scn-btn small{display:block;font-size:10.5px;color:var(--ink-faint);letter-spacing:.06em}
+.scn-btn:hover{border-color:var(--accent);color:var(--ink)}
+.scn-btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.scn-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.scn-steps{display:grid;gap:10px;margin-top:18px}
+.scn-step{display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:start;font-size:14px}
+.scn-step .badge{font-family:var(--font-mono);font-weight:700;font-size:13px;color:var(--accent-ink);background:var(--accent);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+svg .flow{stroke-dasharray:6 5;animation:flow 1.1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-11}}
+@media (prefers-reduced-motion: reduce){svg .flow{animation:none}}
+/* SVG classes: colors via tokens */
+.sv-box{fill:var(--bg-inset);stroke:var(--line-strong)}
+.sv-box-logical{fill:var(--c-logical-soft);stroke:var(--c-logical)}
+.sv-box-tok{fill:var(--c-token-soft);stroke:var(--c-token)}
+.sv-box-shared{fill:var(--c-shared-soft);stroke:var(--c-shared)}
+.sv-box-swap{fill:var(--c-swap-soft);stroke:var(--c-swap)}
+.sv-box-waste{fill:var(--c-waste-soft);stroke:var(--c-waste)}
+.sv-box-accent{fill:var(--accent-soft);stroke:var(--accent)}
+.sv-txt{fill:var(--ink);font-family:var(--font-body)}
+.sv-txt-mono{fill:var(--ink-dim);font-family:var(--font-mono)}
+.sv-txt-accent{fill:var(--accent);font-family:var(--font-mono)}
+.sv-line-data{stroke:var(--ink-dim)}
+.sv-line-control{stroke:var(--ink-faint);stroke-dasharray:5 4}
+.sv-line-accent{stroke:var(--accent)}
+.sv-line-shared{stroke:var(--c-shared)}
+.sv-marker{fill:var(--ink-dim)}
+.sv-marker-accent{fill:var(--accent)}
+.sv-marker-shared{fill:var(--c-shared)}
+/* ============ decision cards ============ */
+.dec-grid{display:grid;gap:16px;margin-top:8px}
+.dec{border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);overflow:hidden}
+.dec-head{display:flex;align-items:center;gap:12px;padding:15px 20px;border-bottom:1px solid var(--line);background:var(--bg-inset)}
+.dec-head .qn{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:2px 8px;white-space:nowrap}
+.dec-head h4{font-size:15.5px;font-weight:700}
+.dec-body{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.dec-cell{padding:14px 20px;border-bottom:1px solid var(--line)}
+.dec-cell:nth-child(odd){border-right:1px solid var(--line)}
+.dec-cell .lab{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:7px}
+.dec-cell p{font-size:13.5px}
+.lab.alt{color:var(--c-waste)} .lab.why{color:var(--c-token)} .lab.cost{color:var(--c-swap)} .lab.q{color:var(--c-logical)}
+.dec-cell.full{grid-column:1/-1;border-right:none}
+/* ============ metric bars ============ */
+.mbars{display:grid;gap:12px;min-width:480px}
+.mbar-row{display:grid;grid-template-columns:150px 1fr 84px;gap:12px;align-items:center;font-size:13px}
+.mbar-row .who{font-family:var(--font-mono);font-size:12px;color:var(--ink-dim);text-align:right}
+.mbar{height:20px;background:var(--bg-inset);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.mbar i{display:block;height:100%;background:var(--c-logical);border-radius:3px}
+.mbar i.win{background:var(--accent)}
+.mbar-row .v{font-family:var(--font-mono);font-size:12.5px;font-weight:700;color:var(--ink)}
+.mbar-row .v.win{color:var(--accent)}
+.mtitle{font-family:var(--font-mono);font-size:12px;color:var(--ink-dim);margin:22px 0 10px;letter-spacing:.06em}
+/* ============ critique ============ */
+.crit{display:grid;gap:14px}
+.crit-item{border:1px solid var(--line);border-left:3px solid var(--c-waste);border-radius:8px;background:var(--bg-elev);padding:14px 18px;font-size:14px}
+.crit-item.self{border-left-color:var(--c-swap)}
+.crit-item .tag2{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--c-waste);display:block;margin-bottom:5px}
+.crit-item.self .tag2{color:var(--c-swap)}
+.steal{list-style:none;display:grid;gap:10px;margin-top:12px}
+.steal li{display:grid;grid-template-columns:26px 1fr;gap:11px;font-size:14px;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:13px 16px}
+.steal li .ic{font-family:var(--font-mono);color:var(--c-token);font-weight:700}
+.callout{border:1px solid var(--line);border-left:3px solid var(--c-logical);background:var(--c-logical-soft);border-radius:8px;padding:14px 18px;margin:20px 0;font-size:14px}
+.callout .lab{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--c-logical);display:block;margin-bottom:5px}
+/* ============ footer ============ */
+footer{margin-top:80px;border-top:1px solid var(--line);padding:26px 0 50px;font-size:12.5px;color:var(--ink-faint);font-family:var(--font-mono)}
+.sv-badge-c{fill:var(--accent)}
+.sv-badge-t{fill:var(--accent-ink);font-family:var(--font-mono);font-weight:700}
+.sv-free{fill:none;stroke:var(--line-strong);stroke-dasharray:4 3}
+/* ============ narrow ============ */
+@media (max-width: 960px){
+  .wrap{grid-template-columns:1fr;gap:0}
+  .toc{position:sticky;top:52px;z-index:50;display:flex;gap:6px;overflow-x:auto;padding:10px 0;max-height:none;background:var(--bg);border-bottom:1px solid var(--line)}
+  .toc-title{display:none}
+  .toc a{white-space:nowrap;border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;font-size:12px}
+  .toc a.on{border-color:var(--accent)}
+  .stat-strip{grid-template-columns:repeat(2,1fr)}
+  .dec-body{grid-template-columns:1fr}
+  .dec-cell:nth-child(odd){border-right:none}
+  .hero{padding-top:44px}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <span class="brand">paper<b>://</b>deep-dive · vLLM</span>
+    <span class="sp"></span>
+    <button class="theme-btn" id="themeBtn" aria-label="切换深浅主题">
+      <svg id="icoSun" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/></svg>
+      <svg id="icoMoon" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg>
+      <span id="themeLabel">深色</span>
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" id="toc" aria-label="目录">
+    <div class="toc-title">Contents</div>
+    <a href="#s1"><span class="no">01</span>问题定义</a>
+    <a href="#s2"><span class="no">02</span>架构总览</a>
+    <a href="#s3"><span class="no">03</span>核心流程</a>
+    <a href="#s4"><span class="no">04</span>负载场景</a>
+    <a href="#s5"><span class="no">05</span>设计决策</a>
+    <a href="#s6"><span class="no">06</span>实验数据</a>
+    <a href="#s7"><span class="no">07</span>批判性阅读</a>
+  </nav>
+
+  <main class="content">
+    <!-- ================= HERO ================= -->
+    <div class="hero" id="top">
+      <div class="hero-tags">
+        <span class="tag hot">SOSP '23</span>
+        <span class="tag">arXiv:2309.06180v1</span>
+        <span class="tag">LLM Serving</span>
+        <span class="tag">Memory Management</span>
+      </div>
+      <h1>PagedAttention：把操作系统的虚拟内存，搬进 GPU 的 KV cache</h1>
+      <p class="thesis">LLM 推理的吞吐被 KV cache 内存卡死，而不是被算力卡死。vLLM 的核心洞察是：<b>KV cache 的管理问题本质上是操作系统 60 年前就解决过的内存分页问题</b>——把每个请求的 KV cache 切成固定大小的"页"，逻辑块按需映射到非连续的物理块，辅以引用计数与写时复制实现跨请求共享。浪费从 60–80% 降到接近零，同样延迟下吞吐提升 2–4×。</p>
+      <div class="meta-row">
+        <span><b>作者</b> Kwon*, Li*, Zhuang, Sheng, Zheng, Yu, Gonzalez, Zhang, Stoica</span>
+        <span><b>机构</b> UC Berkeley · Stanford · UC San Diego</span>
+        <span><b>代码</b> github.com/vllm-project/vllm</span>
+      </div>
+      <div class="stat-strip">
+        <div class="stat"><div class="v num">2–4×</div><div class="k">相同延迟下，对 FasterTransformer / Orca 的吞吐提升（最长序列、最大模型上最高 22×）</div></div>
+        <div class="stat"><div class="v num">96.3%</div><div class="k">KV cache 有效利用率；现有系统只有 20.4%–38.2%（Fig. 2）</div></div>
+        <div class="stat"><div class="v num">800 KB</div><div class="k">OPT-13B 单个 token 的 KV cache 占用；一条 2048 token 序列高达 1.6 GB</div></div>
+        <div class="stat"><div class="v num">+20–26%</div><div class="k">PagedAttention kernel 相对 FasterTransformer 的额外延迟——用这一点开销换回数倍的端到端吞吐</div></div>
+      </div>
+    </div>
+
+    <!-- ================= 01 问题定义 ================= -->
+    <section id="s1">
+      <div class="sec-head"><span class="sec-no">01</span><h2>问题定义：吞吐的天花板是显存，不是算力</h2></div>
+      <p class="lede">自回归解码每迭代只为每条序列算 <strong>1 个 token</strong>，是 matrix-vector 运算——GPU 的算力大量闲置，整个负载是 <strong>memory-bound</strong>。提高吞吐的唯一出路是 batching，而 batch size 的上限由 KV cache 能塞进多少显存决定。</p>
+      <p>以 13B 模型 + A100 40GB 为例：约 <strong>65%（26 GB）</strong>显存被静态模型参数占满，<strong>接近 30%</strong> 是随请求动态增减的 KV cache，激活值只占零头（Fig. 1 左）。参数是死的、激活是短暂的——<strong>KV cache 的管理方式几乎单独决定了最大 batch size</strong>。</p>
+      <h3>现有系统错在哪：把动态的东西按静态处理</h3>
+      <p>FasterTransformer、Orca 等系统遵循深度学习框架的惯例：每个请求的 KV cache 是一块<strong>连续张量</strong>，且因为输出长度事先不可知，按最大序列长度（如 2048）<strong>一次性预分配</strong>。这产生三种浪费（Fig. 3）：</p>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>浪费类型</th><th>成因</th><th>何时能被发现</th></tr></thead>
+        <tbody>
+          <tr><td>预留 reserved</td><td>为"未来会生成的 token"占坑，请求存活期间别人不能用</td><td>最终会用上，但占着茅坑的阶段是纯机会成本</td></tr>
+          <tr><td>内部碎片</td><td>实际长度远短于最大长度（Fig. 11 的长度分布方差极大）</td><td>请求结束后才知道浪费了多少</td></tr>
+          <tr><td>外部碎片</td><td>各请求预分配尺寸不一 + buddy allocator 粒度</td><td>服务开始前就注定永远用不上</td></tr>
+        </tbody>
+      </table></div>
+      <p style="margin-top:16px">论文实测（Fig. 2）：现有系统里真正存 token 状态的显存占比最低只有 <strong>20.4%</strong>——也就是说，一张 40 GB 的 A100，可能有 30 GB 的 KV 空间里躺着 24 GB 的空气。</p>
+
+      <div class="fig">
+        <div class="fig-head"><span class="dot"></span>KV cache 显存去向拆解 · 实验均值（§6.2 期间）</div>
+        <div class="fig-body">
+          <div class="wbars">
+            <div class="wbar-row"><div class="who">Orca <b>(Max)</b></div><div class="wbar"><span class="s-tok" style="width:20.4%"></span><span class="s-rsv" style="width:13.3%"></span><span class="s-int" style="width:57.3%"></span><span class="s-ext" style="width:8.9%"></span></div><div class="pct num">20.4%</div></div>
+            <div class="wbar-row"><div class="who">Orca <b>(Pow2)</b></div><div class="wbar"><span class="s-tok" style="width:26.8%"></span><span class="s-rsv" style="width:17.9%"></span><span class="s-int" style="width:13.6%"></span><span class="s-ext" style="width:41.6%"></span></div><div class="pct num">26.8%</div></div>
+            <div class="wbar-row"><div class="who">Orca <b>(Oracle)</b></div><div class="wbar"><span class="s-tok" style="width:38.2%"></span><span class="s-rsv" style="width:25.2%"></span><span class="s-int" style="width:36.6%"></span></div><div class="pct num">38.2%</div></div>
+            <div class="wbar-row"><div class="who"><b>vLLM</b></div><div class="wbar"><span class="s-tok" style="width:96.3%"></span><span class="s-int" style="width:3.7%"></span></div><div class="pct num">96.3%</div></div>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--c-token)"></i>实际 token 状态（有效）</span>
+          <span><i style="background:var(--c-swap)"></i>预留</span>
+          <span><i style="background:var(--c-waste)"></i>内部碎片</span>
+          <span><i style="background:var(--ink-faint)"></i>外部碎片 & 其他</span>
+        </div>
+        <div class="fig-cap">依据论文 Figure 2 重绘。注意 Orca(Oracle) 是"预知输出长度"的理论上界、实际不可达，仍然浪费 61.8%；vLLM 仅剩的 ~3.7% 是每条序列最后一个未满块（浪费上界 = 块大小 − 1 个 token 槽）。</div>
+      </div>
+
+      <h3>为什么难：三个约束互相咬合</h3>
+      <p><strong>① KV cache 太大。</strong>OPT-13B 单 token 800 KB，GPU 显存容量增长远慢于算力（A100→H100：FLOPS 翻 2 倍多，显存停在 80 GB）——内存墙只会越来越厚。<strong>② 解码算法要共享。</strong>并行采样共享 prompt 段，beam search 共享前缀树且共享模式随解码动态变化；连续存储下共享无从谈起。<strong>③ 长度不可预知。</strong>输入长度分布差异巨大（ShareGPT 均值 161 token vs Alpaca 19 token），输出长度更是运行时才知道，调度器必须随时准备驱逐与恢复。</p>
+      <div class="callout"><span class="lab">分水岭</span>前人（Orca）把功夫下在<strong>调度</strong>上——iteration-level scheduling 让请求按迭代进出 batch；vLLM 把功夫下在<strong>内存</strong>上——让更多请求的工作集同时塞进显存。两者互补：调度越细，内存管理越关键（§9）。</div>
+
+      <div class="calc">
+        <div class="calc-title">▶ 跑一遍 · 一个 token 的 KV cache 有多大</div>
+        <ol>
+          <li>OPT-13B：隐藏维度 <strong>5120</strong>，层数 <strong>40</strong>，FP16 每元素 <strong>2 字节</strong>，K 和 V 各一份（§3，论文原值）。</li>
+          <li><span class="f">2 (K+V) × 5120 (hidden) × 40 (layers) × 2 B = <span class="res">819,200 B ≈ 800 KB / token</span></span></li>
+          <li>序列拉到模型上限 2048 token：<span class="f">800 KB × 2048 = <span class="res">1.6 GB / 请求</span></span></li>
+          <li>13B 机型只有 12 GB 留给 KV cache（Table 1）→ 全部塞满也只能装 <span class="f">12 GB ÷ 800 KB ≈ <span class="res">15.7K 个 token 槽</span></span>——若按 2048 预分配，仅容纳 <strong>7 条</strong>请求。这正是 Fig. 13a 里 Orca(Max) 平均 batch 只有 7.00 的原因。</li>
+        </ol>
+        <div class="note">数字来源：§3 正文与 Table 1；最后一步的对应关系为工程师视角的推断。</div>
+      </div>
+    </section>
+
+    <!-- ================= 02 架构总览 ================= -->
+    <section id="s2">
+      <div class="sec-head"><span class="sec-no">02</span><h2>架构总览：一个"操作系统"长在了推理引擎里</h2></div>
+      <p class="lede">vLLM = FastAPI 前端 + <strong>集中式 Scheduler</strong> + <strong>KV Cache Manager</strong>（维护 block table）+ 若干 GPU Worker（各持模型分片与 Cache Engine）。控制面与数据面分离：调度器每迭代广播一次"输入 token + block table"，之后 Worker 之间用 all-reduce 自行同步，不再需要调度器参与。</p>
+
+      <div class="fig">
+        <div class="fig-head"><span class="dot"></span>vLLM 系统架构（HLD）</div>
+        <div class="fig-body">
+        <svg viewBox="0 0 920 430" width="100%" style="min-width:760px" role="img" aria-label="vLLM 架构图">
+          <defs>
+            <marker id="mArr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sv-marker"/></marker>
+            <marker id="mArrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sv-marker-accent"/></marker>
+            <filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"/></filter>
+          </defs>
+          <!-- client -->
+          <g filter="url(#rough)"><rect x="20" y="30" width="150" height="52" rx="8" class="sv-box"/></g>
+          <text x="95" y="52" text-anchor="middle" class="sv-txt" font-size="13" font-weight="600">Client</text>
+          <text x="95" y="70" text-anchor="middle" class="sv-txt-mono" font-size="10.5">OpenAI API 请求</text>
+          <!-- frontend -->
+          <g filter="url(#rough)"><rect x="240" y="30" width="170" height="52" rx="8" class="sv-box"/></g>
+          <text x="325" y="52" text-anchor="middle" class="sv-txt" font-size="13" font-weight="600">FastAPI Frontend</text>
+          <text x="325" y="70" text-anchor="middle" class="sv-txt-mono" font-size="10.5">采样参数 / beam width k</text>
+          <!-- scheduler -->
+          <g filter="url(#rough)"><rect x="240" y="140" width="250" height="120" rx="8" class="sv-box-accent"/></g>
+          <text x="365" y="164" text-anchor="middle" class="sv-txt" font-size="13.5" font-weight="700">Centralized Scheduler</text>
+          <text x="365" y="182" text-anchor="middle" class="sv-txt-mono" font-size="10.5">FCFS · iteration-level batching</text>
+          <text x="365" y="198" text-anchor="middle" class="sv-txt-mono" font-size="10.5">抢占：swap / recompute</text>
+          <text x="365" y="222" text-anchor="middle" class="sv-txt-accent" font-size="10.5">优化目标：吞吐 × 公平（防饿死）</text>
+          <!-- kv manager -->
+          <g filter="url(#rough)"><rect x="560" y="120" width="230" height="160" rx="8" class="sv-box-accent"/></g>
+          <text x="675" y="144" text-anchor="middle" class="sv-txt" font-size="13.5" font-weight="700">KV Cache Manager</text>
+          <g filter="url(#rough)"><rect x="576" y="158" width="198" height="44" rx="6" class="sv-box"/></g>
+          <text x="675" y="176" text-anchor="middle" class="sv-txt" font-size="11.5">Block Tables（逻辑→物理）</text>
+          <text x="675" y="192" text-anchor="middle" class="sv-txt-mono" font-size="10">ref count · #filled · CoW 标记</text>
+          <g filter="url(#rough)"><rect x="576" y="212" width="94" height="52" rx="6" class="sv-box-tok"/></g>
+          <text x="623" y="233" text-anchor="middle" class="sv-txt" font-size="11">GPU Block</text>
+          <text x="623" y="249" text-anchor="middle" class="sv-txt" font-size="11">Allocator</text>
+          <g filter="url(#rough)"><rect x="680" y="212" width="94" height="52" rx="6" class="sv-box-swap"/></g>
+          <text x="727" y="233" text-anchor="middle" class="sv-txt" font-size="11">CPU Block</text>
+          <text x="727" y="249" text-anchor="middle" class="sv-txt" font-size="11">Allocator</text>
+          <!-- workers -->
+          <g filter="url(#rough)"><rect x="120" y="330" width="200" height="80" rx="8" class="sv-box-logical"/></g>
+          <text x="220" y="356" text-anchor="middle" class="sv-txt" font-size="13" font-weight="600">Worker 0</text>
+          <text x="220" y="374" text-anchor="middle" class="sv-txt-mono" font-size="10.5">Model Shard 0 + Cache Engine</text>
+          <text x="220" y="390" text-anchor="middle" class="sv-txt-mono" font-size="10">PagedAttention kernel</text>
+          <g filter="url(#rough)"><rect x="360" y="330" width="200" height="80" rx="8" class="sv-box-logical"/></g>
+          <text x="460" y="356" text-anchor="middle" class="sv-txt" font-size="13" font-weight="600">Worker 1</text>
+          <text x="460" y="374" text-anchor="middle" class="sv-txt-mono" font-size="10.5">Model Shard 1 + Cache Engine</text>
+          <text x="460" y="390" text-anchor="middle" class="sv-txt-mono" font-size="10">PagedAttention kernel</text>
+          <g filter="url(#rough)"><rect x="600" y="330" width="200" height="80" rx="8" class="sv-box-logical"/></g>
+          <text x="700" y="356" text-anchor="middle" class="sv-txt" font-size="13" font-weight="600">Worker N−1</text>
+          <text x="700" y="374" text-anchor="middle" class="sv-txt-mono" font-size="10.5">Model Shard N−1 + Cache Engine</text>
+          <text x="700" y="390" text-anchor="middle" class="sv-txt-mono" font-size="10">PagedAttention kernel</text>
+          <!-- edges -->
+          <line x1="170" y1="56" x2="236" y2="56" class="sv-line-data" stroke-width="1.6" marker-end="url(#mArr)"/>
+          <path d="M325 86 L325 136" class="sv-line-control" stroke-width="1.5" marker-end="url(#mArr)" fill="none"/>
+          <path d="M490 200 L556 200" class="sv-line-control" stroke-width="1.5" marker-end="url(#mArr)" fill="none"/>
+          <path d="M300 264 C300 300 240 300 230 326" class="sv-line-control" stroke-width="1.5" marker-end="url(#mArr)" fill="none"/>
+          <path d="M365 264 L450 326" class="sv-line-control" stroke-width="1.5" marker-end="url(#mArr)" fill="none"/>
+          <path d="M440 264 C520 300 640 300 690 326" class="sv-line-control" stroke-width="1.5" marker-end="url(#mArr)" fill="none"/>
+          <path d="M322 386 L356 386" class="sv-line-data" stroke-width="1.8" marker-end="url(#mArr)" fill="none"/>
+          <path d="M562 386 L596 386" class="sv-line-data" stroke-width="1.8" marker-end="url(#mArr)" fill="none"/>
+          <text x="339" y="378" text-anchor="middle" class="sv-txt-mono" font-size="9.5">all-reduce</text>
+          <text x="579" y="378" text-anchor="middle" class="sv-txt-mono" font-size="9.5">all-reduce</text>
+          <text x="480" y="310" text-anchor="middle" class="sv-txt-mono" font-size="10">每迭代广播：input token IDs + block table</text>
+        </svg>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>控制面核心（CPU 侧）</span>
+          <span class="lg-control"><i></i>控制面：调度指令 / block table 广播（虚线）</span>
+          <span><i style="background:var(--ink-dim)"></i>数据面：KV 读写 / all-reduce（实线）</span>
+          <span><i style="background:var(--c-swap)"></i>CPU RAM swap 空间</span>
+        </div>
+        <div class="fig-cap">依据论文 Figure 4 重绘。关键观察：Megatron 式张量并行下所有 Worker 处理相同的 token 位置（SPMD），因此全局只需<strong>一份</strong> block table，由集中式管理器统一下发——各 Worker 只存自己负责的那部分 attention head 的 KV。</div>
+      </div>
+
+      <h3>一张表看懂 OS 类比</h3>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>操作系统</th><th>vLLM</th><th>工程含义</th></tr></thead>
+        <tbody>
+          <tr><td>页 page</td><td>KV block（默认 16 token）</td><td>固定大小 → 外部碎片归零</td></tr>
+          <tr><td>字节 byte</td><td>token</td><td>分配的最小内容单元</td></tr>
+          <tr><td>进程 process</td><td>请求 / 序列 sequence</td><td>独立地址空间 = 独立逻辑块链</td></tr>
+          <tr><td>页表 page table</td><td>block table</td><td>逻辑块→物理块 + #filled + ref count</td></tr>
+          <tr><td>按需调页</td><td>块满才分配新物理块</td><td>内部碎片 ≤ 1 个块</td></tr>
+          <tr><td>fork + 写时复制</td><td>并行采样共享 prompt 块</td><td>ref count &gt; 1 时写入触发单块拷贝</td></tr>
+          <tr><td>共享库 .so</td><td>shared prefix（系统提示）</td><td>服务商预缓存前缀块，直接映射</td></tr>
+          <tr><td>swap 到磁盘</td><td>swap 到 CPU RAM</td><td>驱逐粒度是"整条序列"（all-or-nothing）</td></tr>
+          <tr class="hl"><td>（OS 做不到）</td><td>recompute 恢复</td><td>token 序列可由 prompt 重算再生，恢复 = 重跑一次 prefill</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="calc">
+        <div class="calc-title">▶ 跑一遍 · block table 翻译（论文 Fig. 6 的完整过程）</div>
+        <ol>
+          <li>请求 A 的 prompt = <strong>7 个 token</strong>（"Four score and seven years ago our"），块大小 B = <strong>4</strong>。</li>
+          <li>Prefill 后按需映射：逻辑块 0（4 槽全满）→ 物理块 <strong>7</strong>；逻辑块 1（填 3 槽，剩 1 槽预留）→ 物理块 <strong>1</strong>。block table 记录 <span class="f">L0→P7 #filled=4 ｜ L1→P1 #filled=3</span></li>
+          <li>第 1 步解码生成 "fathers"：最后一个逻辑块还有空位，直接写入物理块 1 的第 4 槽，<span class="f">#filled: 3 → 4</span>——<strong>不分配任何新内存</strong>。</li>
+          <li>第 2 步解码生成 "brought"：逻辑块 1 已满 → 分配新物理块 <strong>3</strong>，<span class="f">L2→P3 #filled=1</span></li>
+          <li>整条序列任一时刻的浪费上界 = B − 1 = <strong>3 个 token 槽</strong> ≈ 2.4 MB；对照 Orca(Max) 的预分配浪费可达 <span class="f">(2048 − 9) × 800 KB ≈ <span class="res">1.6 GB</span></span></li>
+        </ol>
+        <div class="note">步骤 1–4 为论文 Fig. 6 原文算例；第 5 步浪费对比为按论文数据推算。</div>
+      </div>
+    </section>
+
+    <!-- ================= 03 核心流程 ================= -->
+    <section id="s3">
+      <div class="sec-head"><span class="sec-no">03</span><h2>核心流程：一个请求在 vLLM 里的一生</h2></div>
+      <p class="lede">点击或用 ← → 键切换，跟随一条请求穿过调度器、block table 与 PagedAttention kernel。</p>
+      <div class="stepper">
+        <div class="step-tabs" role="tablist" id="stepTabs" aria-label="请求生命周期步骤"></div>
+        <div class="step-panel" id="stepPanel" role="tabpanel"></div>
+        <div class="step-nav">
+          <button id="stepPrev">← 上一步</button>
+          <button id="stepNext">下一步 →</button>
+        </div>
+      </div>
+      <div class="calc">
+        <div class="calc-title">▶ 跑一遍 · 一个 decode 迭代里 kernel 做了什么</div>
+        <ol>
+          <li>Scheduler 拼批：把当前迭代所有输入 token 拼成一条序列（prompt 阶段请求的全部 token + 解码阶段请求的最新 1 个 token）。</li>
+          <li>对 batch 中每条序列，PagedAttention kernel 按 block table 逐块取 K/V。查询 token "forth" 的 q 向量依次与块 0（"Four score and seven"）、块 1（"years ago our fathers"）、块 2（"brought"）的 K 做点积（Fig. 5）。</li>
+          <li>块内是连续 16 个位置 → kernel 可以并行读、合并访存（每个 GPU warp 读一个块）；块间通过 block table 间接寻址。</li>
+          <li> softmax 分母要跨块累加 <span class="f">o_i = Σ<sub>j=1..⌈i/B⌉</sub> V_j · A_ijᵀ</span>（论文 Eq. 4 的分块形式）。</li>
+          <li>新 KV 经"融合 reshape + 块写入" kernel 落到 block table 指定的槽位——一次 launch 完成切分、重排、写回。</li>
+        </ol>
+        <div class="note">算式来自论文 Eq. 4 与 §4.3、§5.1；warp 分配策略见 §5.1(2)。</div>
+      </div>
+    </section>
+    <!-- ================= 04 负载场景 ================= -->
+    <section id="s4">
+      <div class="sec-head"><span class="sec-no">04</span><h2>负载场景：同一张内存地图上的三种 dataflow</h2></div>
+      <p class="lede">PagedAttention 真正的威力在复杂解码算法上。下面同一张"逻辑块 → 物理块"地图，切换三种负载看数据如何流动——共享块（紫）是省内存的关键。</p>
+      <div class="scn-bar" role="group" aria-label="切换负载场景">
+        <button class="scn-btn" data-scn="a" aria-pressed="true">A · 基础解码<small>greedy / sampling，单序列</small></button>
+        <button class="scn-btn" data-scn="b" aria-pressed="false">B · 并行采样<small>n = 2，共享 prompt + CoW</small></button>
+        <button class="scn-btn" data-scn="c" aria-pressed="false">C · Beam search<small>k = 4，动态前缀树共享</small></button>
+      </div>
+      <div class="fig">
+        <div class="fig-head"><span class="dot"></span><span id="scnTitle">场景 A · 基础解码：按需增长，浪费 ≤ 1 个块</span></div>
+        <div class="fig-body"><div id="scnSvg"></div></div>
+        <div class="legend">
+          <span><i style="background:var(--c-logical)"></i>逻辑块（每序列从左向右填）</span>
+          <span><i style="background:var(--c-token)"></i>独占物理块</span>
+          <span><i style="background:var(--c-shared)"></i>共享物理块（ref &gt; 1）</span>
+          <span><i style="background:var(--c-waste)"></i>已释放（ref = 0）</span>
+          <span class="lg-control"><i></i>空块</span>
+        </div>
+        <div class="fig-cap">依据论文 Figure 6 / 8 / 9 重绘并做交互化。虚线流动动画表示当前迭代正在读写的通路。</div>
+      </div>
+      <div class="scn-steps" id="scnSteps"></div>
+
+      <div class="calc">
+        <div class="calc-title">▶ 跑一遍 · 写时复制只拷一个块（论文 Fig. 8）</div>
+        <ol>
+          <li>样本 A1、A2 共享 prompt：逻辑块 0、1 都映射到物理块 <strong>7</strong> 和 <strong>1</strong>，二者 <span class="f">ref count = 2</span></li>
+          <li>A1 分叉生成新 token，要写自己的最后一个逻辑块 L1 → 发现对应物理块 P1 的 <span class="f">ref count = 2 &gt; 1</span> → 触发 CoW。</li>
+          <li>分配新物理块 <strong>3</strong>，把 P1 的内容<strong>整块拷贝</strong>过去，A1 的 L1 重映射到 P3，<span class="f">P1 ref count: 2 → 1</span></li>
+          <li>A2 随后写 L1 时 ref 已是 1 → <strong>原地直写，零拷贝</strong>。</li>
+          <li>代价总账：一次 CoW 只搬 <span class="f">16 token × 800 KB ≈ <span class="res">12.8 MB</span></span>（示例：OPT-13B、B=16）；而连续存储方案要为每个样本各存一份完整 prompt KV。</li>
+        </ol>
+        <div class="note">步骤 1–4 为论文 §4.4 原文过程；第 5 步为按论文单 token 体积推算的示例值。</div>
+      </div>
+    </section>
+
+    <!-- ================= 05 设计决策 ================= -->
+    <section id="s5">
+      <div class="sec-head"><span class="sec-no">05</span><h2>关键设计决策：每一张牌怎么打，放弃了什么</h2></div>
+      <div class="dec-grid">
+
+        <div class="dec">
+          <div class="dec-head"><span class="qn">D1</span><h4>KV cache 分页存储，允许物理上不连续</h4></div>
+          <div class="dec-body">
+            <div class="dec-cell"><span class="lab alt">被否决的备选</span><p>① 连续张量 + 按最大长度预分配（FasterTransformer、Orca）；② 连续分配 + 定期 compaction 整理碎片（Pacman 式思路）——KV cache 体量太大，搬运成本在服务路径上不可接受，且仍无法支持共享。</p></div>
+            <div class="dec-cell"><span class="lab why">为什么这样选</span><p>固定块大小直接消灭外部碎片；按需分配把内部碎片区限于每序列最后一块（&lt; 4%）；块级映射让共享变成"多填一行 block table"。分页是 OS 验证过 60 年的答案。</p></div>
+            <div class="dec-cell full"><span class="lab cost">代价 / 权衡</span><p>attention kernel 必须自己处理间接寻址、分支与变长序列——换来 20–26% 的 kernel 级额外延迟（Fig. 18a），并需要 2K 行定制 C++/CUDA。论文赌注：这点算力开销远小于内存省出来的 batch 收益——实验证实赌对了。</p></div>
+          </div>
+        </div>
+
+        <div class="dec">
+          <div class="dec-head"><span class="qn">D2</span><h4>块大小默认 B = 16</h4></div>
+          <div class="dec-body">
+            <div class="dec-cell"><span class="lab alt">被否决的备选</span><p>① B = 1～8：块太小，kernel 无法并行读取足够多位置，GPU 利用率低；② B = 128～256：Alpaca 这类短序列负载上内部碎片暴涨（序列比块还短），共享概率也随之下降。</p></div>
+            <div class="dec-cell"><span class="lab why">为什么这样选</span><p>消融实验（Fig. 18b）：ShareGPT 上 B = 16–128 都是最优平台期；Alpaca 上只有 16/32 不劣化。16 是"足够大以喂饱 GPU、足够小以兜住碎片"的交点。</p></div>
+            <div class="dec-cell full"><span class="lab cost">代价 / 权衡</span><p>每条序列仍浪费最多 B − 1 = 15 个 token 槽（≈ 12 MB / 序列，示例值按 800 KB/token 推算）；块大小是全局静态配置，无法按负载自适应。</p></div>
+          </div>
+        </div>
+
+        <div class="dec">
+          <div class="dec-head"><span class="qn">D3</span><h4>集中式调度器 + 全局唯一 KV cache manager</h4></div>
+          <div class="dec-body">
+            <div class="dec-cell"><span class="lab alt">被否决的备选</span><p>每个 GPU worker 各自管理本地 KV 内存、分布式协商映射——需要 worker 间同步内存管理状态，每步多出协调开销与一致性复杂度。</p></div>
+            <div class="dec-cell"><span class="lab why">为什么这样选</span><p>Megatron 式张量并行是 SPMD：所有 worker 在每一步处理<strong>完全相同</strong>的 token 位置，因此一份 block table 对全员有效。调度器把 block table 随输入一起广播，worker 只管用——内存管理零同步。</p></div>
+            <div class="dec-cell full"><span class="lab cost">代价 / 权衡</span><p>调度器是单点：每迭代一次广播在 worker 极多时会成为控制面瓶颈（论文未测超大规模）；Python 实现的控制逻辑也有性能上限。</p></div>
+          </div>
+        </div>
+
+        <div class="dec">
+          <div class="dec-head"><span class="qn">D4</span><h4>抢占 = 整条序列驱逐（all-or-nothing）+ swap / recompute 双恢复</h4></div>
+          <div class="dec-body">
+            <div class="dec-cell"><span class="lab alt">被否决的备选</span><p>OS 式 LRU 等启发式逐块驱逐——LLM 的访问模式是"一条序列的所有块同时被访问"，逐块预测毫无意义的徒增复杂；只 swap 不 recompute 则小 Block 下 PCIe 小包传输把带宽打骨折。</p></div>
+            <div class="dec-cell"><span class="lab why">为什么这样选</span><p>利用应用语义：<strong>要么全要、要么全不要</strong>，驱逐策略从预测题变成送分题。recompute 是 OS 做不到的大招——已生成 token 拼回 prompt 一次 prefill 即可再生全部 KV，开销与块大小无关（Fig. 19）。</p></div>
+            <div class="dec-cell full"><span class="lab cost">代价 / 权衡</span><p>一旦发生 swap，vLLM 停止接收新请求直到被抢占序列全部完成（§4.5）——宁可让新请求排队也不让系统颠簸；FCFS + 后来者先被抢占保证公平，但对延迟敏感业务偏粗糙。B = 16–64 时两种恢复方式端到端打平。</p></div>
+          </div>
+        </div>
+
+        <div class="dec">
+          <div class="dec-head"><span class="qn">D5</span><h4>引用计数 + 块粒度写时复制实现共享</h4></div>
+          <div class="dec-body">
+            <div class="dec-cell"><span class="lab alt">被否决的备选</span><p>现有系统对 beam search 的做法：候选分叉时整段复制 KV cache——Fig. 9 的例子中候选 3 要拷贝候选 2 的大部分 KV 才能继续。共享前缀场景则每请求重算 prompt。</p></div>
+            <div class="dec-cell"><span class="lab why">为什么这样选</span><p>映射层把"共享"变成纯元数据操作：多填一行 block table + ref count++。写时才付一次单块拷贝。实测省下 beam search 37.6–66.3% 的 KV 内存（Fig. 15），且让不同解码算法的请求可以同批混跑。</p></div>
+            <div class="dec-cell full"><span class="lab cost">代价 / 权衡</span><p>block table 要维护 ref count 与 CoW 状态机；beam search 每步候选洗牌都要精确增减计数——实现复杂度从 kernel 转移到了控制面（Python 的 block manager）。</p></div>
+          </div>
+        </div>
+
+        <div class="dec">
+          <div class="dec-head"><span class="qn">D6</span><h4>三个融合 CUDA kernel，而不是复用通用 API</h4></div>
+          <div class="dec-body">
+            <div class="dec-cell"><span class="lab alt">被否决的备选</span><p>① 用 <code>cudaMemcpyAsync</code> 逐块拷贝——CoW 会产生大量小传输调用；② 直接改 PyTorch 算子——无法融合"按 block table 读 + attention"路径，launch 开销与访存都不优。</p></div>
+            <div class="dec-cell"><span class="lab why">为什么这样选</span><p>① 融合 reshape + 块写入：一次 launch 完成切分/重排/写回；② 改造 FasterTransformer attention kernel 按块表读 KV，每 warp 读一块保证合并访存；③ 融合块拷贝：把多个不连续块的拷贝批成一次 launch。</p></div>
+            <div class="dec-cell full"><span class="lab cost">代价 / 权衡</span><p>2K 行 C++/CUDA 要跟随新硬件与新模型持续维护；kernel 仍比 FT 慢 20–26%——间接寻址的税只能减免、无法豁免。</p></div>
+          </div>
+        </div>
+
+      </div>
+      <div class="calc">
+        <div class="calc-title">▶ 跑一遍 · 块大小对碎片的影响（决策 D2 的量化直觉）</div>
+        <ol>
+          <li>每条序列的内部碎片期望 ≈ <strong>B / 2</strong> 个 token 槽（最后一槽均匀分布，示例假设），上界 B − 1。</li>
+          <li>B = 16：每序列浪费约 <span class="f">8 × 800 KB ≈ <span class="res">6.4 MB</span></span>；30 条并发序列 ≈ 192 MB，占 12 GB KV 空间的 1.6%。</li>
+          <li>B = 256：每序列浪费约 <span class="f">128 × 800 KB ≈ <span class="res">100 MB</span></span>；Alpaca 平均序列仅 78 token（Fig. 11b 均值之和）——<strong>一条序列连半个块都填不满</strong>，碎片率超 60%。</li>
+          <li>结论与论文一致：B = 16 是 ShareGPT / Alpaca 两种负载下都不劣化的最大并行度甜点（Fig. 18b）。</li>
+        </ol>
+        <div class="note">B/2 期望为示例值假设；序列均值与消融结论来自论文 Fig. 11、Fig. 18b。</div>
+      </div>
+    </section>
+    <!-- ================= 06 实验数据 ================= -->
+    <section id="s6">
+      <div class="sec-head"><span class="sec-no">06</span><h2>实验数据：只留支撑论点的数字</h2></div>
+      <p class="lede">设置：OPT-13B / 66B / 175B 与 LLaMA-13B，A100（40/80GB）；ShareGPT（长，输入均值 161 / 输出 338 token）与 Alpaca（短，19 / 58 token）真实对话轨迹 + Poisson 到达。基线：FasterTransformer（无迭代级调度）、Orca 的三个变体——其中 <strong>Orca(Oracle) 预知输出长度，是不可达的理论上界</strong>。</p>
+
+      <h3>同时 batch 的请求数：吞吐优势的直接来源（Fig. 13）</h3>
+      <div class="fig">
+        <div class="fig-head"><span class="dot"></span>OPT-13B 平均 batch 内请求数 · 越高越好</div>
+        <div class="fig-body">
+          <div class="mtitle">ShareGPT @ 2 req/s</div>
+          <div class="mbars">
+            <div class="mbar-row"><div class="who">Orca (Max)</div><div class="mbar"><i style="width:5.3%"></i></div><div class="v num">7.00</div></div>
+            <div class="mbar-row"><div class="who">Orca (Pow2)</div><div class="mbar"><i style="width:7.4%"></i></div><div class="v num">9.81</div></div>
+            <div class="mbar-row"><div class="who">Orca (Oracle)</div><div class="mbar"><i style="width:10.3%"></i></div><div class="v num">13.62</div></div>
+            <div class="mbar-row"><div class="who">vLLM</div><div class="mbar"><i class="win" style="width:23%"></i></div><div class="v win num">30.42</div></div>
+          </div>
+          <div class="mtitle">Alpaca @ 30 req/s</div>
+          <div class="mbars">
+            <div class="mbar-row"><div class="who">Orca (Max)</div><div class="mbar"><i style="width:5.3%"></i></div><div class="v num">7.00</div></div>
+            <div class="mbar-row"><div class="who">Orca (Pow2)</div><div class="mbar"><i style="width:32.6%"></i></div><div class="v num">43.24</div></div>
+            <div class="mbar-row"><div class="who">Orca (Oracle)</div><div class="mbar"><i style="width:54.9%"></i></div><div class="v num">72.75</div></div>
+            <div class="mbar-row"><div class="who">vLLM</div><div class="mbar"><i class="win" style="width:100%"></i></div><div class="v win num">132.44</div></div>
+          </div>
+        </div>
+        <div class="fig-cap">依据论文 Figure 13 重绘。ShareGPT 上 vLLM 比 Orca(Oracle) 多 batch 2.2×、比 Orca(Max) 多 4.3×——长序列负载下优势放大，与"越长越受益"的论点一致。</div>
+      </div>
+
+      <h3>共享带来的内存节省（Fig. 15，OPT-13B · Alpaca）</h3>
+      <div class="fig">
+        <div class="fig-head"><span class="dot"></span>块共享节省的 KV 内存比例</div>
+        <div class="fig-body">
+          <div class="mtitle">并行采样（并行度 2 / 4 / 6）</div>
+          <div class="mbars">
+            <div class="mbar-row"><div class="who">n = 2</div><div class="mbar"><i style="width:6.09%"></i></div><div class="v num">6.09%</div></div>
+            <div class="mbar-row"><div class="who">n = 4</div><div class="mbar"><i style="width:8.53%"></i></div><div class="v num">8.53%</div></div>
+            <div class="mbar-row"><div class="who">n = 6</div><div class="mbar"><i style="width:9.79%"></i></div><div class="v num">9.79%</div></div>
+          </div>
+          <div class="mtitle">Beam search（宽度 2 / 4 / 6）</div>
+          <div class="mbars">
+            <div class="mbar-row"><div class="who">k = 2</div><div class="mbar"><i class="win" style="width:37.56%"></i></div><div class="v win num">37.56%</div></div>
+            <div class="mbar-row"><div class="who">k = 4</div><div class="mbar"><i class="win" style="width:53.13%"></i></div><div class="v win num">53.13%</div></div>
+            <div class="mbar-row"><div class="who">k = 6</div><div class="mbar"><i class="win" style="width:55.16%"></i></div><div class="v win num">55.16%</div></div>
+          </div>
+        </div>
+        <div class="fig-cap">依据论文 Figure 15 重绘。ShareGPT（更长 prompt）上节省更夸张：并行采样 16.2–30.5%，beam search 44.3–66.3%。共享收益随解码算法复杂度上升——beam width 6 时 vLLM 对 Orca(Oracle) 的吞吐优势从基础采样的 1.3× 拉大到 2.3×。</div>
+      </div>
+
+      <h3>其余关键数字一览</h3>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>维度</th><th>结果</th><th>出处</th></tr></thead>
+        <tbody>
+          <tr><td>基础采样吞吐</td><td>ShareGPT：对 Orca(Oracle) <strong>1.7–2.7×</strong>，对 Orca(Max) <strong>2.7–8×</strong>，对 FasterTransformer 最高 <strong>22×</strong></td><td>§6.2 / Fig. 12</td></tr>
+          <tr><td>共享前缀</td><td>翻译负载：1-shot 前缀快 <strong>1.67×</strong>，5-shot（341 token）快 <strong>3.58×</strong>（对 Orca(Oracle)）</td><td>§6.4 / Fig. 16</td></tr>
+          <tr><td>Chatbot 负载</td><td>可承受请求率为三个 Orca 变体的 <strong>2×</strong>（buddy 分配使三者行为趋同）</td><td>§6.5 / Fig. 17</td></tr>
+          <tr><td>kernel 开销</td><td>PagedAttention kernel 比 FasterTransformer 慢 <strong>20–26%</strong>（仅 attention 算子）</td><td>§7.1 / Fig. 18a</td></tr>
+          <tr><td>块大小消融</td><td>ShareGPT：B = 16–128 均最优；Alpaca：仅 16/32 不劣化 → <strong>默认 B = 16</strong></td><td>§7.2 / Fig. 18b</td></tr>
+          <tr><td>抢占恢复</td><td>小块时 swap 因 PCIe 小传输低效；recompute 开销恒定且不超过 swap 延迟的 <strong>20%</strong>；B = 16–64 端到端打平</td><td>§7.3 / Fig. 19</td></tr>
+          <tr class="hl"><td>诚实注脚</td><td>OPT-175B + Alpaca（Fig. 12f）：KV 空间充裕（264 GB）+ 序列短 → 变 compute-bound，vLLM 对 Orca(Oracle/Pow2) 优势收窄</td><td>§6.2</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="calc">
+        <div class="calc-title">▶ 跑一遍 · 从 Table 1 推出 batch 容量</div>
+        <ol>
+          <li>13B 配置：KV 空间 <strong>12 GB</strong>，单 token 800 KB → <span class="f">12 GB ÷ 800 KB ≈ <span class="res">15.7K token 槽</span></span>（与 Table 1 一致）。</li>
+          <li>B = 16 → 物理块总数 ≈ <span class="f">15.7K ÷ 16 ≈ <span class="res">983 块</span></span></li>
+          <li>ShareGPT 平均序列长 = 161（输入）+ 338（输出）≈ <strong>499 token</strong> → 每序列约需 <span class="f">499 ÷ 16 ≈ <span class="res">32 块</span></span></li>
+          <li>满载并发序列 ≈ <span class="f">983 ÷ 32 ≈ <span class="res">30 条</span></span>——与 Fig. 13a 实测平均 batch <strong>30.42</strong> 几乎严丝合缝：vLLM 把显存利用率直接兑换成了 batch size。</li>
+        </ol>
+        <div class="note">槽位数与 trace 均值来自论文 Table 1 / Fig. 11；32 块/序列与 30 并发的对应为工程师视角推算（忽略块内碎片与混合长度）。</div>
+      </div>
+    </section>
+
+    <!-- ================= 07 批判性阅读 ================= -->
+    <section id="s7">
+      <div class="sec-head"><span class="sec-no">07</span><h2>批判性阅读：边界、质疑与可以直接偷走的思想</h2></div>
+
+      <h3>论文自认的边界</h3>
+      <div class="crit">
+        <div class="crit-item self"><span class="tag2">论文 §8 自述</span>这套技术只在"动态分配 + memory-bound"的负载上成立。DNN 训练张量形状静态、非 LLM 服务是 compute-bound——引入间接寻址与非连续块反而可能<strong>降低</strong>性能。</div>
+        <div class="crit-item self"><span class="tag2">论文 §7.1 自述</span>PagedAttention kernel 比高度优化的 FasterTransformer 慢 20–26%。优势完全来自内存侧，不是算子侧。</div>
+        <div class="crit-item self"><span class="tag2">论文 §4.5 自述</span>swap 发生后停止接收新请求直到被抢占序列全部完成——过载期的尾延迟行为相当粗糙。</div>
+      </div>
+
+      <h3>工程师视角的追问</h3>
+      <div class="crit">
+        <div class="crit-item"><span class="tag2">质疑 · 调度公平</span>FCFS + "最晚到达者先被抢占"对长输出请求不利：一条快写完的长序列可能因为内存耗尽前新来的请求而……不，反过来——新请求会被抢占。但长请求的 KV 占用时间本身就在挤压系统，论文没有讨论按 SLO 或剩余长度调度的空间。</div>
+        <div class="crit-item"><span class="tag2">质疑 · 基线强度</span>Orca(Oracle) 不可达，真实世界的 Orca 更接近 Pow2/Max——对 Pow2 的 2.7–8× 才是实务参考值。另外 Orca 未开源，基线是作者自行复现，buddy allocator 假设可能放大或缩小差距。</div>
+        <div class="crit-item"><span class="tag2">质疑 · 规模外推</span>集中式调度器 + Python 控制面在 8×A100 内验证充分；跨节点、数百 GPU 时单点广播与 block manager 是否成为瓶颈，论文未覆盖。</div>
+        <div class="crit-item"><span class="tag2">质疑 · 时代变量</span>论文（2023.09）未涉及之后成为标配的 chunked prefill、prefix caching 自动复用、投机解码等；但这些全部建立在本文的块管理地基上——地基本身没有过时。</div>
+      </div>
+
+      <h3>可以直接偷的思想</h3>
+      <ul class="steal">
+        <li><span class="ic">▸</span><span><strong>给"动态增长、长度未知"的 GPU 状态做分页。</strong>任何这类状态（多模态中间特征、agent 长上下文、diffusion 历史）都可以套"固定块 + 逻辑/物理映射"的模板。</span></li>
+        <li><span class="ic">▸</span><span><strong>映射层即解耦层。</strong>上层算法（beam、采样、前缀共享）只操作逻辑块，下层存储随意排布——加一个 indirection，复杂度各归各位。论文原话：kernel 只看到一串物理块 ID。</span></li>
+        <li><span class="ic">▸</span><span><strong>recompute 当恢复手段。</strong>OS 不能把丢掉的页"算"回来，但 LLM 的 KV 可以由输入再生——当你的系统状态是确定性函数输出时，checkpoint 可以被"重放"替代。</span></li>
+        <li><span class="ic">▸</span><span><strong>用访问语义简化驱逐。</strong>已知"一条序列的块永远一起被访问"，LRU 之类的逐块预测就是过度设计——all-or-nothing 反而最优。先问负载语义，再选通用算法。</span></li>
+        <li><span class="ic">▸</span><span><strong>不可变前缀 + CoW 是通用的省内存范式。</strong>fork 进程、共享库、beam 树——凡是"大量副本共享前缀、偶发写分叉"的结构，引用计数 + 写时复制几乎总是对的。</span></li>
+      </ul>
+
+      <div class="callout" style="margin-top:26px"><span class="lab">一句话收束</span>vLLM 没有发明新的数学，它发明的是一个<strong>对应关系</strong>：KV cache ≈ 进程地址空间。一旦这个对应成立，操作系统六十年积累的分页、共享、写时复制、swap 工具箱就全部解锁——这正是系统研究最漂亮的赢法。</div>
+    </section>
+
+    <footer>
+      PagedAttention 论文深度解读 · 源文献：Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention", SOSP '23, arXiv:2309.06180v1<br>
+      所有标注"依据论文 Figure N 重绘"的图形为示意性再创作；标注"示例值"的数字为解说性假设，非论文原值；"工程师视角"内容为解读评论，与论文结论区分。
+    </footer>
+  </main>
+</div>
+
+<script>
+/* ============ 主题 ============ */
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn'),
+      lab=document.getElementById('themeLabel'),
+      sun=document.getElementById('icoSun'), moon=document.getElementById('icoMoon');
+  function apply(t){
+    root.setAttribute('data-theme',t);
+    try{localStorage.setItem('pdd-theme',t);}catch(e){}
+    lab.textContent = t==='dark'?'深色':'浅色';
+    sun.style.display  = t==='dark'?'':'none';
+    moon.style.display = t==='dark'?'none':'';
+  }
+  var t;
+  try{t=localStorage.getItem('pdd-theme');}catch(e){}
+  if(!t) t = (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';
+  apply(t);
+  btn.addEventListener('click',function(){apply(root.getAttribute('data-theme')==='dark'?'light':'dark');});
+})();
+
+/* ============ TOC 滚动高亮 ============ */
+(function(){
+  var links=[].slice.call(document.querySelectorAll('.toc a'));
+  var map={};
+  links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(a){a.classList.remove('on');});
+        var a=map[e.target.id]; if(a)a.classList.add('on');
+      }
+    });
+  },{rootMargin:'-15% 0px -70% 0px'});
+  document.querySelectorAll('section[id]').forEach(function(s){io.observe(s);});
+})();
+
+/* ============ 核心流程 stepper ============ */
+(function(){
+  var steps=[
+    {t:'到达排队',h:'① 请求到达：FCFS 排队',b:'<p>请求带着采样参数（最大长度、beam width <em>k</em> 等）进入 FastAPI 前端。调度策略是 <strong>FCFS</strong>：先到的先服务、防饿死；需要抢占时，<strong>最晚到达的最先被牺牲</strong>。</p>',m:'queue.push(request)   # policy = FCFS, preempt = LIFO'},
+    {t:'Prefill',h:'② Prefill：只按 prompt 实际长度分配块',b:'<p>7 个 token 的 prompt 只映射 ⌈7/B⌉ 个物理块——<strong>不</strong>为最大长度 2048 预分配。prompt 阶段是 matrix-matrix 运算，GPU 算力吃满；KV 写入块内，最后一个块的空槽留给未来。新请求只需等待<strong>一个迭代</strong>即可插入运行中的 batch（iteration-level scheduling）。</p>',m:'alloc(⌈7/16⌉ = 1 block)   vs   orca: reserve(2048 slots)'},
+    {t:'拼批',h:'③ 每个迭代：调度器拼批并广播',b:'<p>调度器选出本轮候选序列集合，把"prompt 请求的全部 token + 解码请求的最新 1 个 token"拼成一条输入序列，连同每条序列的 <strong>block table</strong> 一起广播给所有 GPU worker。之后 worker 间用 NCCL all-reduce 自同步，控制面退出本迭代。</p>',m:'broadcast(input_ids, block_tables) → workers (SPMD)'},
+    {t:'Decode',h:'④ Decode：PagedAttention kernel 按块取数',b:'<p>attention 层里，kernel 沿 block table 逐块取 K/V：每个 warp 读一个块保证合并访存；块内 16 个位置并行处理；softmax 分母跨块累加（Eq. 4 分块形式）。逻辑上连续的上下文，物理上散落各处——kernel 不在乎。</p>',m:'for block in block_table: A = q·K_block; o += A·V_block'},
+    {t:'块满扩容',h:'⑤ 最后一个块写满：才分配新物理块',b:'<p>新 token 的 KV 总是写入最后一个逻辑块的下一个空槽；块写满才申请新物理块并追加映射。因此每条序列的浪费被钉死在 <strong>≤ B−1 个 token 槽</strong>——这是 96.3% 利用率的来源。</p>',m:'if filled == B: map[len] = gpu_alloc()  # on-demand only'},
+    {t:'抢占',h:'⑥ 显存耗尽：整条序列被驱逐',b:'<p>物理块不够时，选最晚到达的序列<strong>整条</strong>驱逐（all-or-nothing），同组的 beam 候选一起 gang-schedule。恢复二选一：<strong>swap</strong> 到 CPU RAM（块大时快），或 <strong>recompute</strong>——把已生成 token 拼回 prompt 重跑一次 prefill（块小时快，且开销恒定）。swap 期间暂停接收新请求。</p>',m:'evict(seq_group) → cpu_swap ｜ recompute: prefill(prompt+output)'},
+    {t:'完成释放',h:'⑦ 序列完成：块即刻归还，ref count 归零',b:'<p>遇到 &lt;eos&gt; 或长度上限后序列结束，其逻辑块对应的物理块 ref count 递减，归零的块立刻回到空闲池服务新请求。共享块（如 prompt 前缀）在最后一个引用者结束后才被释放。</p>',m:'for blk in seq: if --ref[blk] == 0: free(blk)'}
+  ];
+  var tabs=document.getElementById('stepTabs'), panel=document.getElementById('stepPanel'),
+      prev=document.getElementById('stepPrev'), next=document.getElementById('stepNext'), cur=0;
+  steps.forEach(function(s,i){
+    var b=document.createElement('button');
+    b.setAttribute('role','tab'); b.innerHTML='<span class="sn">'+(i+1)+'</span>'+s.t;
+    b.addEventListener('click',function(){show(i);});
+    tabs.appendChild(b);
+  });
+  function show(i){
+    cur=Math.max(0,Math.min(steps.length-1,i));
+    [].forEach.call(tabs.children,function(b,j){b.setAttribute('aria-selected',j===cur?'true':'false');});
+    panel.innerHTML='<h4>'+steps[cur].h+'</h4>'+steps[cur].b+'<div class="mono-line">'+steps[cur].m+'</div>';
+    prev.disabled=cur===0; next.disabled=cur===steps.length-1;
+  }
+  prev.addEventListener('click',function(){show(cur-1);});
+  next.addEventListener('click',function(){show(cur+1);});
+  document.addEventListener('keydown',function(e){
+    var r=tabs.getBoundingClientRect();
+    if(r.bottom<0||r.top>innerHeight)return;
+    if(e.key==='ArrowRight')show(cur+1);
+    if(e.key==='ArrowLeft')show(cur-1);
+  });
+  show(0);
+})();
+
+/* ============ 负载场景渲染 ============ */
+(function(){
+  var LX=178,LY=56,LW=58,LH=30,LDX=66,LDY=86, PW=38,PH=38,PDX=46,PDY=50,PX=560,PY=56,PER=9;
+  function px(i){return PX+(i%PER)*PDX;}
+  function py(i){return PY+Math.floor(i/PER)*PDY;}
+  var SCN={
+    a:{title:'场景 A · 基础解码：按需增长，浪费 ≤ 1 个块',h:190,n:9,
+      seqs:[{name:'请求 A',blocks:[{to:7,f:4},{to:1,f:4},{to:3,f:1}]}],
+      phys:{1:'used',3:'used',7:'used'},ref:{},
+      active:[[0,1],[0,2]],
+      badges:[{n:1,at:'L',s:0,b:0},{n:2,at:'P',p:1},{n:3,at:'P',p:3},{n:4,at:'L',s:0,b:2}],
+      steps:['<strong>Prefill 只映射实际所需</strong>：7 token 的 prompt → 逻辑块 L0、L1 → 物理块 P7、P1（B=4 的示意），不按 2048 上限预分配。',
+             '<strong>第 1 个 decode 迭代</strong>：新 token 写入 P1 最后一个空槽，#filled 3→4，<strong>零新分配</strong>。',
+             '<strong>第 2 个迭代</strong>：L1 已满 → 分配 P3 并追加映射 L2→P3；浪费上界 = 3 个 token 槽。',
+             '<strong>序列完成</strong>：P7/P1/P3 即刻归还空闲池——下一条请求直接复用，无任何整理成本。']},
+    b:{title:'场景 B · 并行采样（n=2）：prompt 只存一份，分叉时写时复制',h:280,n:9,
+      seqs:[{name:'样本 A1',blocks:[{to:7,f:4},{to:3,f:3}]},
+            {name:'样本 A2',blocks:[{to:7,f:4},{to:1,f:3}]}],
+      phys:{7:'shared',3:'used',1:'used'},ref:{7:2},
+      active:[[0,1],[1,1]],cow:{from:1,to:3},
+      badges:[{n:1,at:'P',p:7},{n:2,at:'L',s:0,b:1},{n:3,at:'P',p:3},{n:4,at:'P',p:1}],
+      steps:['<strong>共享 prompt</strong>：A1/A2 的 L0、L1 同映射到 P7、P1，ref count = 2——prompt 的 KV cache 全 batch 只存一份（实测占总 KV 的 12%，§3）。',
+             '<strong>A1 分叉</strong>：采样出不同 token 要写 L1 → block manager 查到 P1 的 ref = 2 &gt; 1，触发 <strong>copy-on-write</strong>。',
+             '<strong>单块拷贝</strong>：分配 P3，整块复制 P1 → P3，A1 的 L1 重映射；P1 ref 降为 1。一次 CoW 只搬一个块。',
+             '<strong>A2 直写</strong>：ref 已是 1，A2 原地写 P1，零拷贝。共享越深的负载（长 prompt）省得越多。']},
+    c:{title:'场景 C · Beam search（k=4）：共享模式随每步动态演化',h:420,n:13,
+      seqs:[{name:'候选 0',blocks:[{to:0},{to:1},{to:3},{to:6},{to:9}]},
+            {name:'候选 1',blocks:[{to:0},{to:1},{to:3},{to:6},{to:10}]},
+            {name:'候选 2',blocks:[{to:0},{to:1},{to:3},{to:7},{to:11}]},
+            {name:'候选 3',blocks:[{to:0},{to:1},{to:3},{to:7},{to:12}]}],
+      phys:{0:'shared',1:'shared',3:'shared',6:'shared',7:'shared',9:'used',10:'used',11:'used',12:'used',2:'freed',4:'freed',5:'freed',8:'freed'},
+      ref:{0:4,1:4,3:4,6:2,7:2},
+      active:[[0,4],[1,4],[2,4],[3,4]],
+      badges:[{n:1,at:'P',p:0},{n:2,at:'P',p:6},{n:3,at:'P',p:2},{n:4,at:'P',p:9}],
+      steps:['<strong>前缀树共享</strong>：4 个候选共享 prompt 块 P0 与公共前缀 P1、P3（ref = 4）——共享结构随解码自然形成，无需显式声明。',
+             '<strong>分叉分层</strong>：候选 0/1 共享 P6、候选 2/3 共享 P7（ref = 2）；分叉越晚，共享越深，内存越省。',
+             '<strong>淘汰即回收</strong>：新一轮 top-4 全部出自旧候选 1、2 → 落选者的逻辑块释放，P2/P4/P5/P8 ref 归零立即回收（虚线 × 块）。',
+             '<strong>新候选落地</strong>：P9–P12 分配给新候选的最新块。传统系统此处要整段复制胜出者的 KV cache；vLLM 只在"写进共享块内部"时 CoW 一个块——实测省 37.6–66.3% 内存。']}
+  };
+  function esc(s){return s;}
+  function render(key){
+    var d=SCN[key], out=[];
+    out.push('<svg viewBox="0 0 920 '+d.h+'" width="100%" style="min-width:860px" role="img" aria-label="'+d.title+'">');
+    out.push('<defs><marker id="mA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sv-marker"/></marker>'
+      +'<marker id="mS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="sv-marker-shared"/></marker></defs>');
+    out.push('<text x="'+LX+'" y="30" class="sv-txt-mono" font-size="11">逻辑块（每序列的地址空间）</text>');
+    out.push('<text x="'+PX+'" y="30" class="sv-txt-mono" font-size="11">物理块池 · GPU DRAM</text>');
+    // arrows
+    d.seqs.forEach(function(s,si){
+      s.blocks.forEach(function(b,bi){
+        var sx=LX+bi*LDX+LW, sy=LY+si*LDY+LH/2, tx=px(b.to), ty=py(b.to)+PH/2;
+        var shared=d.phys[b.to]==='shared';
+        var act=d.active.some(function(p){return p[0]===si&&p[1]===bi;});
+        out.push('<path d="M'+sx+' '+sy+' C'+(sx+44)+' '+sy+','+(tx-46)+' '+ty+','+tx+' '+ty+'" fill="none" stroke-width="1.6" class="'+(shared?'sv-line-shared':'sv-line-data')+(act?' flow':'')+'" marker-end="url(#m'+(shared?'S':'A')+')"/>');
+      });
+    });
+    // CoW annotation
+    if(d.cow){
+      var x1=px(d.cow.from)+PW/2, y1=py(d.cow.from), x2=px(d.cow.to)+PW/2, y2=py(d.cow.to);
+      out.push('<path d="M'+x1+' '+y1+' C'+x1+' '+(y1-26)+','+x2+' '+(y2-26)+','+x2+' '+y2+'" fill="none" stroke-width="1.4" class="sv-line-control" marker-end="url(#mA)"/>');
+      out.push('<text x="'+((x1+x2)/2)+'" y="'+(Math.min(y1,y2)-12)+'" text-anchor="middle" class="sv-txt-accent" font-size="10">copy-on-write</text>');
+    }
+    // logical blocks
+    d.seqs.forEach(function(s,si){
+      var y=LY+si*LDY;
+      out.push('<text x="24" y="'+(y+LH/2+4)+'" class="sv-txt" font-size="12.5" font-weight="600">'+s.name+'</text>');
+      s.blocks.forEach(function(b,bi){
+        var x=LX+bi*LDX;
+        out.push('<rect x="'+x+'" y="'+y+'" width="'+LW+'" height="'+LH+'" rx="5" class="sv-box-logical"/>');
+        out.push('<text x="'+(x+LW/2)+'" y="'+(y+LH/2+4)+'" text-anchor="middle" class="sv-txt-mono" font-size="10">L'+bi+(b.f?' · '+b.f+'/4':'')+'</text>');
+      });
+    });
+    // physical pool
+    for(var i=0;i<d.n;i++){
+      var x=px(i),y=py(i),st=d.phys[i]||'free';
+      var cls=st==='used'?'sv-box-tok':st==='shared'?'sv-box-shared':st==='freed'?'sv-box-waste':'sv-free';
+      out.push('<rect x="'+x+'" y="'+y+'" width="'+PW+'" height="'+PH+'" rx="5" class="'+cls+'"/>');
+      if(st==='freed'){
+        out.push('<text x="'+(x+PW/2)+'" y="'+(y+PH/2+5)+'" text-anchor="middle" class="sv-txt-mono" font-size="14">×</text>');
+      }else{
+        out.push('<text x="'+(x+PW/2)+'" y="'+(y+PH/2+4)+'" text-anchor="middle" class="sv-txt-mono" font-size="11">'+i+'</text>');
+      }
+      var r=d.ref[i];
+      if(r&&r>1){
+        out.push('<circle cx="'+(x+PW)+'" cy="'+y+'" r="9" class="sv-box-shared" stroke-width="1.4"/>');
+        out.push('<text x="'+(x+PW)+'" y="'+(y+3.5)+'" text-anchor="middle" class="sv-txt" font-size="9.5" font-weight="700">'+r+'</text>');
+      }
+    }
+    // badges
+    d.badges.forEach(function(bg){
+      var bx,by;
+      if(bg.at==='L'){bx=LX+bg.b*LDX+LW/2;by=LY+bg.s*LDY-14;}
+      else{bx=px(bg.p)+PW/2;by=py(bg.p)+PH+18;}
+      out.push('<circle cx="'+bx+'" cy="'+by+'" r="10.5" class="sv-badge-c"/>');
+      out.push('<text x="'+bx+'" y="'+(by+3.5)+'" text-anchor="middle" class="sv-badge-t" font-size="11">'+bg.n+'</text>');
+    });
+    out.push('</svg>');
+    document.getElementById('scnSvg').innerHTML=out.join('');
+    document.getElementById('scnTitle').textContent=d.title;
+    document.getElementById('scnSteps').innerHTML=d.steps.map(function(s,i){
+      return '<div class="scn-step"><span class="badge">'+(i+1)+'</span><p>'+s+'</p></div>';
+    }).join('');
+  }
+  var btns=[].slice.call(document.querySelectorAll('.scn-btn'));
+  btns.forEach(function(b){
+    b.addEventListener('click',function(){
+      btns.forEach(function(x){x.setAttribute('aria-pressed','false');});
+      b.setAttribute('aria-pressed','true');
+      render(b.dataset.scn);
+    });
+  });
+  render('a');
+})();
+</script>
+</body>
+</html>

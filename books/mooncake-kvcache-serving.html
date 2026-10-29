@@ -1,0 +1,1606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mooncake 论文深读 · KVCache-centric 解耦架构解析</title>
+<style>
+/* ============================================================
+   Design tokens — dark "systems console" is the primary theme;
+   light theme is a full counterpart, not an inversion.
+   Tier colors encode the memory hierarchy in every diagram:
+   VRAM teal / DRAM gold / SSD violet / RDMA steel-blue.
+   Control plane (scheduling) is persimmon — the mooncake hue.
+   ============================================================ */
+:root {
+  --bg: #0F141B;
+  --bg-raise: #151C26;
+  --panel: #18202B;
+  --panel-2: #1D2733;
+  --line: #2A3542;
+  --line-soft: #212B37;
+  --ink: #E7ECF1;
+  --ink-2: #9AA8B6;
+  --ink-3: #6B7987;
+  --accent: #E1703D;
+  --accent-soft: rgba(225,112,61,.14);
+  --on-accent: #10141B;
+  --vram: #3FBFA5;
+  --dram: #D9A13B;
+  --ssd: #9B8AC4;
+  --rdma: #5E9BD6;
+  --ok: #4CAF7D;
+  --bad: #D95F4E;
+  /* svg surfaces */
+  --svg-pool: #141B24;
+  --svg-conductor: #241B14;
+  --svg-band: #1A1610;
+  --svg-chip-vram: #16352E;
+  --svg-chip-dram: #3A2E14;
+  --svg-chip-ssd: #241F33;
+  --stage-a: rgba(63,191,165,.05);
+  --stage-b: rgba(217,161,59,.05);
+  --badge-ink: #10141B;
+  --pseudo-bg: #0B0F15;
+  --pseudo-ink: #C6D0DA;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --measure: 68ch;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #F4F6F9; --bg-raise: #FFFFFF; --panel: #FFFFFF; --panel-2: #EEF1F5;
+    --line: #D5DCE4; --line-soft: #E4E9F0;
+    --ink: #1B2530; --ink-2: #49586A; --ink-3: #7C8A99;
+    --accent: #C4531F; --accent-soft: rgba(196,83,31,.12); --on-accent: #FFFFFF;
+    --vram: #157F6B; --dram: #8C620F; --ssd: #6E5FA8; --rdma: #2B6399;
+    --ok: #1E7B4F; --bad: #C33F2E;
+    --svg-pool: #EDF1F6; --svg-conductor: #F9E7D8; --svg-band: #F6EFDC;
+    --svg-chip-vram: #D6ECE5; --svg-chip-dram: #F3E7C6; --svg-chip-ssd: #E6E1F2;
+    --stage-a: rgba(21,127,107,.07); --stage-b: rgba(140,98,15,.07);
+    --badge-ink: #FFFFFF;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #F4F6F9; --bg-raise: #FFFFFF; --panel: #FFFFFF; --panel-2: #EEF1F5;
+  --line: #D5DCE4; --line-soft: #E4E9F0;
+  --ink: #1B2530; --ink-2: #49586A; --ink-3: #7C8A99;
+  --accent: #C4531F; --accent-soft: rgba(196,83,31,.12); --on-accent: #FFFFFF;
+  --vram: #157F6B; --dram: #8C620F; --ssd: #6E5FA8; --rdma: #2B6399;
+  --ok: #1E7B4F; --bad: #C33F2E;
+  --svg-pool: #EDF1F6; --svg-conductor: #F9E7D8; --svg-band: #F6EFDC;
+  --svg-chip-vram: #D6ECE5; --svg-chip-dram: #F3E7C6; --svg-chip-ssd: #E6E1F2;
+  --stage-a: rgba(21,127,107,.07); --stage-b: rgba(140,98,15,.07);
+  --badge-ink: #FFFFFF;
+}
+:root[data-theme="dark"] {
+  --bg: #0F141B; --bg-raise: #151C26; --panel: #18202B; --panel-2: #1D2733;
+  --line: #2A3542; --line-soft: #212B37;
+  --ink: #E7ECF1; --ink-2: #9AA8B6; --ink-3: #6B7987;
+  --accent: #E1703D; --accent-soft: rgba(225,112,61,.14); --on-accent: #10141B;
+  --vram: #3FBFA5; --dram: #D9A13B; --ssd: #9B8AC4; --rdma: #5E9BD6;
+  --ok: #4CAF7D; --bad: #D95F4E;
+  --svg-pool: #141B24; --svg-conductor: #241B14; --svg-band: #1A1610;
+  --svg-chip-vram: #16352E; --svg-chip-dram: #3A2E14; --svg-chip-ssd: #241F33;
+  --stage-a: rgba(63,191,165,.05); --stage-b: rgba(217,161,59,.05);
+  --badge-ink: #10141B;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { animation: none !important; transition: none !important; }
+}
+
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 16px; line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent-soft); color: var(--ink); }
+a { color: var(--rdma); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible, button:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.topbar-inner {
+  max-width: 1240px; margin: 0 auto; padding: 0 24px;
+  height: 56px; display: flex; align-items: center; gap: 16px;
+}
+.topbar .brand { font-family: var(--mono); font-size: 13px; letter-spacing: .02em; white-space: nowrap; }
+.topbar .brand b { color: var(--accent); font-weight: 600; }
+.topbar .meta {
+  margin-left: auto; font-family: var(--mono); font-size: 11.5px;
+  color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.theme-toggle {
+  appearance: none; cursor: pointer; flex: none;
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink-2); border-radius: 999px; padding: 6px 12px;
+  font-family: var(--mono); font-size: 11.5px;
+  transition: border-color .15s, color .15s;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--ink); }
+.theme-toggle svg { width: 14px; height: 14px; }
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="light"] .icon-moon { display: none; }
+:root[data-theme="light"] .icon-sun { display: inline; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .icon-moon { display: none; }
+  :root:not([data-theme="dark"]) .icon-sun { display: inline; }
+}
+@media (max-width: 720px) { .topbar .meta { display: none; } }
+
+/* ---------- layout ---------- */
+.layout {
+  max-width: 1240px; margin: 0 auto; padding: 0 24px;
+  display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 56px;
+}
+
+/* ---------- toc rail ---------- */
+.toc { padding-top: 48px; min-width: 0; }
+.toc nav { position: sticky; top: 88px; display: flex; flex-direction: column; gap: 2px; }
+.toc .toc-title {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px;
+}
+.toc a {
+  font-family: var(--mono); font-size: 12.5px; color: var(--ink-2);
+  padding: 6px 10px; border-left: 2px solid var(--line-soft);
+  transition: color .15s, border-color .15s;
+}
+.toc a:hover { color: var(--ink); text-decoration: none; }
+.toc a.active { color: var(--accent); border-left-color: var(--accent); }
+
+/* ---------- content ---------- */
+.content { min-width: 0; padding: 48px 0 96px; }
+section { margin-bottom: 88px; }
+section:last-of-type { margin-bottom: 0; }
+
+.eyebrow {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--accent); margin: 0 0 10px;
+}
+h1, h2, h3 { text-wrap: balance; }
+h2 { font-family: var(--mono); font-weight: 600; font-size: 24px; letter-spacing: -.01em; margin: 0 0 18px; }
+h2 .hash { color: var(--accent); margin-right: 10px; font-weight: 400; }
+h3 { font-size: 17px; font-weight: 650; margin: 36px 0 10px; }
+p { max-width: var(--measure); margin: 0 0 14px; }
+.lede { font-size: 17.5px; color: var(--ink-2); max-width: 72ch; }
+ul, ol { max-width: var(--measure); padding-left: 22px; margin: 0 0 14px; }
+li { margin-bottom: 6px; }
+strong { font-weight: 650; }
+code {
+  font-family: var(--mono); font-size: .86em;
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  padding: 1px 6px; border-radius: 5px; color: var(--dram); white-space: nowrap;
+}
+.term { color: var(--vram); }
+
+/* ---------- hero ---------- */
+.hero { padding: 56px 0 8px; }
+.hero .kicker { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); margin-bottom: 14px; }
+.hero .kicker b { color: var(--accent); font-weight: 600; }
+.hero h1 {
+  font-family: var(--mono); font-weight: 700;
+  font-size: clamp(26px, 4vw, 40px); line-height: 1.25;
+  letter-spacing: -.015em; margin: 0 0 18px; max-width: 22ch;
+}
+.hero h1 .dim { color: var(--ink-3); }
+.hero .sub { font-size: 17px; color: var(--ink-2); max-width: 74ch; margin-bottom: 28px; }
+.paper-meta {
+  display: flex; flex-wrap: wrap; gap: 8px 24px;
+  font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+  border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+  padding: 12px 0; max-width: 900px;
+}
+.paper-meta span b { color: var(--ink-2); font-weight: 600; }
+
+/* ---------- stat strip ---------- */
+.stat-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft);
+  border-radius: var(--radius); overflow: hidden; margin: 28px 0 0; max-width: 900px;
+}
+.stat { background: var(--panel); padding: 18px 18px 16px; }
+.stat .v {
+  font-family: var(--mono); font-size: 26px; font-weight: 700;
+  color: var(--dram); font-variant-numeric: tabular-nums; line-height: 1.15;
+}
+.stat .v.accent { color: var(--accent); }
+.stat .v.teal { color: var(--vram); }
+.stat .l { font-size: 12.5px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+
+/* ---------- callouts ---------- */
+.callout {
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  background: var(--panel); border-radius: 8px;
+  padding: 14px 18px; margin: 20px 0; max-width: var(--measure);
+}
+.callout.note { border-left-color: var(--rdma); }
+.callout.warn { border-left-color: var(--dram); }
+.callout .t {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px;
+}
+.callout p { margin: 0; font-size: 15px; }
+
+/* ---------- worked example ---------- */
+.example {
+  border: 1px dashed var(--dram); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--dram) 5%, var(--panel));
+  margin: 24px 0; max-width: 980px; overflow: hidden;
+}
+.example > .ex-head {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--dram); padding: 10px 18px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--dram) 40%, transparent);
+  letter-spacing: .04em;
+}
+.example > .ex-body { padding: 14px 18px 16px; }
+.example p, .example ul, .example ol { font-size: 14.5px; max-width: none; }
+.example p:last-child, .example ul:last-child, .example ol:last-child { margin-bottom: 0; }
+.example .ex-steps { display: grid; gap: 8px; }
+.example .ex-line {
+  display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: baseline;
+  font-size: 14.5px;
+}
+.example .ex-line .n {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--on-accent);
+  background: var(--dram); border-radius: 50%; width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center; justify-self: start;
+}
+.example .ex-line .r { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+.example .ex-line .r b { color: var(--dram); font-weight: 700; }
+.example table.data { min-width: 0; width: 100%; }
+
+/* ---------- figures ---------- */
+figure {
+  margin: 28px 0; max-width: 980px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg-raise); overflow: hidden;
+}
+figure .fig-scroll { overflow-x: auto; padding: 20px; }
+figure svg { display: block; min-width: 640px; width: 100%; height: auto; }
+figure svg.compact { min-width: 520px; }
+figcaption {
+  border-top: 1px solid var(--line-soft);
+  padding: 12px 20px; font-size: 13px; color: var(--ink-2);
+}
+figcaption b { font-family: var(--mono); font-size: 12px; margin-right: 8px; }
+
+/* svg shared — all colors via tokens so both themes work */
+svg text { font-family: var(--mono); fill: var(--ink); }
+svg .t-title { font-size: 13px; font-weight: 700; }
+svg .t-label { font-size: 11.5px; fill: var(--ink-2); }
+svg .t-small { font-size: 10.5px; fill: var(--ink-3); }
+svg .t-mono { font-size: 11px; fill: var(--dram); }
+svg .t-ink { fill: var(--ink); }
+svg .t-v { fill: var(--vram); } svg .t-d { fill: var(--dram); }
+svg .t-s { fill: var(--ssd); } svg .t-r { fill: var(--rdma); }
+svg .t-a { fill: var(--accent); } svg .t-bad { fill: var(--bad); }
+svg .f-p2 { fill: var(--panel-2); } svg .f-node { fill: var(--panel); }
+svg .f-pool { fill: var(--svg-pool); } svg .f-cond { fill: var(--svg-conductor); }
+svg .f-band { fill: var(--svg-band); }
+svg .f-chipv { fill: var(--svg-chip-vram); } svg .f-chipl { fill: var(--svg-chip-dram); }
+svg .f-chips { fill: var(--svg-chip-ssd); }
+svg .f-acc { fill: var(--accent); } svg .f-dram { fill: var(--dram); } svg .f-vram { fill: var(--vram); }
+svg .s-line { stroke: var(--line); } svg .s-v { stroke: var(--vram); }
+svg .s-d { stroke: var(--dram); } svg .s-a { stroke: var(--accent); }
+svg .stage-a { fill: var(--stage-a); } svg .stage-b { fill: var(--stage-b); }
+svg .ln-d { stroke: var(--dram); stroke-width: 2.4; fill: none; }
+svg .ln-v { stroke: var(--vram); stroke-width: 2.4; fill: none; }
+.badge text { fill: var(--badge-ink); font-weight: 700; }
+.edge-ctrl { stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 5 4; fill: none; }
+.edge-data { stroke: var(--rdma); stroke-width: 2; fill: none; }
+.edge-cache { stroke: var(--dram); stroke-width: 1.8; fill: none; }
+.edge-plain { stroke: var(--line); stroke-width: 1.4; fill: none; }
+.edge-req { stroke: var(--ink-2); stroke-width: 1.6; fill: none; }
+.edge-reject { stroke: var(--bad); stroke-width: 1.8; fill: none; stroke-dasharray: 5 4; }
+.mk-a { fill: var(--accent); } .mk-d { fill: var(--dram); } .mk-r { fill: var(--rdma); }
+.mk-bad { fill: var(--bad); } .mk-ink { fill: var(--ink-2); } .mk-line { fill: var(--line); }
+
+/* ---------- stepper ---------- */
+.stepper {
+  max-width: 980px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--panel); overflow: hidden; margin: 28px 0;
+}
+.stepper .steps { display: grid; grid-template-columns: repeat(4, 1fr); }
+.stepper button.step {
+  appearance: none; border: none; border-right: 1px solid var(--line-soft);
+  background: var(--panel); color: var(--ink-2);
+  font-family: var(--mono); font-size: 12px; text-align: left;
+  padding: 14px 16px; cursor: pointer; line-height: 1.5;
+  transition: background .15s, color .15s;
+}
+.stepper button.step:last-child { border-right: none; }
+.stepper button.step .n { display: block; font-size: 11px; color: var(--ink-3); letter-spacing: .1em; }
+.stepper button.step b { color: inherit; font-weight: 600; }
+.stepper button.step:hover { background: var(--panel-2); color: var(--ink); }
+.stepper button.step[aria-selected="true"] {
+  background: var(--panel-2); color: var(--ink); box-shadow: inset 0 3px 0 var(--accent);
+}
+.stepper .step-panel { border-top: 1px solid var(--line-soft); padding: 22px 24px 24px; }
+.stepper .step-panel h4 { font-family: var(--mono); font-size: 15px; margin: 0 0 8px; color: var(--accent); }
+.stepper .step-panel p { font-size: 15px; margin-bottom: 10px; }
+.stepper .step-panel ul { font-size: 14.5px; }
+@media (max-width: 720px) {
+  .stepper .steps { grid-template-columns: 1fr 1fr; }
+  .stepper button.step { border-bottom: 1px solid var(--line-soft); }
+}
+
+/* ---------- scenario player ---------- */
+.scenario-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 24px 0 16px; max-width: 980px; }
+.scenario-tabs button {
+  appearance: none; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel);
+  border-radius: var(--radius); padding: 14px 16px;
+  color: var(--ink-2); font-family: var(--sans); font-size: 13px;
+  transition: border-color .15s, background .15s;
+}
+.scenario-tabs button b { display: block; color: var(--ink); font-size: 14.5px; margin: 2px 0 4px; }
+.scenario-tabs button span { display: block; font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.scenario-tabs button:hover { background: var(--panel-2); }
+.scenario-tabs button[aria-selected="true"] {
+  border-color: var(--accent); background: var(--panel-2); box-shadow: inset 0 3px 0 var(--accent);
+}
+.scenario-detail {
+  max-width: 980px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); padding: 20px 24px; margin-top: 16px;
+}
+.scenario-detail h4 { font-family: var(--mono); font-size: 15px; color: var(--accent); margin: 0 0 6px; }
+.scenario-detail .profile { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin-bottom: 12px; }
+.scenario-detail ol { font-size: 14.5px; max-width: none; }
+.scenario-detail .role { border-top: 1px solid var(--line-soft); margin-top: 14px; padding-top: 12px; font-size: 14.5px; max-width: none; }
+.scenario-detail .role b { color: var(--dram); }
+
+/* diagram scenario states */
+.flow-svg [data-s] { transition: opacity .3s; }
+.flow-svg[data-scenario="a"] [data-s]:not([data-s~="a"]),
+.flow-svg[data-scenario="b"] [data-s]:not([data-s~="b"]),
+.flow-svg[data-scenario="c"] [data-s]:not([data-s~="c"]) { opacity: .14; }
+.flow-svg .badge { display: none; pointer-events: none; }
+.flow-svg[data-scenario="a"] .badge[data-s~="a"],
+.flow-svg[data-scenario="b"] .badge[data-s~="b"],
+.flow-svg[data-scenario="c"] .badge[data-s~="c"] { display: inline; }
+.flow-svg[data-scenario="a"] .edge[data-s~="a"],
+.flow-svg[data-scenario="b"] .edge[data-s~="b"],
+.flow-svg[data-scenario="c"] .edge[data-s~="c"] {
+  stroke-dasharray: 7 5; animation: dashflow 1.1s linear infinite;
+}
+@keyframes dashflow { to { stroke-dashoffset: -24; } }
+@media (max-width: 720px) { .scenario-tabs { grid-template-columns: 1fr; } }
+
+/* ---------- decision cards ---------- */
+.decision {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); margin: 24px 0; overflow: hidden; max-width: 980px;
+}
+.decision > header {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 16px 22px; border-bottom: 1px solid var(--line-soft); background: var(--panel-2);
+}
+.decision .did {
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  color: var(--on-accent); background: var(--accent);
+  padding: 3px 9px; border-radius: 5px; white-space: nowrap;
+}
+.decision header h3 { margin: 0; font-size: 16.5px; }
+.decision .body { padding: 18px 22px 20px; }
+.decision .q { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); margin-bottom: 12px; }
+.decision .q b { color: var(--ink-2); font-weight: 600; }
+.decision .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-top: 14px; }
+.decision .block .bt {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.decision .block.alt .bt { color: var(--ink-3); }
+.decision .block.why .bt { color: var(--ok); }
+.decision .block.cost .bt { color: var(--dram); }
+.decision .block ul { font-size: 14.5px; padding-left: 18px; }
+.decision .block li { margin-bottom: 5px; }
+
+/* ---------- pseudocode ---------- */
+pre.pseudo {
+  font-family: var(--mono); font-size: 13px; line-height: 1.7;
+  background: var(--pseudo-bg); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 20px 24px;
+  overflow-x: auto; max-width: 980px; color: var(--pseudo-ink); tab-size: 4;
+}
+pre.pseudo .kw { color: #E1703D; }
+pre.pseudo .fn { color: #3FBFA5; }
+pre.pseudo .cm { color: #6B7987; }
+pre.pseudo .vr { color: #D9A13B; }
+
+/* ---------- tables ---------- */
+.tbl-wrap { overflow-x: auto; margin: 20px 0; max-width: 980px; }
+table.data { border-collapse: collapse; font-size: 14px; min-width: 560px; font-variant-numeric: tabular-nums; }
+table.data caption {
+  text-align: left; font-family: var(--mono); font-size: 12px;
+  color: var(--ink-3); padding-bottom: 10px; caption-side: top;
+}
+table.data th, table.data td { border: 1px solid var(--line); padding: 9px 14px; text-align: right; }
+table.data th {
+  background: var(--panel-2); font-family: var(--mono); font-size: 12px;
+  font-weight: 600; color: var(--ink-2); white-space: nowrap;
+}
+table.data td:first-child, table.data th:first-child { text-align: left; }
+table.data td { background: var(--panel); font-family: var(--mono); font-size: 13px; }
+table.data td.hl { color: var(--vram); font-weight: 700; }
+table.data td.dim { color: var(--ink-3); }
+
+/* ---------- bar chart ---------- */
+.bars { margin: 20px 0; max-width: 640px; }
+.bars .row { display: grid; grid-template-columns: 190px 1fr 64px; align-items: center; gap: 12px; margin-bottom: 10px; }
+.bars .row .bl { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+.bars .row .track { background: var(--panel-2); border-radius: 5px; height: 22px; position: relative; overflow: hidden; }
+.bars .row .fill { height: 100%; border-radius: 5px; }
+.bars .row .bv { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.bars.wide { max-width: 760px; }
+.bars.wide .row { grid-template-columns: 220px 1fr 76px; }
+
+/* ---------- misc ---------- */
+.footer {
+  margin-top: 80px; border-top: 1px solid var(--line-soft);
+  padding-top: 24px; font-size: 13px; color: var(--ink-3);
+  font-family: var(--mono); max-width: 900px; line-height: 1.8;
+}
+.footer a { color: var(--rdma); }
+
+@media (max-width: 1023px) {
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  .toc { padding-top: 0; }
+  .toc nav {
+    position: sticky; top: 56px; z-index: 40;
+    flex-direction: row; overflow-x: auto; gap: 4px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px);
+    padding: 10px 0; border-bottom: 1px solid var(--line-soft);
+  }
+  .toc .toc-title { display: none; }
+  .toc a { border: 1px solid var(--line-soft); border-radius: 999px; padding: 4px 12px; white-space: nowrap; }
+  .toc a.active { border-color: var(--accent); }
+}
+
+@media print {
+  .topbar, .toc { display: none; }
+  .layout { display: block; max-width: none; }
+  body { background: #fff; color: #111; font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <span class="brand"><b>mooncake</b> // paper deep-dive</span>
+    <span class="meta">arXiv:2407.00079v5 · Moonshot AI × Tsinghua · 面向工程师的架构解析</span>
+    <button class="theme-toggle" id="theme-toggle" aria-label="切换浅色/深色主题" title="切换浅色/深色主题">
+      <svg class="icon-moon" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <svg class="icon-sun" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9 13 13M13 3l-1.1 1.1M4.1 11.9 3 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span id="theme-label">浅色</span>
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="toc">
+    <nav id="toc-nav" aria-label="目录">
+      <div class="toc-title">Contents</div>
+      <a href="#problem">01 · 问题定义</a>
+      <a href="#arch">02 · 架构总览</a>
+      <a href="#lifecycle">03 · 请求生命周期</a>
+      <a href="#scenarios">04 · 典型负载 Dataflow</a>
+      <a href="#kvcache">05 · KVCache 池设计</a>
+      <a href="#decisions">06 · 关键设计决策</a>
+      <a href="#overload">07 · 过载调度</a>
+      <a href="#eval">08 · 实验数据</a>
+      <a href="#takeaways">09 · 批判性阅读</a>
+    </nav>
+  </aside>
+
+  <main class="content">
+    <!-- ==================== HERO ==================== -->
+    <div class="hero" id="top">
+      <p class="kicker"><b>论文深读</b> · 给程序员看的架构解析 — High-Level Design &amp; Design Choices</p>
+      <h1>Mooncake：以 <span style="color:var(--dram)">KVCache</span> 为中心的<br>LLM 推理服务解耦架构 <span class="dim">v5</span></h1>
+      <p class="sub">
+        这是 Kimi 的生产级 serving 平台论文。它做的事情可以一句话讲完：把推理集群里的
+        <strong>Prefill 与 Decoding 拆成两个资源池</strong>，再把所有节点闲置的
+        <strong>CPU / DRAM / SSD 聚合成一个分布式 KVCache 池</strong>，最后用一个全局调度器（Conductor）
+        围绕"KVCache 在哪里、要搬到哪"做所有调度决策。本报告不复述论文，而是面向工程师拆解它的
+        架构取舍：每个设计决策的备选方案是什么、为什么这样选、代价是什么——并且每节都配了一个可以
+        在脑子里跑一遍的具体算例。
+      </p>
+      <div class="paper-meta">
+        <span><b>论文</b> Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving</span>
+        <span><b>作者</b> Ruoyu Qin, Zheming Li 等（Moonshot AI ♠ / 清华 MadSys ♡）</span>
+        <span><b>编号</b> arXiv:2407.00079v5</span>
+        <span><b>开源</b> github.com/kvcache-ai/Mooncake（含真实 trace）</span>
+      </div>
+      <div class="stat-strip">
+        <div class="stat"><div class="v teal">+525%</div><div class="l">模拟长上下文场景下吞吐提升上限（vs vLLM，满足同等 SLO）</div></div>
+        <div class="stat"><div class="v teal">+75%</div><div class="l">真实负载下可承载的请求数提升（vs vLLM）</div></div>
+        <div class="stat"><div class="v">55%</div><div class="l">真实 trace 中 KVCache 复用率上限（LRU、容量无限时）</div></div>
+        <div class="stat"><div class="v accent">429</div><div class="l">过载时直接返回 HTTP 429 —— 早拒绝是架构的一等公民</div></div>
+      </div>
+    </div>
+
+    <!-- ==================== 01 问题定义 ==================== -->
+    <section id="problem">
+      <p class="eyebrow">01 / Problem Statement</p>
+      <h2><span class="hash">##</span>问题定义：一个带 SLO 约束的吞吐最大化问题</h2>
+      <p class="lede">LLM 推理的两次"性格分裂"是整篇论文的地基：Prefill 是 compute-bound，Decoding 是 memory-bound。把它俩塞进同一个实例，是大多数调度痛苦的来源。</p>
+
+      <h3>两个阶段的计算特征</h3>
+      <ul>
+        <li><strong>Prefill（预填充）</strong>：一次性并行处理全部输入 token，生成第一个输出 token 并写入 KVCache。Attention 计算量随输入长度<strong>超线性</strong>增长（O(n²)），属于 compute-bound。它的 SLO 指标是 <code>TTFT</code>（Time To First Token）。</li>
+        <li><strong>Decoding（解码）</strong>：自回归地逐 token 生成，每步只算 1 个 token、却要读全部 KVCache，属于 memory-bandwidth-bound。计算时间随 batch size <strong>亚线性</strong>增长——这正是 continuous batching 有效的原因。它的 SLO 指标是 <code>TBT</code>（Time Between Tokens）。</li>
+      </ul>
+
+      <figure>
+        <div class="fig-scroll">
+        <svg class="compact" viewBox="0 0 980 300" role="img" aria-label="Prefill 与 Decoding 的延迟/吞吐特征曲线">
+          <!-- left panel: latency vs seq len -->
+          <text x="40" y="30" class="t-label">Prefill 延迟 vs 输入长度（batch=1）</text>
+          <line x1="60" y1="60" x2="60" y2="240" class="s-line" stroke-width="1.2"/>
+          <line x1="60" y1="240" x2="440" y2="240" class="s-line" stroke-width="1.2"/>
+          <!-- superlinear curve -->
+          <path d="M60 236 C 150 232, 220 222, 280 200 C 340 178, 400 120, 435 70" fill="none" class="ln-d"/>
+          <text x="420" y="62" class="t-small t-d">超线性 ↑</text>
+          <!-- linear reference -->
+          <line x1="60" y1="240" x2="440" y2="120" stroke="var(--line)" stroke-width="1.2" stroke-dasharray="4 4"/>
+          <text x="330" y="196" class="t-small">线性参考（MLP 部分）</text>
+          <text x="60" y="262" class="t-small">8K</text>
+          <text x="410" y="262" class="t-small">128K</text>
+          <text x="60" y="282" class="t-small">attention 的 O(n²) 项主导了长输入</text>
+
+          <!-- right panel: throughput vs batch -->
+          <text x="540" y="30" class="t-label">Decoding 吞吐 vs batch size（seq=8K）</text>
+          <line x1="560" y1="60" x2="560" y2="240" class="s-line" stroke-width="1.2"/>
+          <line x1="560" y1="240" x2="940" y2="240" class="s-line" stroke-width="1.2"/>
+          <!-- sublinear-ish saturating curve -->
+          <path d="M560 238 C 640 190, 700 150, 780 128 C 850 110, 910 104, 935 100" fill="none" class="ln-v"/>
+          <text x="820" y="90" class="t-small t-v">亚线性，趋于饱和</text>
+          <text x="560" y="262" class="t-small">1</text>
+          <text x="915" y="262" class="t-small">16</text>
+          <text x="560" y="282" class="t-small">batch 越大 MFU 越高，但 TBT 与 VRAM 占用同步上升</text>
+        </svg>
+        </div>
+        <figcaption><b>FIG 1</b> 依据论文 Figure 2 重绘的定性曲线（dummy LLaMA2-70B，归一化数值）。左：prefill 延迟随输入长度超线性上涨；右：decoding 吞吐随 batch 亚线性饱和——两条曲线分别解释了 TTFT 与 TBT 两个 SLO 的由来。</figcaption>
+      </figure>
+
+      <h3>优化目标 vs 约束——矛盾在哪里</h3>
+      <p>提升吞吐有两条经典路径，但每一条都会咬到延迟 SLO：</p>
+      <ul>
+        <li><strong>复用 KVCache</strong> 省算力 → 但缓存若在远端/低速存储，加载会拉长 TTFT；</li>
+        <li><strong>加大 decoding batch</strong> 提升 MFU → 但 batch 越大 TBT 越高，且受 VRAM 中 KVCache 总容量限制。</li>
+      </ul>
+      <p>于是问题形式化为：<strong>max 有效吞吐（goodput），s.t. TTFT/TBT 的 P90 SLO</strong>。论文对 goodput 的定义比前人更苛刻——<strong>只有完整跑完的请求才计入</strong>；中途被丢弃的请求，已消耗的算力全部记为浪费。这个定义直接催生了第 7 节的"早拒绝"机制。</p>
+
+      <div class="example">
+        <div class="ex-head">▶ 跑一遍 · 一个平均请求的 SLO 账本</div>
+        <div class="ex-body">
+          <div class="ex-steps">
+            <div class="ex-line"><span class="n">1</span><span class="r">取 trace 中的平均请求：<b>input 8,590 tokens / output 182 tokens</b>（真实分布的均值）</span></div>
+            <div class="ex-line"><span class="n">2</span><span class="r">假设单节点空载 prefill 速率 4,000 tok/s（示例值）→ 空载 TTFT ≈ 8,590 ÷ 4,000 ≈ <b>2.1s</b></span></div>
+            <div class="ex-line"><span class="n">3</span><span class="r">假设空载 TBT = 20ms → 生成 182 tokens ≈ <b>3.6s</b>，期间每步都要读完整 KVCache</span></div>
+            <div class="ex-line"><span class="n">4</span><span class="r">按论文实验的 SLO 定义（P90 = 空载的 10× / 5×）→ 线上允许 TTFT ≤ <b>21s</b>、TBT ≤ <b>100ms</b></span></div>
+            <div class="ex-line"><span class="n">5</span><span class="r">调度器的全部工作 = 在这个余量空间里做权衡：多用 1s 加载远端缓存换 1.5s 少算，值不值？——这就是第 6 节 D4 算法每天回答的问题</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="t">工程师视角 · 为什么这篇论文值得读</div>
+        <p>大多数 serving 论文假设资源充足、优化利用率；Mooncake 假设的是<strong>长期过载</strong>——GPU 供给受限、请求量指数增长、无法弹性扩容。它回答的不是"怎么跑得更快"，而是"资源永远不够时，怎么把每一块 GPU 的有效产出榨干，同时不违反 SLO"。这是生产系统和论文玩具的分水岭。</p>
+      </div>
+    </section>
+
+    <!-- ==================== 02 架构总览 ==================== -->
+    <section id="arch">
+      <p class="eyebrow">02 / High-Level Design</p>
+      <h2><span class="hash">##</span>架构总览：三种资源池 + 一个调度器</h2>
+      <p class="lede">Mooncake 把 GPU 一体机（HGX/DGX 式节点）拆开重组为三个逻辑资源池：Prefill 池、Decoding 池、以及横跨所有节点的分布式 KVCache 池。调度中枢 Conductor 以 KVCache 的分布为核心状态做全局决策。</p>
+
+      <figure>
+        <div class="fig-scroll">
+        <svg viewBox="0 0 980 620" role="img" aria-label="Mooncake 架构图：Conductor 调度 Prefill 池、Decoding 池与分布式 KVCache 池">
+          <defs>
+            <marker id="arw-ctrl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-a"/></marker>
+            <marker id="arw-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-r"/></marker>
+            <marker id="arw-cache" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-d"/></marker>
+            <marker id="arw-plain" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-line"/></marker>
+          </defs>
+
+          <!-- client -->
+          <rect x="30" y="24" width="150" height="52" rx="8" class="f-p2 s-line"/>
+          <text x="105" y="46" text-anchor="middle" class="t-label t-ink">客户端请求</text>
+          <text x="105" y="64" text-anchor="middle" class="t-small">tokenize 后进入</text>
+
+          <!-- conductor -->
+          <rect x="300" y="14" width="380" height="72" rx="10" class="f-cond s-a" stroke-width="1.6"/>
+          <text x="490" y="40" text-anchor="middle" class="t-title t-a">Conductor — 全局调度器</text>
+          <text x="490" y="60" text-anchor="middle" class="t-small">cache-aware prefill 调度 · decoding 负载均衡 · 热点复制 / 换出 · 早拒绝</text>
+          <text x="490" y="76" text-anchor="middle" class="t-small">核心状态：KVCache 块的全局分布 + 各实例负载预测</text>
+
+          <path class="edge-ctrl" marker-end="url(#arw-ctrl)" d="M180 50 H292"/>
+
+          <!-- prefill pool boundary -->
+          <rect x="30" y="130" width="450" height="370" rx="12" class="f-pool s-line"/>
+          <text x="52" y="156" class="t-title t-d">Prefill Pool</text>
+          <text x="52" y="172" class="t-small">优化目标：max 缓存复用 · s.t. TTFT SLO、最低 MFU、KVCache &lt; DRAM</text>
+
+          <!-- prefill node group: CPP pipeline -->
+          <rect x="52" y="190" width="406" height="132" rx="8" class="f-node s-v" stroke-width="1.2"/>
+          <text x="66" y="210" class="t-label">CPP 流水线节点组（x2 节点，可按 X 扩展）</text>
+          <rect x="66" y="222" width="168" height="86" rx="6" class="f-p2 s-line"/>
+          <text x="76" y="240" class="t-label t-ink">Prefill Node A</text>
+          <rect x="76" y="248" width="148" height="16" rx="3" class="f-chipv"/>
+          <text x="84" y="260" class="t-small t-v">GPU · paged KVCache (VRAM)</text>
+          <rect x="76" y="268" width="148" height="16" rx="3" class="f-chipl"/>
+          <text x="84" y="280" class="t-small t-d">CPU DRAM + SSD · cache 分片</text>
+          <text x="76" y="300" class="t-small">本地 chunked prefill 调度器</text>
+          <rect x="276" y="222" width="168" height="86" rx="6" class="f-p2 s-line"/>
+          <text x="286" y="240" class="t-label t-ink">Prefill Node B</text>
+          <rect x="286" y="248" width="148" height="16" rx="3" class="f-chipv"/>
+          <text x="294" y="260" class="t-small t-v">GPU · paged KVCache (VRAM)</text>
+          <rect x="286" y="268" width="148" height="16" rx="3" class="f-chipl"/>
+          <text x="294" y="280" class="t-small t-d">CPU DRAM + SSD · cache 分片</text>
+          <text x="286" y="300" class="t-small">本地 chunked prefill 调度器</text>
+          <path class="edge-data" marker-end="url(#arw-data)" d="M234 265 H268"/>
+          <text x="251" y="254" text-anchor="middle" class="t-small t-r">chunk 边界</text>
+
+          <!-- prefill node standalone -->
+          <rect x="52" y="338" width="406" height="86" rx="8" class="f-node s-v" stroke-width="1.2"/>
+          <text x="66" y="358" class="t-label">单节点 Prefill（TP only，短上下文）</text>
+          <rect x="66" y="368" width="180" height="16" rx="3" class="f-chipv"/>
+          <text x="74" y="380" class="t-small t-v">GPU · layer-wise load/store</text>
+          <rect x="254" y="368" width="180" height="16" rx="3" class="f-chipl"/>
+          <text x="262" y="380" class="t-small t-d">CPU DRAM · prefix cache</text>
+          <text x="66" y="404" class="t-small">短请求无需流水线 → 单节点处理，MFU 更高</text>
+
+          <!-- decoding pool boundary -->
+          <rect x="530" y="130" width="420" height="370" rx="12" class="f-pool s-line"/>
+          <text x="552" y="156" class="t-title t-v">Decoding Pool</text>
+          <text x="552" y="172" class="t-small">优化目标：max batch 吞吐 · s.t. TBT SLO、KVCache &lt; VRAM</text>
+
+          <!-- decoding node 1 -->
+          <rect x="552" y="190" width="378" height="120" rx="8" class="f-node s-v" stroke-width="1.2"/>
+          <text x="566" y="212" class="t-label">Decoding Node 1</text>
+          <rect x="566" y="222" width="220" height="18" rx="3" class="f-chipv"/>
+          <text x="574" y="235" class="t-small t-v">GPU · continuous batching（在途请求的完整 KVCache）</text>
+          <rect x="566" y="246" width="220" height="18" rx="3" class="f-chipl"/>
+          <text x="574" y="259" class="t-small t-d">CPU DRAM · 接收中的 full KVCache 缓冲</text>
+          <text x="566" y="284" class="t-small">本地调度器二次校验 TBT SLO（可拒绝请求）</text>
+          <text x="566" y="300" class="t-small">异步加载与 GPU 解码并行，避免气泡</text>
+
+          <!-- decoding node 2 -->
+          <rect x="552" y="326" width="378" height="98" rx="8" class="f-node s-v" stroke-width="1.2"/>
+          <text x="566" y="348" class="t-label">Decoding Node 2 … N</text>
+          <rect x="566" y="358" width="220" height="18" rx="3" class="f-chipv"/>
+          <text x="574" y="371" class="t-small t-v">GPU · continuous batching</text>
+          <rect x="566" y="382" width="220" height="18" rx="3" class="f-chipl"/>
+          <text x="574" y="395" class="t-small t-d">CPU DRAM · KVCache 缓冲</text>
+
+          <!-- control edges -->
+          <path class="edge-ctrl" marker-end="url(#arw-ctrl)" d="M420 86 C420 110, 300 110, 255 128"/>
+          <text x="288" y="106" class="t-small t-a">选定 prefill 实例/组</text>
+          <path class="edge-ctrl" marker-end="url(#arw-ctrl)" d="M560 86 C560 108, 700 106, 740 128"/>
+          <text x="706" y="106" class="t-small t-a">预选 decoding 实例</text>
+
+          <!-- KVCache streaming edge -->
+          <path class="edge-data" marker-end="url(#arw-data)" d="M458 240 C500 240, 500 250, 544 250"/>
+          <text x="500" y="228" text-anchor="middle" class="t-small t-r">逐层流式 KVCache</text>
+
+          <!-- kvcache pool band -->
+          <rect x="30" y="524" width="920" height="76" rx="12" class="f-band s-d" stroke-width="1.2" stroke-dasharray="6 4"/>
+          <text x="52" y="550" class="t-title t-d">Distributed KVCache Pool</text>
+          <text x="52" y="568" class="t-small">聚合所有节点闲置的 CPU / DRAM / SSD · paged blocks · 前缀哈希去重 · LRU/LFU 驱逐 · 热点复制</text>
+          <text x="52" y="586" class="t-small t-r">Messenger：每节点独立进程，GPUDirect RDMA 负责一切跨节点 KVCache 传输</text>
+          <rect x="700" y="544" width="230" height="20" rx="4" class="f-chips"/>
+          <text x="710" y="558" class="t-small t-s">SSD 冷层 · 换出长尾块</text>
+          <rect x="700" y="570" width="230" height="20" rx="4" class="f-chipl"/>
+          <text x="710" y="584" class="t-small t-d">DRAM 热层 · prefix cache blocks</text>
+
+          <!-- vertical cache edges -->
+          <path class="edge-cache" marker-end="url(#arw-cache)" d="M255 500 V516"/>
+          <path class="edge-cache" marker-end="url(#arw-cache)" d="M150 424 V516"/>
+          <path class="edge-cache" marker-end="url(#arw-cache)" d="M740 424 V516"/>
+          <text x="264" y="512" class="t-small t-d">load / store</text>
+          <text x="748" y="512" class="t-small t-d">async load</text>
+        </svg>
+        </div>
+        <figcaption><b>FIG 2</b> Mooncake 高层架构（依据论文 Figure 1 重绘）。虚线为控制面（Conductor 调度），实线钢蓝为 RDMA 数据面，金色为 KVCache 与缓存池的读写。</figcaption>
+      </figure>
+
+      <h3>读图要点</h3>
+      <ul>
+        <li><strong>解耦的不只是计算，还有状态</strong>。P/D 分离在很多论文里都有（Splitwise、DistServe、TetriInfer），Mooncake 的增量在于把 <strong>KVCache 本身也池化</strong>——利用 GPU 节点上大量闲置的 CPU、DRAM、SSD，组成一个"不要钱"的分布式缓存层。</li>
+        <li><strong>控制面与数据面分离</strong>。Conductor 只做决策（选实例、复制/换出缓存、拒绝请求），搬数据的是每节点上的 Messenger 进程（GPUDirect RDMA）。</li>
+        <li><strong>两个池的优化目标相反</strong>，这决定了它们各自的本地调度器、并行策略、资源约束都不同——这正是坚持解耦的论据（见决策 D1）。</li>
+      </ul>
+    </section>
+    <!-- ==================== 03 生命周期 ==================== -->
+    <section id="lifecycle">
+      <p class="eyebrow">03 / Request Lifecycle</p>
+      <h2><span class="hash">##</span>一个请求的四步旅程</h2>
+      <p class="lede">Conductor 为每个请求选一对 prefill / decoding 实例，然后按以下流水线执行。点击每一步查看工程细节。</p>
+
+      <div class="stepper" id="lifecycle-stepper">
+        <div class="steps" role="tablist" aria-label="请求生命周期步骤">
+          <button class="step" role="tab" aria-selected="true" data-step="0"><span class="n">STEP 1</span><b>KVCache Reuse</b><br>前缀缓存加载</button>
+          <button class="step" role="tab" aria-selected="false" data-step="1"><span class="n">STEP 2</span><b>Incremental Prefill</b><br>增量预填充</button>
+          <button class="step" role="tab" aria-selected="false" data-step="2"><span class="n">STEP 3</span><b>KVCache Transfer</b><br>逐层流传输</button>
+          <button class="step" role="tab" aria-selected="false" data-step="3"><span class="n">STEP 4</span><b>Decoding</b><br>连续批处理解码</button>
+        </div>
+        <div class="step-panel" id="step-panel" role="tabpanel"></div>
+      </div>
+
+      <div class="callout note">
+        <div class="t">关键工程细节</div>
+        <p>第 3 步与第 2 步是<strong>异步重叠</strong>的：prefill 每算完一层，该层的 KVCache 立刻经 Messenger 流式发往 decoding 节点的 DRAM，而不是等全部算完再搬。同理，decoding 侧在 GPU 解码的同时异步把下一批请求的 KVCache 从 DRAM 载入 VRAM。整条流水线上没有"纯搬运"的等待段。</p>
+      </div>
+
+      <div class="example">
+        <div class="ex-head">▶ 跑一遍 · 同一份 128K 财报，首问 vs 追问</div>
+        <div class="ex-body">
+          <div class="ex-steps">
+            <div class="ex-line"><span class="n">1</span><span class="r">用户上传一份 <b>128K tokens</b> 的财报，首次提问「去年毛利率多少？」——哈希链匹配 <b>0 blocks</b>，全量 prefill</span></div>
+            <div class="ex-line"><span class="n">2</span><span class="r">Conductor 选 2 节点 CPP 组：输入切 8 chunks × 16K，两节点流水并行，prefill 时间 ≈ 单节点的 <b>1/2 + 少量流水线填充</b>（见 D2 时间线图）</span></div>
+            <div class="ex-line"><span class="n">3</span><span class="r">每层 KVCache 算完即经 RDMA 流往 decoding 节点；最后一个 chunk 算完时，前面的 KVCache <b>早已到齐</b>——传输被完全藏住</span></div>
+            <div class="ex-line"><span class="n">4</span><span class="r">增量 KVCache（128K tokens × 全部层）同时写回分布式缓存池，本次会话的 hash 块登记进全局索引</span></div>
+            <div class="ex-line"><span class="n">5</span><span class="r">一分钟后用户追问「那净利率呢？」——新输入 ≈ 128K + 20 tokens，前缀命中 <b>≈250 blocks（全部历史）</b>，只需增量 prefill 约 20 个 token：TTFT 从十几秒降到 <b>亚秒级</b></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 04 典型负载场景 ==================== -->
+    <section id="scenarios">
+      <p class="eyebrow">04 / Typical Workloads</p>
+      <h2><span class="hash">##</span>三种典型负载：同一张架构图上的三条 Dataflow</h2>
+      <p class="lede">架构的价值要在负载下才看得出来。切换下面三个典型场景，观察同一张架构图上被点亮的数据通路——每条通路对应一类真实集群负载，编号 ①②③④ 与下方步骤一一对应。</p>
+
+      <div class="scenario-tabs" role="tablist" aria-label="典型负载场景">
+        <button role="tab" aria-selected="true" data-scn="0"><span>CASE A · 长上下文</span><b>128K 文档总结 · 冷缓存</b><span>cache miss · 压力点在 TTFT</span></button>
+        <button role="tab" aria-selected="false" data-scn="1"><span>CASE B · 高缓存命中</span><b>多轮对话 / 共享 system prompt</b><span>前缀命中 12 blocks</span></button>
+        <button role="tab" aria-selected="false" data-scn="2"><span>CASE C · 高峰过载</span><b>到达速率 2× 集群容量</b><span>预测式早拒绝裁决</span></button>
+      </div>
+
+      <figure>
+        <div class="fig-scroll">
+        <svg id="flow-svg" class="flow-svg" data-scenario="a" viewBox="0 0 980 660" role="img" aria-label="Mooncake 架构图：随场景切换高亮对应的数据通路">
+          <defs>
+            <marker id="f-arw-ctrl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-a"/></marker>
+            <marker id="f-arw-data" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-r"/></marker>
+            <marker id="f-arw-cache" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-d"/></marker>
+            <marker id="f-arw-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-bad"/></marker>
+            <marker id="f-arw-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-ink"/></marker>
+          </defs>
+
+          <g data-s="a b c">
+            <rect x="30" y="24" width="150" height="52" rx="8" class="f-p2 s-line"/>
+            <text x="105" y="46" text-anchor="middle" class="t-label t-ink">客户端请求</text>
+            <text x="105" y="64" text-anchor="middle" class="t-small">tokenize 后进入</text>
+          </g>
+          <path class="edge edge-req" data-s="a b c" marker-end="url(#f-arw-ink)" d="M182 50 H292"/>
+
+          <g data-s="a b c">
+            <rect x="300" y="14" width="380" height="72" rx="10" class="f-cond s-a" stroke-width="1.6"/>
+            <text x="490" y="40" text-anchor="middle" class="t-title t-a">Conductor — 全局调度器</text>
+            <text x="490" y="60" text-anchor="middle" class="t-small">cache-aware prefill 调度 · decoding 负载均衡 · 热点复制 / 换出 · 早拒绝</text>
+            <text x="490" y="76" text-anchor="middle" class="t-small">核心状态：KVCache 块全局分布 + 各实例负载预测</text>
+          </g>
+
+          <path class="edge edge-reject" data-s="c" marker-end="url(#f-arw-bad)" d="M352 86 C 300 116, 205 118, 141 80"/>
+          <text x="222" y="140" class="t-small t-bad" data-s="c" text-anchor="middle">HTTP 429 · 早拒绝，不消耗 GPU</text>
+
+          <g data-s="a b">
+            <rect x="30" y="150" width="450" height="360" rx="12" class="f-pool s-line"/>
+            <text x="52" y="176" class="t-title t-d">Prefill Pool</text>
+            <text x="52" y="192" class="t-small">max 缓存复用 · s.t. TTFT SLO、最低 MFU、KVCache &lt; DRAM</text>
+          </g>
+
+          <g data-s="a">
+            <rect x="52" y="210" width="406" height="128" rx="8" class="f-node s-v" stroke-width="1.2"/>
+            <text x="66" y="230" class="t-label">CPP 流水线组（长上下文多节点并行）</text>
+            <rect x="66" y="240" width="168" height="58" rx="6" class="f-p2 s-line"/>
+            <text x="76" y="258" class="t-label t-ink">Prefill Node A</text>
+            <rect x="76" y="266" width="148" height="16" rx="3" class="f-chipv"/>
+            <text x="82" y="278" class="t-small t-v">GPU · paged KVCache</text>
+            <rect x="276" y="240" width="168" height="58" rx="6" class="f-p2 s-line"/>
+            <text x="286" y="258" class="t-label t-ink">Prefill Node B</text>
+            <rect x="286" y="266" width="148" height="16" rx="3" class="f-chipv"/>
+            <text x="292" y="278" class="t-small t-v">GPU · paged KVCache</text>
+            <path class="edge edge-data" data-s="a" marker-end="url(#f-arw-data)" d="M236 269 H270"/>
+            <text x="253" y="292" class="t-small t-r" text-anchor="middle">chunk 边界通信</text>
+            <text x="66" y="326" class="t-small">同一请求的不同 chunk 由不同节点同时处理（决策 D2）</text>
+          </g>
+
+          <g data-s="b">
+            <rect x="52" y="352" width="406" height="80" rx="8" class="f-node s-v" stroke-width="1.2"/>
+            <text x="66" y="372" class="t-label">单节点 Prefill（TP only · 缓存命中友好）</text>
+            <rect x="66" y="382" width="186" height="16" rx="3" class="f-chipv"/>
+            <text x="74" y="394" class="t-small t-v">GPU · layer-wise load/store</text>
+            <rect x="260" y="382" width="186" height="16" rx="3" class="f-chipl"/>
+            <text x="268" y="394" class="t-small t-d">CPU DRAM · prefix cache</text>
+            <text x="66" y="420" class="t-small">只算未命中尾部，增量 KVCache 写回缓存池</text>
+          </g>
+
+          <g data-s="a b c">
+            <rect x="530" y="150" width="420" height="360" rx="12" class="f-pool s-line"/>
+            <text x="552" y="176" class="t-title t-v">Decoding Pool</text>
+            <text x="552" y="192" class="t-small">max batch 吞吐 · s.t. TBT SLO、KVCache &lt; VRAM</text>
+          </g>
+
+          <g data-s="a c">
+            <rect x="552" y="210" width="378" height="110" rx="8" class="f-node s-v" stroke-width="1.2"/>
+            <text x="566" y="232" class="t-label">Decoding Node 1</text>
+            <rect x="566" y="242" width="250" height="16" rx="3" class="f-chipv"/>
+            <text x="574" y="254" class="t-small t-v">GPU · continuous batching</text>
+            <rect x="566" y="264" width="250" height="16" rx="3" class="f-chipl"/>
+            <text x="574" y="276" class="t-small t-d">DRAM · full KVCache 缓冲</text>
+            <text x="566" y="300" class="t-small">本地调度器二次校验 TBT SLO</text>
+            <text x="566" y="314" class="t-small">其负载是早拒绝预测的目标</text>
+          </g>
+
+          <g data-s="b">
+            <rect x="552" y="336" width="378" height="84" rx="8" class="f-node s-v" stroke-width="1.2"/>
+            <text x="566" y="358" class="t-label">Decoding Node 2 … N</text>
+            <rect x="566" y="368" width="250" height="16" rx="3" class="f-chipv"/>
+            <text x="574" y="380" class="t-small t-v">GPU · continuous batching</text>
+            <rect x="566" y="390" width="250" height="16" rx="3" class="f-chipl"/>
+            <text x="574" y="402" class="t-small t-d">DRAM · full KVCache 缓冲</text>
+          </g>
+
+          <path class="edge edge-ctrl" data-s="a b c" marker-end="url(#f-arw-ctrl)" d="M415 86 C 400 130, 290 128, 257 146"/>
+          <text x="292" y="120" class="t-small t-a" data-s="a b c">选定 prefill 实例</text>
+          <path class="edge edge-ctrl" data-s="a b c" marker-end="url(#f-arw-ctrl)" d="M565 86 C 570 128, 690 124, 725 148"/>
+          <text x="672" y="122" class="t-small t-a" data-s="a b c" text-anchor="middle">预选 decoding 实例</text>
+
+          <path class="edge edge-data" data-s="a" marker-end="url(#f-arw-data)" d="M458 264 C 498 264, 505 262, 544 262"/>
+          <text x="501" y="248" class="t-small t-r" data-s="a" text-anchor="middle">逐层流式 KVCache</text>
+          <path class="edge edge-data" data-s="b" marker-end="url(#f-arw-data)" d="M458 392 C 500 392, 505 386, 544 386"/>
+          <text x="501" y="376" class="t-small t-r" data-s="b" text-anchor="middle">增量 KVCache（小）</text>
+
+          <g data-s="a b">
+            <rect x="30" y="540" width="920" height="78" rx="12" class="f-band s-d" stroke-width="1.2" stroke-dasharray="6 4"/>
+            <text x="52" y="566" class="t-title t-d">Distributed KVCache Pool</text>
+            <text x="52" y="584" class="t-small">聚合各节点闲置 CPU / DRAM / SSD · paged blocks · 前缀哈希去重 · 热点复制</text>
+            <text x="52" y="602" class="t-small t-r">Messenger：每节点独立进程，GPUDirect RDMA 承担全部跨节点 KVCache 传输</text>
+            <rect x="700" y="556" width="230" height="20" rx="4" class="f-chips"/>
+            <text x="710" y="570" class="t-small t-s">SSD 冷层 · 换出长尾块</text>
+            <rect x="700" y="582" width="230" height="20" rx="4" class="f-chipl"/>
+            <text x="710" y="596" class="t-small t-d">DRAM 热层 · prefix cache blocks</text>
+          </g>
+
+          <path class="edge edge-cache" data-s="b" marker-end="url(#f-arw-cache)" d="M250 538 V 438"/>
+          <text x="258" y="490" class="t-small t-d" data-s="b">load prefix</text>
+          <path class="edge edge-cache" data-s="b" marker-end="url(#f-arw-cache)" d="M350 438 V 538"/>
+          <text x="358" y="490" class="t-small t-d" data-s="b">store incremental</text>
+          <path class="edge edge-cache" data-s="a b" marker-end="url(#f-arw-cache)" d="M740 538 V 424"/>
+          <text x="748" y="490" class="t-small t-d" data-s="a b">async load</text>
+
+          <g class="badge" data-s="a" transform="translate(330,110)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">1</text></g>
+          <g class="badge" data-s="a" transform="translate(253,246)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">2</text></g>
+          <g class="badge" data-s="a" transform="translate(501,226)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">3</text></g>
+          <g class="badge" data-s="a" transform="translate(745,196)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">4</text></g>
+          <g class="badge" data-s="b" transform="translate(330,110)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">1</text></g>
+          <g class="badge" data-s="b" transform="translate(212,486)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">2</text></g>
+          <g class="badge" data-s="b" transform="translate(436,368)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">3</text></g>
+          <g class="badge" data-s="b" transform="translate(501,352)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">4</text></g>
+          <g class="badge" data-s="c" transform="translate(232,32)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">1</text></g>
+          <g class="badge" data-s="c" transform="translate(490,104)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">2</text></g>
+          <g class="badge" data-s="c" transform="translate(246,112)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">3</text></g>
+          <g class="badge" data-s="c" transform="translate(640,98)"><circle r="11" class="f-acc"/><text y="4" text-anchor="middle" font-size="12">4</text></g>
+        </svg>
+        </div>
+        <figcaption><b>FIG 3</b> 交互式架构图：切换场景后，对应数据通路保持点亮并沿流向流动，无关元素淡出。金色 = KVCache 读写，钢蓝 = RDMA 数据面，柿红虚线 = 控制面调度，红色 = 拒绝路径。</figcaption>
+      </figure>
+
+      <div class="scenario-detail" id="scn-detail" role="tabpanel"></div>
+    </section>
+    <!-- ==================== 05 KVCache 池 ==================== -->
+    <section id="kvcache">
+      <p class="eyebrow">05 / The Cache Layer</p>
+      <h2><span class="hash">##</span>KVCache 池：前缀哈希链 + 分页块存储</h2>
+      <p class="lede">缓存层的核心数据结构是一条<strong>哈希链</strong>：每个块的 key 由"自身内容 + 前驱块的哈希"共同决定。这让前缀匹配变成了逐块的 key 比较，同时天然支持全局去重。</p>
+
+      <figure>
+        <div class="fig-scroll">
+        <svg viewBox="0 0 980 330" role="img" aria-label="KVCache 前缀哈希链匹配示意图">
+          <defs>
+            <marker id="arw-hash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-line"/></marker>
+          </defs>
+          <text x="30" y="42" class="t-label">已缓存请求</text>
+          <text x="30" y="58" class="t-small">tokens: a b c d e</text>
+          <g>
+            <rect x="150" y="24" width="140" height="44" rx="6" class="f-p2 s-line"/>
+            <text x="220" y="42" text-anchor="middle" class="t-mono">A = Hash(a)</text>
+            <text x="220" y="58" text-anchor="middle" class="t-small">block 0</text>
+            <rect x="310" y="24" width="140" height="44" rx="6" class="f-p2 s-line"/>
+            <text x="380" y="42" text-anchor="middle" class="t-mono">B = Hash(A+b)</text>
+            <text x="380" y="58" text-anchor="middle" class="t-small">block 1</text>
+            <rect x="470" y="24" width="140" height="44" rx="6" class="f-p2 s-line"/>
+            <text x="540" y="42" text-anchor="middle" class="t-mono">C = Hash(B+c)</text>
+            <text x="540" y="58" text-anchor="middle" class="t-small">block 2</text>
+            <rect x="630" y="24" width="140" height="44" rx="6" class="f-p2 s-line"/>
+            <text x="700" y="42" text-anchor="middle" class="t-mono">D = Hash(C+d)</text>
+            <text x="700" y="58" text-anchor="middle" class="t-small">block 3</text>
+            <rect x="790" y="24" width="140" height="44" rx="6" class="f-p2 s-line"/>
+            <text x="860" y="42" text-anchor="middle" class="t-mono">E = Hash(D+e)</text>
+            <text x="860" y="58" text-anchor="middle" class="t-small">block 4</text>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M290 46 H306"/>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M450 46 H466"/>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M610 46 H626"/>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M770 46 H786"/>
+          </g>
+
+          <text x="30" y="142" class="t-label">新请求</text>
+          <text x="30" y="158" class="t-small">tokens: a b c d e f g h i</text>
+          <g>
+            <rect x="150" y="124" width="140" height="48" rx="6" class="f-chipv s-v"/>
+            <text x="220" y="144" text-anchor="middle" class="t-mono t-v">A ✓ match</text>
+            <text x="220" y="162" text-anchor="middle" class="t-small">复用，免重算</text>
+            <rect x="310" y="124" width="140" height="48" rx="6" class="f-chipv s-v"/>
+            <text x="380" y="144" text-anchor="middle" class="t-mono t-v">B ✓ match</text>
+            <text x="380" y="162" text-anchor="middle" class="t-small">复用，免重算</text>
+            <rect x="470" y="124" width="140" height="48" rx="6" class="f-chipv s-v"/>
+            <text x="540" y="144" text-anchor="middle" class="t-mono t-v">C ✓ match</text>
+            <text x="540" y="162" text-anchor="middle" class="t-small">复用，免重算</text>
+            <rect x="630" y="124" width="140" height="48" rx="6" class="f-chipv s-v"/>
+            <text x="700" y="144" text-anchor="middle" class="t-mono t-v">D ✓ match</text>
+            <text x="700" y="162" text-anchor="middle" class="t-small">复用，免重算</text>
+            <rect x="790" y="124" width="140" height="48" rx="6" class="f-chipv s-v"/>
+            <text x="860" y="144" text-anchor="middle" class="t-mono t-v">E ✓ match</text>
+            <text x="860" y="162" text-anchor="middle" class="t-small">复用，免重算</text>
+          </g>
+          <g>
+            <rect x="150" y="212" width="140" height="48" rx="6" class="f-cond s-a"/>
+            <text x="220" y="232" text-anchor="middle" class="t-mono t-a">F = Hash(E+f)</text>
+            <text x="220" y="250" text-anchor="middle" class="t-small">✗ mismatch → 需计算</text>
+            <rect x="310" y="212" width="140" height="48" rx="6" class="f-p2 s-line"/>
+            <text x="380" y="232" text-anchor="middle" class="t-mono">G = Hash(F+g)</text>
+            <text x="380" y="250" text-anchor="middle" class="t-small">incremental</text>
+            <rect x="470" y="212" width="140" height="48" rx="6" class="f-p2 s-line"/>
+            <text x="540" y="232" text-anchor="middle" class="t-mono">H = Hash(G+h)</text>
+            <text x="540" y="250" text-anchor="middle" class="t-small">incremental</text>
+            <rect x="630" y="212" width="140" height="48" rx="6" class="f-p2 s-line"/>
+            <text x="700" y="232" text-anchor="middle" class="t-mono">I = Hash(H+i)</text>
+            <text x="700" y="250" text-anchor="middle" class="t-small">incremental</text>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M290 236 H306"/>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M450 236 H466"/>
+            <path class="edge-plain" marker-end="url(#arw-hash)" d="M610 236 H626"/>
+          </g>
+          <path d="M860 172 C860 196, 320 196, 220 208" fill="none" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#f-arw-ctrl2)"/>
+          <defs><marker id="f-arw-ctrl2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="mk-a"/></marker></defs>
+          <text x="540" y="196" text-anchor="middle" class="t-small t-a">前缀在 E 之后分叉 → prefix_len = 5 blocks，f…i 进入增量 prefill</text>
+
+          <text x="30" y="306" class="t-small">论文中 block size = 512 tokens；两段请求前 12 个 hash_id 相同 = 前 12×512 = 6,144 tokens 可直接共享 KVCache</text>
+        </svg>
+        </div>
+        <figcaption><b>FIG 4</b> 前缀哈希链（依据论文 Figure 3 重绘）。哈希链式依赖保证：相同前缀 + 相同当前块 → 相同 key，可直接去重；任一位置分叉后所有后继 key 全部不同，不会误命中。</figcaption>
+      </figure>
+
+      <div class="example">
+        <div class="ex-head">▶ 跑一遍 · 两条真实 trace 的前缀共享（论文 Listing 1 原样数据）</div>
+        <div class="ex-body">
+          <div class="ex-steps">
+            <div class="ex-line"><span class="n">1</span><span class="r">请求 A：input_length = 6,955 → 14 个块（6,955 ÷ 512 向上取整），hash_ids = <b>[46…57, 2353, 2354]</b></span></div>
+            <div class="ex-line"><span class="n">2</span><span class="r">请求 B：input_length = 6,472 → 13 个块，hash_ids = <b>[46…57, 2366]</b></span></div>
+            <div class="ex-line"><span class="n">3</span><span class="r">逐块比对：前 <b>12</b> 个 ID 完全相同 → 前缀共享 12 × 512 = <b>6,144 tokens</b>（同一篇长文档的两轮提问）</span></div>
+            <div class="ex-line"><span class="n">4</span><span class="r">B 只需增量 prefill 6,472 − 6,144 = <b>328 tokens</b>，省掉约 <b>95%</b> 的 prefill 计算——TTFT 几乎只剩排队时间</span></div>
+          </div>
+        </div>
+      </div>
+
+      <h3>缓存策略实测（论文 Table 1，基于 23,608 条真实 trace）</h3>
+      <div class="tbl-wrap">
+        <table class="data">
+          <caption>不同驱逐策略 × 容量下的缓存命中率（块数 → 命中率）</caption>
+          <thead>
+            <tr><th>策略</th><th>1,000 块</th><th>10,000 块</th><th>30,000 块</th><th>50,000 块</th><th>100,000 块</th><th>无限容量</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>LRU</td><td>0.34</td><td>0.46</td><td>0.54</td><td>0.55</td><td>0.55</td><td class="hl">0.55</td></tr>
+            <tr><td>LFU</td><td>0.34</td><td>0.40</td><td>0.50</td><td>0.55</td><td>0.55</td><td>0.55</td></tr>
+            <tr><td>LengthAware</td><td>0.34</td><td>0.40</td><td>0.50</td><td>0.53</td><td class="dim">0.54</td><td class="dim">0.55</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>两个值得记住的结论：<strong>LRU 在这个负载上表现最好</strong>（请求利用具有时间局部性）；命中率从 1k → 50k 块时从 34% 涨到 55%，之后几乎饱和——但论文提醒这是 1 小时采样子集，真实所需容量应随规模等比放大。另外，块的热度极度不均：<strong>超过 50% 的块从未被复用，而少数块（如 system prompt）被访问上万次</strong>——热点复制因此不是优化项，而是必需品。</p>
+    </section>
+
+    <!-- ==================== 06 设计决策 ==================== -->
+    <section id="decisions">
+      <p class="eyebrow">06 / Design Choices</p>
+      <h2><span class="hash">##</span>六个关键设计决策</h2>
+      <p class="lede">每张卡片按同一结构拆解：决策问题 → 被否决的备选方案 → 选择理由 → 付出的代价。这是论文里最有工程含金量的部分。</p>
+
+      <!-- D1 -->
+      <article class="decision">
+        <header><span class="did">D1</span><h3>坚持 P/D 解耦，而不是 chunk 内联进 decoding batch</h3></header>
+        <div class="body">
+          <p class="q">问题：有了 chunked prefill（SARATHI 路线），还有必要把 prefill 拆出去吗？统一池调度更简单、还能提高 decoding batch 的计算强度。</p>
+          <p>Mooncake 的答案：<strong>拆，但留一个例外</strong>——只有当请求无需切 chunk、且不破坏 TBT SLO 时，才允许把它的 prefill 内联进 decoding batch。其余全部走独立 prefill 池。</p>
+          <div class="grid">
+            <div class="block alt">
+              <div class="bt">被否决的方案</div>
+              <ul>
+                <li>全量 chunked prefill 内联（SARATHI / vLLM 式统一调度）：所有节点同构，调度最简单</li>
+              </ul>
+            </div>
+            <div class="block why">
+              <div class="bt">为什么解耦</div>
+              <ul>
+                <li>Prefill 需要<strong>不同的跨节点并行设置</strong>来压长上下文的 TTFT（见 D2），与 decoding 节点同构等于放弃这个自由度</li>
+                <li>独立 prefill 池带来一个独特机会：<strong>省 VRAM</strong>（见 D3），让 prefill 调度可以无视 VRAM 容量</li>
+              </ul>
+            </div>
+            <div class="block cost">
+              <div class="bt">代价 / 权衡</div>
+              <ul>
+                <li>多了一次跨节点 KVCache 传输，依赖 RDMA 网络质量</li>
+                <li>Prefill / decoding 实例比例需预设，失衡时吞吐受损（实验里 2P+2D 的 TTFT 反而不如 3P+1D）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- D2 -->
+      <article class="decision">
+        <header><span class="did">D2</span><h3>长上下文并行：Chunked Pipeline Parallelism（CPP），而非 SP</h3></header>
+        <div class="body">
+          <p class="q">问题：128K~1M 上下文的 prefill 想用多节点并行压 TTFT，选哪种并行策略？</p>
+          <p>做法：把 prefill 集群每 X 个节点组成一个流水线组，单请求的输入按 <code>prefill_chunk</code>（通常 &gt;1000 tokens）切块，<strong>同一请求的不同 chunk 由不同节点同时处理</strong>，靠逐层流式传输衔接自回归依赖。据作者所知，这是 token 级流水线并行首次用于推理（此前只出现在训练系统如 TeraPipe）。</p>
+
+          <figure>
+            <div class="fig-scroll">
+            <svg class="compact" viewBox="0 0 980 300" role="img" aria-label="CPP 流水线时间线：两个节点交错处理同一请求的 6 个 chunk">
+              <defs><marker id="cpp-arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="mk-d"/></marker></defs>
+              <!-- serial baseline -->
+              <text x="40" y="56" class="t-label">单节点串行</text>
+              <g>
+                <rect x="160" y="64" width="122" height="34" rx="4" class="f-chipv"/><text x="221" y="85" text-anchor="middle" class="t-small t-v">c1</text>
+                <rect x="286" y="64" width="122" height="34" rx="4" class="f-chipv"/><text x="347" y="85" text-anchor="middle" class="t-small t-v">c2</text>
+                <rect x="412" y="64" width="122" height="34" rx="4" class="f-chipv"/><text x="473" y="85" text-anchor="middle" class="t-small t-v">c3</text>
+                <rect x="538" y="64" width="122" height="34" rx="4" class="f-chipv"/><text x="599" y="85" text-anchor="middle" class="t-small t-v">c4</text>
+                <rect x="664" y="64" width="122" height="34" rx="4" class="f-chipv"/><text x="725" y="85" text-anchor="middle" class="t-small t-v">c5</text>
+                <rect x="790" y="64" width="122" height="34" rx="4" class="f-chipv"/><text x="851" y="85" text-anchor="middle" class="t-small t-v">c6</text>
+              </g>
+              <text x="916" y="85" class="t-small">TTFT ≈ 6T</text>
+              <!-- CPP lanes -->
+              <text x="40" y="162" class="t-label">CPP · Node A</text>
+              <text x="40" y="228" class="t-label">CPP · Node B</text>
+              <g>
+                <rect x="160" y="150" width="122" height="34" rx="4" class="f-chipv s-v"/><text x="221" y="171" text-anchor="middle" class="t-small t-v">c1</text>
+                <rect x="311" y="150" width="122" height="34" rx="4" class="f-chipv s-v"/><text x="372" y="171" text-anchor="middle" class="t-small t-v">c3</text>
+                <rect x="462" y="150" width="122" height="34" rx="4" class="f-chipv s-v"/><text x="523" y="171" text-anchor="middle" class="t-small t-v">c5</text>
+                <rect x="185" y="216" width="122" height="34" rx="4" class="f-chipl"/><text x="246" y="237" text-anchor="middle" class="t-small t-d">c2</text>
+                <rect x="336" y="216" width="122" height="34" rx="4" class="f-chipl"/><text x="397" y="237" text-anchor="middle" class="t-small t-d">c4</text>
+                <rect x="488" y="216" width="122" height="34" rx="4" class="f-chipl"/><text x="549" y="237" text-anchor="middle" class="t-small t-d">c6</text>
+              </g>
+              <!-- dependency arrows -->
+              <path class="edge-cache" marker-end="url(#cpp-arw)" d="M185 184 V 212"/>
+              <path class="edge-cache" marker-end="url(#cpp-arw)" d="M311 216 V 188"/>
+              <path class="edge-cache" marker-end="url(#cpp-arw)" d="M336 184 V 212"/>
+              <path class="edge-cache" marker-end="url(#cpp-arw)" d="M462 216 V 188"/>
+              <path class="edge-cache" marker-end="url(#cpp-arw)" d="M488 184 V 212"/>
+              <text x="620" y="171" class="t-small t-d">边界 KV 逐层流式衔接</text>
+              <text x="620" y="237" class="t-small t-d">填充延迟 ≈ 单层传输</text>
+              <!-- end markers -->
+              <line x1="614" y1="140" x2="614" y2="262" stroke="var(--vram)" stroke-width="1.4" stroke-dasharray="5 4"/>
+              <text x="628" y="262" class="t-label t-v">TTFT ≈ 3.6T</text>
+              <line x1="916" y1="52" x2="916" y2="106" stroke="var(--line)" stroke-width="1.2" stroke-dasharray="5 4"/>
+            </svg>
+            </div>
+            <figcaption><b>FIG 5</b> CPP 时间线（示意）：6 个 chunk、2 个节点。chunk i+1 不必等 chunk i 全部算完——边界 KVCache 逐层流式到达即可开工，流水线填充延迟只有约一层传输的时间。TTFT 从 6T 降到 ≈3.6T；节点越多加速比越接近 X。</figcaption>
+          </figure>
+
+          <div class="grid">
+            <div class="block alt">
+              <div class="bt">被否决的方案</div>
+              <ul>
+                <li><strong>跨节点 TP</strong>：每层两次 RDMA all-reduce，MFU 骤降</li>
+                <li><strong>Sequence Parallelism（Ring/Striped Attention）</strong>：每层至少一次跨节点通信，MFU 仍低于单节点 TP，且与 KVCache 传输抢网络</li>
+                <li><strong>弹性 SP（LoongServe）</strong>：需预建全局通信组 + 动态伸缩节点组，Conductor 调度复杂度爆炸</li>
+              </ul>
+            </div>
+            <div class="block why">
+              <div class="bt">为什么 CPP</div>
+              <ul>
+                <li>跨节点通信<strong>只发生在 chunk 边界</strong>，可与计算重叠——MFU 更高，不与 KVCache 传输争网</li>
+                <li>长短上下文通吃：短请求单节点即可，<strong>无需弹性调整节点分组</strong>，部署形态静态</li>
+              </ul>
+            </div>
+            <div class="block cost">
+              <div class="bt">代价 / 权衡</div>
+              <ul>
+                <li>流水线组内存在 bubble（论文未展开量化）</li>
+                <li>调度器要同时管"节点组"和"单节点"两种 prefill 形态</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- D3 -->
+      <article class="decision">
+        <header><span class="did">D3</span><h3>Layer-wise Prefill：逐层异步 load/store，把传输藏进计算</h3></header>
+        <div class="body">
+          <p class="q">问题：长上下文请求的 KVCache 巨大（S），处理时间长（T），驻留 VRAM 的占用成本是 S×T。怎么把这笔账降下来？</p>
+          <p>做法：prefill 本来就是逐层计算且 compute-bound，于是每层 attention 开始前<strong>等待该层 KVCache 异步加载完成、同时触发下一层的异步加载</strong>；该层算完立即异步写回 DRAM。全部用 launch/wait 原语实现。</p>
+
+          <figure>
+            <div class="fig-scroll">
+            <svg class="compact" viewBox="0 0 980 280" role="img" aria-label="Layer-wise prefill 的重叠时间线：IO 藏进下一层计算">
+              <!-- serial -->
+              <text x="40" y="56" class="t-label">串行 load/store</text>
+              <g>
+                <rect x="160" y="64" width="110" height="32" rx="4" class="f-chipv"/><text x="215" y="84" text-anchor="middle" class="t-small t-v">L1 计算</text>
+                <rect x="270" y="64" width="90" height="32" rx="4" class="f-chipl"/><text x="315" y="84" text-anchor="middle" class="t-small t-d">L1 写回</text>
+                <rect x="360" y="64" width="110" height="32" rx="4" class="f-chipv"/><text x="415" y="84" text-anchor="middle" class="t-small t-v">L2 计算</text>
+                <rect x="470" y="64" width="90" height="32" rx="4" class="f-chipl"/><text x="515" y="84" text-anchor="middle" class="t-small t-d">L2 写回</text>
+                <rect x="560" y="64" width="110" height="32" rx="4" class="f-chipv"/><text x="615" y="84" text-anchor="middle" class="t-small t-v">L3 计算</text>
+                <rect x="670" y="64" width="90" height="32" rx="4" class="f-chipl"/><text x="715" y="84" text-anchor="middle" class="t-small t-d">L3 写回</text>
+              </g>
+              <text x="775" y="84" class="t-small">总时长 = 计算 + IO</text>
+              <!-- overlapped -->
+              <text x="40" y="152" class="t-label">计算 lane</text>
+              <text x="40" y="218" class="t-label">异步 IO lane</text>
+              <g>
+                <rect x="160" y="140" width="110" height="32" rx="4" class="f-chipv s-v"/><text x="215" y="160" text-anchor="middle" class="t-small t-v">L1 计算</text>
+                <rect x="270" y="140" width="110" height="32" rx="4" class="f-chipv s-v"/><text x="325" y="160" text-anchor="middle" class="t-small t-v">L2 计算</text>
+                <rect x="380" y="140" width="110" height="32" rx="4" class="f-chipv s-v"/><text x="435" y="160" text-anchor="middle" class="t-small t-v">L3 计算</text>
+                <rect x="270" y="206" width="90" height="32" rx="4" class="f-chipl"/><text x="315" y="226" text-anchor="middle" class="t-small t-d">L1 写回</text>
+                <rect x="380" y="206" width="90" height="32" rx="4" class="f-chipl"/><text x="425" y="226" text-anchor="middle" class="t-small t-d">L2 写回</text>
+                <rect x="490" y="206" width="90" height="32" rx="4" class="f-chipl"/><text x="535" y="226" text-anchor="middle" class="t-small t-d">L3 写回</text>
+              </g>
+              <line x1="490" y1="130" x2="490" y2="248" stroke="var(--vram)" stroke-width="1.4" stroke-dasharray="5 4"/>
+              <text x="504" y="160" class="t-small t-v">计算结束（连续无气泡）</text>
+              <text x="504" y="226" class="t-small t-d">IO 全部藏进下一层计算</text>
+            </svg>
+            </div>
+            <figcaption><b>FIG 6</b> Layer-wise prefill 的重叠效果（示意）。写回/加载与下一层计算并行，prefill 执行时间 ≈ max(计算时间, KVCache 传输时间)，而非两者之和——长上下文下收益最大（论文 Figure 7，128K 时差距最显著）。</figcaption>
+          </figure>
+
+          <div class="grid">
+            <div class="block why">
+              <div class="bt">收益</div>
+              <ul>
+                <li>prefill 执行时间 ≈ max(计算时间, KVCache 加载时间)，传输基本被藏住</li>
+                <li><strong>prefill 调度从此可以无视 VRAM 容量</strong>——只要能装下单个请求即可，调度只看缓存分布和 DRAM</li>
+                <li>长上下文存储延迟显著下降（论文 Figure 7，128K 时 layer-wise 优势最大）</li>
+              </ul>
+            </div>
+            <div class="block cost">
+              <div class="bt">代价 / 权衡</div>
+              <ul>
+                <li>实现复杂度：每层都要穿插异步 IO 的 launch/wait 编排</li>
+                <li>对 RDMA 带宽有硬要求（实验节点 800 Gbps 互联）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+      <!-- D4 -->
+      <article class="decision">
+        <header><span class="did">D4</span><h3>Cache-aware 全局调度：以 TTFT 估计为准绳选 prefill 实例</h3></header>
+        <div class="body">
+          <p class="q">问题：选"缓存命中最长的实例"还是"负载最轻的实例"？两个目标经常冲突。</p>
+          <p>答案：都<strong>不直接选</strong>——把两者统一折算成 TTFT 估计值（排队时间 + prefill 执行时间 [+ 缓存迁移时间]），选 TTFT 最短的。若估计值违反 SLO，直接返回 429。</p>
+          <pre class="pseudo"><span class="cm">// Algorithm 1 — KVCache-centric Scheduling（论文伪代码的精简注释版）</span>
+<span class="vr">block_keys</span> ← <span class="fn">PrefixHash</span>(R.prompt_tokens, B)
+(<span class="vr">best_len</span>, <span class="vr">best_node</span>) ← <span class="fn">FindBestPrefixMatch</span>(P, block_keys)
+
+<span class="kw">for</span> instance <span class="kw">in</span> P:
+    <span class="vr">T_queue</span>   ← <span class="fn">EstimatePrefillQueueTime</span>(instance)          <span class="cm">// 队列中所有请求的 prefill 时间求和</span>
+    <span class="kw">if</span> (best_len − instance.prefix_len) &lt; <span class="vr">kvcache_balancing_threshold</span>:
+        <span class="vr">T_total</span> ← <span class="vr">T_queue</span> + <span class="fn">EstimatePrefillExecTime</span>(len, instance.prefix_len)
+    <span class="kw">else</span>:                                  <span class="cm">// 缓存差距大：宁可迁移热点缓存</span>
+        <span class="vr">T_total</span> ← <span class="fn">EstimateTransferTime</span>(instance←best_node) + <span class="vr">T_queue</span>
+                + <span class="fn">EstimatePrefillExecTime</span>(len, best_len)
+    保留 <span class="vr">T_total</span> 最小的 instance → p
+
+d ← <span class="fn">SelectDecodingInstance</span>(D)             <span class="cm">// 纯负载均衡</span>
+<span class="kw">if</span> TTFT &gt; <span class="vr">TTFT_SLO</span> <span class="kw">or</span> TBT &gt; <span class="vr">TBT_SLO</span>: <span class="kw">reject</span> R  <span class="cm">// → HTTP 429</span>
+<span class="kw">if</span> best_len − p.prefix_len &gt; <span class="vr">threshold</span>: <span class="fn">TransferKVCache</span>(best_node → p)  <span class="cm">// 热点迁移</span></pre>
+
+          <div class="example">
+            <div class="ex-head">▶ 跑一遍 · 一个 10,000 token 请求的三实例演算（示例数值）</div>
+            <div class="ex-body">
+              <table class="data">
+                <thead><tr><th>候选实例</th><th>本地命中</th><th>排队 T_queue</th><th>计算 T_prefill</th><th>迁移 T_transfer</th><th>TTFT 估计</th></tr></thead>
+                <tbody>
+                  <tr><td>P1</td><td>12 blocks（6,144 tok）</td><td>1.20s</td><td>3,856 tok ÷ 2,000 tok/s = 1.93s</td><td class="dim">—</td><td>3.13s</td></tr>
+                  <tr><td>P2</td><td>6 blocks（3,072 tok）</td><td>0.20s</td><td>按迁移后 12 blocks 算 = 1.93s</td><td>6 blocks ≈ 0.15s</td><td class="hl">2.28s ← 选中</td></tr>
+                  <tr><td>P3</td><td>0</td><td>0s</td><td>10,000 ÷ 2,000 = 5.00s</td><td class="dim">—</td><td>5.00s</td></tr>
+                </tbody>
+              </table>
+              <p style="margin-top:12px">P2 与最优缓存（P1 的 12 blocks）差距 6 blocks，超过 <code>kvcache_balancing_threshold</code> → 走迁移分支：把 P1 的热点缓存复制到 P2。<strong>一次调度同时完成了"选最快实例"和"热点块自动扩散"两件事</strong>——D5 的启发式就是这样搭 D4 便车的。</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="block why">
+              <div class="bt">工程要点</div>
+              <ul>
+                <li>Prefill 时间用<strong>离线数据拟合的预测模型</strong>估计——Transformer 计算模式规整，误差界很小</li>
+                <li>所有实例的 TTFT 并行计算，调度开销相对推理可忽略</li>
+                <li>难点在<strong>传输时间估计</strong>：取决于数据量 + 发送端网络是否拥塞</li>
+              </ul>
+            </div>
+            <div class="block cost">
+              <div class="bt">代价 / 权衡</div>
+              <ul>
+                <li><code>kvcache_balancing_threshold</code> 目前是<strong>人工调参</strong>（作者承认，留作自适应化的 future work）</li>
+                <li>vLLM 开源版只有本地 KVCache 缓存，这套是全局缓存视角的调度</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- D5 -->
+      <article class="decision">
+        <header><span class="did">D5</span><h3>缓存负载均衡：启发式热点迁移，而非用量预测</h3></header>
+        <div class="body">
+          <p class="q">问题：要不要收集全局块用量、建模预测未来热度，再做复制/换出？</p>
+          <p>答案：不。对快速增长的服务，负载高度动态，<strong>精确预测未来用量不现实</strong>。改用启发式：当请求因负载原因没路由到"命中最长"的实例时，若估计的额外 prefill 时间 &gt; 传输时间，就把缓存位置转发给备选实例、由它主动拉取并本地留存——<strong>热点块被访问得越多，就自然被复制得越广</strong>，无需任何预测模型。</p>
+          <div class="grid">
+            <div class="block why">
+              <div class="bt">为什么优雅</div>
+              <ul>
+                <li>复制行为是请求的<strong>副产品</strong>，零额外控制循环</li>
+                <li>与 D4 的调度算法共用同一套时间估计，没有第二套模型要维护</li>
+                <li>实测（8P+8D 集群回放 2.3 万真实请求）：平均 TTFT 从负载均衡调度的 60.41s 压到 <strong>6.26s</strong></li>
+              </ul>
+            </div>
+            <div class="block cost">
+              <div class="bt">代价 / 权衡</div>
+              <ul>
+                <li>启发式不保证全局最优，理论上存在震荡复制的边界场景</li>
+                <li>"宁可重算也不搬缓存"的分支依赖同一个阈值参数</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- D6 -->
+      <article class="decision">
+        <header><span class="did">D6</span><h3>Messenger：独立进程 + GPUDirect RDMA 的传输层</h3></header>
+        <div class="body">
+          <p class="q">问题：KVCache 在 GPU/CPU/跨机之间怎么搬，才能不干扰推理主循环？</p>
+          <p>做法：每个节点跑一个独立的 Messenger 进程，接收信号后执行 GPUDirect RDMA 传输。推理进程只管发信号，搬运完全旁路。这套架构还顺带让 Mooncake 能对外提供 <strong>context caching API</strong>（用户显式复用 KVCache，类似后来的 commercial context caching 产品）。</p>
+          <div class="grid">
+            <div class="block why">
+              <div class="bt">收益</div>
+              <ul>
+                <li>传输与计算进程隔离，故障域清晰，可独立升级</li>
+                <li>GPUDirect 绕过 CPU 拷贝，GPU↔远端内存直通</li>
+              </ul>
+            </div>
+            <div class="block cost">
+              <div class="bt">代价 / 权衡</div>
+              <ul>
+                <li>对 RDMA 网络（800 Gbps 级）是硬性依赖，普通云网络难以复现同等效果</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ==================== 07 过载调度 ==================== -->
+    <section id="overload">
+      <p class="eyebrow">07 / Overload-oriented Scheduling</p>
+      <h2><span class="hash">##</span>过载调度：早拒绝，以及它引发的震荡</h2>
+      <p class="lede">这是全文最"生产系统"的一章：当请求量永远大于供给，调度器的核心动作从"排得好"变成"<strong>拒得早、拒得准</strong>"。但朴素的早拒绝会让集群负载像失控的反馈回路一样震荡。</p>
+
+      <h3>三个递进的策略</h3>
+      <ul>
+        <li><strong>基线</strong>：prefill 完成后再由 decoding 端按负载拒收 → prefill 算力白烧（论文 goodput 定义下的纯浪费）。</li>
+        <li><strong>Early Rejection</strong>：请求到达时，Conductor 取 prefill 池与 decoding 池负载的<strong>较大者</strong>决定是否接受，把 decoding 的负载评估提前到 prefill 开始之前。</li>
+        <li><strong>基于预测的 Early Rejection</strong>：不用"当前" decoding 负载，而用<strong>预测的"prefill 完成后那一刻"的 decoding 负载</strong>来决策。</li>
+      </ul>
+
+      <figure>
+        <div class="fig-scroll">
+        <svg viewBox="0 0 980 360" role="img" aria-label="早拒绝导致的 prefill 与 decoding 负载反相震荡示意">
+          <line x1="70" y1="40" x2="70" y2="300" class="s-line" stroke-width="1.2"/>
+          <line x1="70" y1="300" x2="950" y2="300" class="s-line" stroke-width="1.2"/>
+          <text x="60" y="50" class="t-small" text-anchor="end">1.0</text>
+          <text x="60" y="180" class="t-small" text-anchor="end">0.5</text>
+          <text x="60" y="303" class="t-small" text-anchor="end">0</text>
+          <text x="80" y="325" class="t-small">time →</text>
+
+          <rect x="70" y="40" width="220" height="260" class="stage-a"/>
+          <rect x="290" y="40" width="220" height="260" class="stage-b"/>
+          <rect x="510" y="40" width="220" height="260" class="stage-a"/>
+          <rect x="730" y="40" width="220" height="260" class="stage-b"/>
+          <text x="180" y="60" text-anchor="middle" class="t-label">Stage 1 · Accept</text>
+          <text x="400" y="60" text-anchor="middle" class="t-label">Stage 2 · Reject</text>
+          <text x="620" y="60" text-anchor="middle" class="t-label">Stage 3 · Accept</text>
+          <text x="840" y="60" text-anchor="middle" class="t-label">Stage 4 · Reject</text>
+
+          <polyline points="70,260 180,60 290,60 400,250 510,250 620,70 730,70 840,250 950,250" class="ln-d"/>
+          <polyline points="70,270 180,250 290,250 400,70 510,70 620,240 730,240 840,80 950,80" class="ln-v"/>
+
+          <rect x="700" y="318" width="14" height="4" class="f-dram"/><text x="722" y="324" class="t-small">Prefill 负载</text>
+          <rect x="810" y="318" width="14" height="4" class="f-vram"/><text x="832" y="324" class="t-small">Decoding 负载</text>
+
+          <text x="180" y="285" text-anchor="middle" class="t-small t-d">两池皆空 → 放行到打满</text>
+          <text x="400" y="285" text-anchor="middle" class="t-small t-v">涌入 decoding → 拒收 → prefill 闲置</text>
+          <text x="620" y="285" text-anchor="middle" class="t-small t-d">decoding 排空 → 再放行</text>
+          <text x="840" y="285" text-anchor="middle" class="t-small t-v">再次拥塞，循环往复</text>
+        </svg>
+        </div>
+        <figcaption><b>FIG 7</b> 朴素早拒绝的反相震荡（依据论文 Figure 9/10a 重绘）。根因是典型的<strong>延迟反馈回路</strong>：用"当前 decoding 负载"为"未来的 decoding 负载"做决策，控制信号滞后一个 prefill 周期，于是两个池的负载像错相方波一样此起彼伏——资源利用率被震荡吃掉。</figcaption>
+      </figure>
+
+      <h3>解药：系统级负载预测</h3>
+      <p>精确的 request-level 预测（预测每个请求的输出长度）成本高、准确率低，过载时尤其不可靠。Mooncake 选择更粗糙但稳健的 <strong>system-level</strong> 预测：</p>
+      <ol>
+        <li>假设每个请求的 decoding 阶段耗时统一为 <code>td</code>；</li>
+        <li>对目标时刻 <code>t</code>：把 t 前能完成 prefill 的请求<strong>加进</strong> decoding 实例，把执行时间将超过 td 的请求<strong>移除</strong>；</li>
+        <li>统计所有 decoding 实例的平均 TBT 与 <code>l_tbt</code> 的比值，作为 t 时刻的预测负载。</li>
+      </ol>
+
+      <div class="example">
+        <div class="ex-head">▶ 跑一遍 · t+8s 的 decoding 负载预测（示例数值）</div>
+        <div class="ex-body">
+          <div class="ex-steps">
+            <div class="ex-line"><span class="n">1</span><span class="r">设定：统一解码时长 <b>td = 10s</b>；某 decoding 实例容量 50 个并发请求，当前在跑 <b>40</b> 个</span></div>
+            <div class="ex-line"><span class="n">2</span><span class="r">新请求 R 到达，prefill 预计耗时 <b>8s</b> → 需要回答：t+8s 时 decoding 池还塞得下吗？</span></div>
+            <div class="ex-line"><span class="n">3</span><span class="r">加：prefill 池排队中的请求里，<b>15</b> 个会在 t+8s 前完成 prefill → 加入 decoding</span></div>
+            <div class="ex-line"><span class="n">4</span><span class="r">减：在跑的 40 个里，<b>18</b> 个到那时已运行超过 td → 移除</span></div>
+            <div class="ex-line"><span class="n">5</span><span class="r">预测负载 = (40 − 18 + 15) ÷ 50 = <b>74%</b> → 平均 TBT 比值 &lt; 1 → <b>放行 R</b>。若算出 110% → 直接 429，R 不消耗任何 GPU</span></div>
+          </div>
+        </div>
+      </div>
+
+      <p>效果（2 倍速回放真实 trace、8P+8D 集群）：基线拒绝 4,183 个请求 → 朴素早拒绝 3,771 → 预测式早拒绝 <strong>3,589</strong>。拒绝数下降意味着更少算力浪费和更高的集群承载上限。</p>
+
+      <div class="callout warn">
+        <div class="t">工程师视角 · 这是控制理论问题</div>
+        <p>把 Conductor 看成一个控制器：朴素早拒绝 = 用滞后一个环节的测量值做反馈控制，必然震荡（相位裕度不足）。预测式早拒绝相当于加了<strong>前馈环节</strong>——用模型预估未来状态再决策。如果你在自己的系统里见过"限流阀值导致流量锯齿"，病根一模一样。</p>
+      </div>
+    </section>
+
+    <!-- ==================== 08 实验 ==================== -->
+    <section id="eval">
+      <p class="eyebrow">08 / Evaluation Highlights</p>
+      <h2><span class="hash">##</span>实验数据速览</h2>
+      <p class="lede">所有实验用与 LLaMA2-70B 同构的 dummy 模型 + 真实 trace 回放（23,608 条，块哈希已脱敏重映射，已开源）。节点：8×A800-80GB（NVLINK），节点间 800 Gbps RDMA。SLO：TTFT P90 = 10× 基线、TBT P90 = 5× 基线。</p>
+
+      <h3>端到端吞吐提升（满足 SLO 前提下，vs 同规模 vLLM）</h3>
+      <div class="bars wide" role="img" aria-label="各负载下 Mooncake 相对 vLLM 的吞吐提升柱状图">
+        <div class="row"><span class="bl">ArXiv Summarization（8K 输入）</span><div class="track"><div class="fill" style="width:20%;background:var(--vram)"></div></div><span class="bv">+20%</span></div>
+        <div class="row"><span class="bl">L-Eval（19K 输入 · 80%+ 缓存）</span><div class="track"><div class="fill" style="width:40%;background:var(--vram)"></div></div><span class="bv">+40%</span></div>
+        <div class="row"><span class="bl">模拟数据 16K</span><div class="track"><div class="fill" style="width:50%;background:var(--dram)"></div></div><span class="bv">+50%</span></div>
+        <div class="row"><span class="bl">真实 trace 回放（请求承载量）</span><div class="track"><div class="fill" style="width:75%;background:var(--dram)"></div></div><span class="bv">+75%</span></div>
+        <div class="row"><span class="bl">模拟数据 128K（长上下文上限）</span><div class="track"><div class="fill" style="width:100%;background:var(--accent)"></div></div><span class="bv" style="color:var(--accent)">+525%</span></div>
+      </div>
+      <p>提升幅度<strong>随上下文变长而放大</strong>（128k 场景达到 525%）——长上下文对 vLLM 这类耦合系统的 decoding 干扰是致命的，它被迫逐条处理长请求。真实负载下两者 TTFT 分布几乎一致（都接近 100% 达标），差距全在 TBT：Mooncake 约 100% 达标，vLLM 只有 <strong>57%</strong>。</p>
+
+      <h3>调度策略对比（8P+8D，回放 2.3 万真实请求，平均 TTFT）</h3>
+      <div class="bars" role="img" aria-label="四种调度策略的平均 TTFT 对比柱状图">
+        <div class="row"><span class="bl">KVCache-centric（本文）</span><div class="track"><div class="fill" style="width:7%;background:var(--accent)"></div></div><span class="bv" style="color:var(--accent)">6.26s</span></div>
+        <div class="row"><span class="bl">仅 cache-aware</span><div class="track"><div class="fill" style="width:16%;background:var(--vram)"></div></div><span class="bv">14.36s</span></div>
+        <div class="row"><span class="bl">负载均衡</span><div class="track"><div class="fill" style="width:66%;background:var(--dram)"></div></div><span class="bv">60.41s</span></div>
+        <div class="row"><span class="bl">随机调度</span><div class="track"><div class="fill" style="width:100%;background:var(--ink-3)"></div></div><span class="bv">92.07s</span></div>
+      </div>
+      <p>注意"负载均衡"——业界最常见的默认策略——在缓存敏感的负载下比随机好不了太多。<strong>缓存命中率对 TTFT 的支配力远大于实例负载均衡</strong>，这是 KVCache-centric 调度存在的直接证据。</p>
+    </section>
+
+    <!-- ==================== 09 批判性阅读 ==================== -->
+    <section id="takeaways">
+      <p class="eyebrow">09 / Critical Reading &amp; Takeaways</p>
+      <h2><span class="hash">##</span>批判性阅读：这套架构的边界在哪</h2>
+
+      <h3>论文自己承认或未解的问题</h3>
+      <ul>
+        <li><strong>P/D 比例是静态预设的</strong>。实验里 2P+2D 因两池负载失衡 TTFT 反而变差；论文把"动态转换 prefill/decoding 实例"留作 future work。比例选错，解耦反而放大浪费。</li>
+        <li><strong>阈值靠手调</strong>。<code>kvcache_balancing_threshold</code>（搬缓存还是重算的分界）目前人工调整。</li>
+        <li><strong>decoding 端二次校验仍可能拒收</strong>：prefill 完成后 decoding 负载可能已变化，本地调度器再查一次 TBT SLO，拒收则 prefill 算力浪费——早拒绝只是降低了概率，没有消除。</li>
+        <li><strong>复用率天花板</strong>：真实负载下即使容量无限、TTFT 约束无限宽松，理论复用率也只有 55%（特定场景如 papers.cool 可达 90%）。缓存不是银弹，收益高度依赖业务形态。</li>
+        <li><strong>硬件门槛</strong>：整套设计依赖 800 Gbps RDMA 互联和节点上大量闲置 DRAM/SSD；没有这张网，逐层流式传输的收益兑现不了。</li>
+      </ul>
+
+      <h3>如果你在做 serving 系统，可以直接偷的思想</h3>
+      <ul>
+        <li><strong>把缓存位置变成调度的输入</strong>，而不是调度完成后的被动结果。TTFT = 排队 + 计算 + 搬运，三项都建模再取 min。</li>
+        <li><strong>热点复制用启发式而不是预测</strong>：让请求路径顺带完成复制，省掉一整个预测子系统。</li>
+        <li><strong>逐层 overlap</strong> 是通用模式：任何"逐层算 + 逐层有产出"的流水线（prefill、长视频生成）都能把 IO 藏进计算。</li>
+        <li><strong>过载是常态，把拒绝做成一等公民</strong>：定义"完整跑完才算 goodput"，然后用预测式早拒绝把浪费压到最小。警惕滞后反馈造成的负载震荡。</li>
+        <li><strong>Goodput 的定义决定调度器的形状</strong>。先定义清楚"什么算有效产出"，再谈优化。</li>
+      </ul>
+
+      <div class="callout">
+        <div class="t">延伸</div>
+        <p>论文 v5 之后的演进值得跟踪：Mooncake Store 已独立开源（kvcache-ai/Mooncake），社区出现了与 vLLM/SGLang 的集成；attention offloading、异构加速器（带宽型 vs 计算型）是论文点名的大方向。DeepSeek 的 MLA 从算法侧提高算术强度，与这套系统侧解耦互为正交优化。</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>Source: Qin et al., "Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving", arXiv:2407.00079v5, Moonshot AI &amp; Tsinghua University. Trace: <a href="https://github.com/kvcache-ai/Mooncake">github.com/kvcache-ai/Mooncake</a>.</p>
+      <p>本报告为面向工程师的解读性重写：架构图与示意图依据论文 Figure 1 / 2 / 3 / 9 / 10 重绘，标注"示例值"的数字为教学演算假设，其余数值取自论文正文与表格。解读性评论已用"工程师视角"标注，与论文原文结论区分。</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = document.getElementById("theme-toggle");
+  var themeLabel = document.getElementById("theme-label");
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t) return t;
+    return (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+  }
+  function applyTheme(t) {
+    document.documentElement.setAttribute("data-theme", t);
+    themeLabel.textContent = t === "dark" ? "浅色" : "深色";
+    try { localStorage.setItem("mc-theme", t); } catch (e) {}
+  }
+  try {
+    var stored = localStorage.getItem("mc-theme");
+    if (stored === "light" || stored === "dark") {
+      document.documentElement.setAttribute("data-theme", stored);
+    } else {
+      document.documentElement.setAttribute("data-theme", currentTheme());
+    }
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", currentTheme());
+  }
+  themeLabel.textContent = currentTheme() === "dark" ? "浅色" : "深色";
+  themeBtn.addEventListener("click", function () {
+    applyTheme(currentTheme() === "dark" ? "light" : "dark");
+  });
+
+  /* ---------- scroll-spy TOC ---------- */
+  var links = Array.prototype.slice.call(document.querySelectorAll("#toc-nav a"));
+  var map = {};
+  links.forEach(function (a) { map[a.getAttribute("href").slice(1)] = a; });
+  var sections = Array.prototype.slice.call(document.querySelectorAll("main section[id]"));
+  function setActive(id) {
+    links.forEach(function (a) { a.classList.remove("active"); });
+    if (map[id]) map[id].classList.add("active");
+  }
+  if ("IntersectionObserver" in window) {
+    var visible = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) visible[e.target.id] = e.intersectionRatio;
+        else delete visible[e.target.id];
+      });
+      var best = null, bestR = 0;
+      Object.keys(visible).forEach(function (id) {
+        if (visible[id] > bestR) { bestR = visible[id]; best = id; }
+      });
+      if (best) setActive(best);
+    }, { rootMargin: "-20% 0px -55% 0px", threshold: [0, 0.1, 0.5] });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+
+  /* ---------- lifecycle stepper ---------- */
+  var STEPS = [
+    {
+      title: "Step 1 · KVCache Reuse —— 能复用的绝不重算",
+      body: "<p>选定的 prefill 节点收到三样东西：原始输入、<strong>可复用前缀缓存的 block ID 列表</strong>、为本请求分配的完整缓存 block ID。它按 block ID 把前缀 KVCache 从远端 CPU 内存（经 Messenger/RDMA）直接载入 GPU，请求由此「热启动」。没有前缀缓存则跳过本步。</p><ul><li>Conductor 在此平衡三个目标：复用尽可能多的 KVCache、均衡各 prefill 节点负载、保住 TTFT SLO——这就是 D4 的算法在干的事。</li></ul>"
+    },
+    {
+      title: "Step 2 · Incremental Prefill —— 切块增量计算",
+      body: "<p>基于前缀缓存，只需计算未命中部分的 token。若未缓存 token 数超过 <code>prefill_chunk</code>（典型值 &gt; 1000），prefill 被切成多个 chunk 流水线执行（CPP，见 D2）。算出的增量 KVCache 随即写回 CPU 内存进入全局缓存池，供未来请求复用。</p><ul><li>每个 chunk 内部仍是逐层计算——这为 Step 3 的逐层传输创造了重叠窗口。</li></ul>"
+    },
+    {
+      title: "Step 3 · KVCache Transfer —— 逐层流式搬运，与计算重叠",
+      body: "<p>每算完一层，该层 KVCache 立即经 Messenger 以 GPUDirect RDMA <strong>流式</strong>发往目标 decoding 节点的 CPU DRAM，而不是等全部层算完再整体传输。这是 D3 的 layer-wise 机制在跨机链路上的延伸：传输时间被藏进后续层的计算时间里。</p><ul><li>对 decoding 侧同理：异步加载与 GPU 解码并行，防止 GPU 空转气泡。</li></ul>"
+    },
+    {
+      title: "Step 4 · Decoding —— 入队连续批处理，但有二次校验",
+      body: "<p>完整 KVCache 全部到达 decoding 节点 DRAM 后，请求加入下一轮 continuous batching。Conductor 预选 decoding 节点时已按当前负载保证 TBT SLO，但<strong>本地调度器会再校验一次</strong>——因为 prefill 期间负载可能已变。校验失败则拒收，已消耗的 prefill 算力记为浪费（这正是第 7 节早拒绝要最小化的东西）。</p>"
+    }
+  ];
+  var stepper = document.getElementById("lifecycle-stepper");
+  if (stepper) {
+    var tabs = Array.prototype.slice.call(stepper.querySelectorAll("button.step"));
+    var panel = document.getElementById("step-panel");
+    function render(i) {
+      tabs.forEach(function (t, j) { t.setAttribute("aria-selected", j === i ? "true" : "false"); });
+      panel.innerHTML = "<h4>" + STEPS[i].title + "</h4>" + STEPS[i].body;
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { render(i); });
+      t.addEventListener("keydown", function (e) {
+        var n = null;
+        if (e.key === "ArrowRight") n = (i + 1) % tabs.length;
+        if (e.key === "ArrowLeft") n = (i - 1 + tabs.length) % tabs.length;
+        if (n !== null) { e.preventDefault(); tabs[n].focus(); render(n); }
+      });
+    });
+    render(0);
+  }
+
+  /* ---------- workload scenario switcher ---------- */
+  var SCN = [
+    {
+      key: "a",
+      h4: "场景 A · 长上下文请求（缓存未命中）",
+      profile: "input ≈ 128K tokens · output ≈ 512 · cache hit ≈ 0% · 压力点：TTFT SLO",
+      steps: [
+        "Conductor 估算各候选 prefill 实例的 TTFT：本请求无缓存可复用，选中一个 CPP 流水线节点组而非单节点——只有多节点并行才能把 128K 输入的 TTFT 压进 SLO。",
+        "输入按 prefill_chunk 切块，Node A / B 流水线并行处理同一请求的不同 chunk；跨节点通信只发生在 chunk 边界，且与计算重叠（对应决策 D2，见 FIG 5 时间线）。",
+        "每算完一层，该层 KVCache 立即经 Messenger / RDMA 流式发往 decoding 节点的 DRAM，传输时间被藏进后续层的计算里（对应决策 D3，见 FIG 6）。",
+        "完整 KVCache 到齐后，请求加入 decoding 节点的 continuous batching；本地调度器二次校验 TBT SLO 后开始解码。"
+      ],
+      role: "CPP 流水线与逐层流式传输就是为这个场景而生的。在 vLLM 这类耦合系统里，128K prefill 会长时间卡住 decoding——这正是模拟实验中吞吐差距最高达 525% 的来源。"
+    },
+    {
+      key: "b",
+      h4: "场景 B · 前缀缓存命中（多轮对话 / 共享 system prompt）",
+      profile: "input ≈ 8K · 前缀命中 12 blocks（6,144 tokens）· 压力点：省算力 + 负载均衡",
+      steps: [
+        "Conductor 沿前缀哈希链逐块匹配，找到命中最长的 prefill 实例；若它负载过高，则把热点缓存迁移到较空闲的实例——仅当估计迁移时间小于额外计算时间（对应决策 D4 / D5）。",
+        "命中的前缀 KVCache 从分布式缓存池经 RDMA 直接载入 GPU（向上的金色箭头）：这 6,144 个 token 完全免重算。",
+        "只对未命中尾部做增量 prefill；新产生的 KVCache 立刻写回缓存池（向下的金色箭头），供后续请求复用。",
+        "增量 KVCache 体积小，流式传输开销极低；请求随后进入 decoding 节点。"
+      ],
+      role: "KVCache 池化 + cache-aware 调度把「缓存命中」从单机优化升级为全局资源。实测平均 TTFT 从负载均衡调度的 60.41s 降到 6.26s（对比数据见第 08 节）。"
+    },
+    {
+      key: "c",
+      h4: "场景 C · 高峰过载（到达速率 ＞ 集群容量）",
+      profile: "流量 2× 回放真实 trace · 压力点：不在必败请求上浪费算力",
+      steps: [
+        "请求到达后 Conductor 不急着分配资源，先做预测：等它做完 prefill 的那一刻，decoding 池的负载会是多少（系统级预测：假设统一解码时长 td，加减请求后计算 TBT 比值，见本节下方的演算框）。",
+        "预测超标 → 直接返回 HTTP 429（红色路径）。请求不消耗任何 GPU 算力，由上层决定重试或放弃。",
+        "预测通过 → 放行，走场景 A / B 的正常流水线。",
+        "注意对比：朴素早拒绝用「当前」decoding 负载做决策，信号滞后一个 prefill 周期，导致两池负载反相震荡（第 07 节 FIG 7）；预测式裁决消除了这个相位差。"
+      ],
+      role: "把「拒绝」做成一等公民。2× 过载回放下，预测式早拒绝比基线少拒 594 个请求（4,183 → 3,589）——每一个省下的都是一整次 prefill 的算力。"
+    }
+  ];
+  var scnSvg = document.getElementById("flow-svg");
+  var scnDetail = document.getElementById("scn-detail");
+  var scnTabs = Array.prototype.slice.call(document.querySelectorAll(".scenario-tabs button"));
+  function renderScn(i) {
+    scnTabs.forEach(function (t, j) { t.setAttribute("aria-selected", j === i ? "true" : "false"); });
+    scnSvg.setAttribute("data-scenario", SCN[i].key);
+    scnDetail.innerHTML = "<h4>" + SCN[i].h4 + "</h4>" +
+      "<div class=\"profile\">" + SCN[i].profile + "</div><ol>" +
+      SCN[i].steps.map(function (s) { return "<li>" + s + "</li>"; }).join("") +
+      "</ol><div class=\"role\"><b>架构作用 ·</b> " + SCN[i].role + "</div>";
+  }
+  if (scnSvg && scnDetail && scnTabs.length) {
+    scnTabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { renderScn(i); });
+      t.addEventListener("keydown", function (e) {
+        var n = null;
+        if (e.key === "ArrowRight") n = (i + 1) % scnTabs.length;
+        if (e.key === "ArrowLeft") n = (i - 1 + scnTabs.length) % scnTabs.length;
+        if (n !== null) { e.preventDefault(); scnTabs[n].focus(); renderScn(n); }
+      });
+    });
+    renderScn(0);
+  }
+})();
+</script>
+</body>
+</html>

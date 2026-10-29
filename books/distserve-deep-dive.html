@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="DistServe 论文深度解读：prefill/decoding 解耦、每 GPU goodput、并行策略搜索、带宽感知放置与 KV cache 调度。">
+  <title>DistServe 深度解读｜拆分阶段，优化双 SLO 下的 goodput</title>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var params = new URLSearchParams(window.location.search);
+      var preset = root.getAttribute('data-theme');
+      var query = params.get('theme');
+      var saved = null;
+      try { saved = window.localStorage.getItem('distserve-deep-dive-theme'); } catch (error) {}
+      var system = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      var theme = preset || ((query === 'light' || query === 'dark') ? query : null) || saved || system;
+      root.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
+    }());
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: hsl(220 20% 10%);
+      --bg-elev: hsl(220 18% 13%);
+      --panel: hsl(219 17% 16%);
+      --panel-strong: hsl(218 16% 20%);
+      --text: hsl(200 24% 93%);
+      --muted: hsl(205 11% 69%);
+      --faint: hsl(206 9% 51%);
+      --line: hsl(213 14% 29%);
+      --line-strong: hsl(210 14% 43%);
+      --accent: hsl(187 76% 57%);
+      --accent-soft: hsl(187 55% 20% / .38);
+      --prefill: hsl(33 88% 61%);
+      --prefill-soft: hsl(33 55% 20% / .36);
+      --decode: hsl(164 61% 52%);
+      --decode-soft: hsl(164 43% 19% / .36);
+      --kv: hsl(272 63% 73%);
+      --kv-soft: hsl(272 40% 21% / .34);
+      --control: hsl(205 78% 66%);
+      --goodput: hsl(120 45% 60%);
+      --run: hsl(45 88% 63%);
+      --run-soft: hsl(45 52% 20% / .30);
+      --danger: hsl(4 76% 68%);
+      --danger-soft: hsl(4 45% 20% / .35);
+      --shadow: hsl(220 40% 3% / .36);
+      --selection: hsl(187 65% 40% / .45);
+      --overlay: hsl(220 20% 10% / .88);
+      --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-display: "Aptos Display", "Helvetica Neue", "PingFang SC", sans-serif;
+      --font-mono: "SFMono-Regular", "Cascadia Code", "Roboto Mono", Consolas, "Liberation Mono", monospace;
+      --radius: 4px;
+      --topbar: 64px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: hsl(210 26% 97%);
+        --bg-elev: hsl(0 0% 100%);
+        --panel: hsl(210 22% 95%);
+        --panel-strong: hsl(210 18% 90%);
+        --text: hsl(220 30% 16%);
+        --muted: hsl(214 13% 38%);
+        --faint: hsl(213 9% 48%);
+        --line: hsl(211 17% 82%);
+        --line-strong: hsl(211 15% 62%);
+        --accent: hsl(187 88% 32%);
+        --accent-soft: hsl(187 55% 85% / .58);
+        --prefill: hsl(33 88% 40%);
+        --prefill-soft: hsl(35 85% 87% / .74);
+        --decode: hsl(164 68% 28%);
+        --decode-soft: hsl(164 42% 86% / .72);
+        --kv: hsl(272 47% 48%);
+        --kv-soft: hsl(272 43% 89% / .70);
+        --control: hsl(205 76% 42%);
+        --goodput: hsl(120 48% 30%);
+        --run: hsl(42 86% 37%);
+        --run-soft: hsl(45 85% 87% / .66);
+        --danger: hsl(4 66% 45%);
+        --danger-soft: hsl(4 65% 88% / .65);
+        --shadow: hsl(214 30% 30% / .16);
+        --selection: hsl(187 60% 70% / .60);
+        --overlay: hsl(210 26% 97% / .88);
+      }
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: hsl(210 26% 97%); --bg-elev: hsl(0 0% 100%); --panel: hsl(210 22% 95%); --panel-strong: hsl(210 18% 90%);
+      --text: hsl(220 30% 16%); --muted: hsl(214 13% 38%); --faint: hsl(213 9% 48%); --line: hsl(211 17% 82%); --line-strong: hsl(211 15% 62%);
+      --accent: hsl(187 88% 32%); --accent-soft: hsl(187 55% 85% / .58); --prefill: hsl(33 88% 40%); --prefill-soft: hsl(35 85% 87% / .74);
+      --decode: hsl(164 68% 28%); --decode-soft: hsl(164 42% 86% / .72); --kv: hsl(272 47% 48%); --kv-soft: hsl(272 43% 89% / .70);
+      --control: hsl(205 76% 42%); --goodput: hsl(120 48% 30%); --run: hsl(42 86% 37%); --run-soft: hsl(45 85% 87% / .66);
+      --danger: hsl(4 66% 45%); --danger-soft: hsl(4 65% 88% / .65); --shadow: hsl(214 30% 30% / .16); --selection: hsl(187 60% 70% / .60); --overlay: hsl(210 26% 97% / .88);
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: hsl(220 20% 10%); --bg-elev: hsl(220 18% 13%); --panel: hsl(219 17% 16%); --panel-strong: hsl(218 16% 20%);
+      --text: hsl(200 24% 93%); --muted: hsl(205 11% 69%); --faint: hsl(206 9% 51%); --line: hsl(213 14% 29%); --line-strong: hsl(210 14% 43%);
+      --accent: hsl(187 76% 57%); --accent-soft: hsl(187 55% 20% / .38); --prefill: hsl(33 88% 61%); --prefill-soft: hsl(33 55% 20% / .36);
+      --decode: hsl(164 61% 52%); --decode-soft: hsl(164 43% 19% / .36); --kv: hsl(272 63% 73%); --kv-soft: hsl(272 40% 21% / .34);
+      --control: hsl(205 78% 66%); --goodput: hsl(120 45% 60%); --run: hsl(45 88% 63%); --run-soft: hsl(45 52% 20% / .30);
+      --danger: hsl(4 76% 68%); --danger-soft: hsl(4 45% 20% / .35); --shadow: hsl(220 40% 3% / .36); --selection: hsl(187 65% 40% / .45); --overlay: hsl(220 20% 10% / .88);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; min-width: 320px; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 16px; line-height: 1.75; -webkit-font-smoothing: antialiased; }
+    ::selection { background: var(--selection); }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    button, input { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; padding: 8px 12px; background: var(--bg-elev); color: var(--text); transform: translateY(-160%); }
+    .skip-link:focus { transform: translateY(0); }
+    .topbar { position: sticky; top: 0; z-index: 50; min-height: var(--topbar); border-bottom: 1px solid var(--line); background: var(--overlay); backdrop-filter: blur(16px); }
+    .topbar-inner { width: min(1480px, calc(100% - 40px)); min-height: var(--topbar); margin-inline: auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; color: var(--text); text-decoration: none; }
+    .brand-mark { color: var(--accent); font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+    .brand-sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .top-actions { display: flex; align-items: center; gap: 14px; }
+    .phase-badge { color: var(--decode); font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; }
+    .theme-toggle { min-height: 38px; padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); color: var(--text); cursor: pointer; font-family: var(--font-mono); font-size: 12px; }
+    .theme-toggle:hover { border-color: var(--accent); }
+    .shell { width: min(1480px, calc(100% - 40px)); margin-inline: auto; display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: clamp(28px, 4vw, 64px); }
+    .toc-inner { position: sticky; top: calc(var(--topbar) + 28px); padding-block: 32px; }
+    .toc-title { margin: 0 0 14px; color: var(--faint); font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+    .toc a { display: grid; grid-template-columns: 25px 1fr; gap: 8px; padding: 7px 6px; border-left: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.4; text-decoration: none; }
+    .toc a span:first-child { color: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+    .toc a:hover, .toc a[aria-current="true"] { border-left-color: var(--accent); color: var(--text); }
+    .toc a[aria-current="true"] { background: var(--accent-soft); }
+    .toc-note { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--faint); font-family: var(--font-mono); font-size: 10px; line-height: 1.7; }
+    .content { min-width: 0; max-width: 1120px; padding-bottom: 80px; }
+    section { scroll-margin-top: calc(var(--topbar) + 24px); }
+    .report-section { padding-block: 62px; border-top: 1px solid var(--line); }
+    .section-heading { display: grid; gap: 12px; margin-bottom: 30px; }
+    .eyebrow { color: var(--accent); font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3, h4, p { margin: 0; }
+    h2 { max-width: 850px; font-family: var(--font-display); font-size: clamp(28px, 3.3vw, 43px); line-height: 1.18; letter-spacing: -.035em; text-wrap: balance; }
+    h3 { font-size: 20px; line-height: 1.35; letter-spacing: -.015em; text-wrap: balance; }
+    h4 { font-size: 15px; line-height: 1.45; }
+    p { max-width: 72ch; }
+    .section-deck { color: var(--muted); font-size: 17px; line-height: 1.8; }
+    .muted { color: var(--muted); }
+    .mono, code, .formula { font-family: var(--font-mono); }
+    code { padding: .12em .35em; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); color: var(--text); font-size: .88em; overflow-wrap: anywhere; }
+    .formula { display: block; max-width: 100%; padding: 14px 16px; border: 1px solid var(--line); background: var(--bg-elev); color: var(--text); font-size: 13px; line-height: 1.9; overflow-x: auto; white-space: nowrap; }
+    .source-line { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; color: var(--faint); font-family: var(--font-mono); font-size: 11px; }
+    .source-chip { display: inline-flex; align-items: center; width: fit-content; min-height: 25px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); background: var(--panel); font-family: var(--font-mono); font-size: 10px; letter-spacing: .03em; }
+    .hero { padding-block: clamp(44px, 7vw, 86px) 48px; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr); gap: clamp(30px, 5vw, 64px); align-items: center; }
+    .hero-copy { display: grid; gap: 24px; }
+    .hero-kicker { display: flex; flex-wrap: wrap; gap: 8px; }
+    .paper-title { font-family: var(--font-display); font-size: clamp(54px, 7vw, 90px); font-weight: 750; line-height: .98; letter-spacing: -.065em; }
+    .hero-thesis { max-width: 64ch; font-size: clamp(18px, 2vw, 23px); line-height: 1.65; }
+    .hero-thesis strong { color: var(--accent); font-weight: 650; }
+    .hero-sub { color: var(--muted); font-size: 14px; }
+    .meta-list { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--muted); font-size: 12px; }
+    .meta-list a { white-space: nowrap; }
+    .hero-figure { margin: 0; border: 1px solid var(--line-strong); background: var(--bg-elev); box-shadow: 0 24px 60px var(--shadow); }
+    .hero-figure figcaption, .diagram-caption { padding: 12px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; line-height: 1.65; }
+    .hero-visual { display: block; width: 100%; height: auto; }
+    .metric-strip { margin-top: 38px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--line); }
+    .metric { min-width: 0; padding: 20px 18px; display: grid; gap: 5px; }
+    .metric + .metric { border-left: 1px solid var(--line); }
+    .metric strong { color: var(--text); font-family: var(--font-mono); font-size: clamp(23px, 2.8vw, 34px); line-height: 1.15; letter-spacing: -.05em; font-variant-numeric: tabular-nums; }
+    .metric span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .metric small { color: var(--faint); font-family: var(--font-mono); font-size: 9px; }
+    .run-example { margin-top: 28px; padding: 20px 22px; border: 1px dashed var(--run); border-radius: var(--radius); background: var(--run-soft); display: grid; gap: 14px; }
+    .run-title { color: var(--run); font-family: var(--font-mono); font-size: 13px; font-weight: 700; }
+    .run-example p, .run-example li { max-width: 78ch; font-size: 14px; }
+    .calc-line { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(0, 1.3fr); gap: 14px; padding-block: 7px; border-bottom: 1px dotted var(--line-strong); font-size: 13px; }
+    .calc-line:last-child { border-bottom: 0; }
+    .calc-line strong { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .example-note { color: var(--muted); font-size: 11px !important; }
+    .callout { padding: 18px 20px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 8px; }
+    .callout-label { color: var(--accent); font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; }
+    .callout.engineer { border-style: dotted; }
+    .callout.engineer .callout-label { color: var(--kv); }
+    .callout p { font-size: 14px; }
+    .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .stack { display: grid; gap: 20px; min-width: 0; }
+    .phase-compare { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); }
+    .phase-column { padding: 22px; display: grid; gap: 12px; }
+    .phase-column.prefill { background: var(--prefill-soft); }
+    .phase-column.decoding { background: var(--decode-soft); }
+    .phase-column + .phase-column { border-left: 1px solid var(--line); }
+    .phase-tag { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .07em; }
+    .prefill .phase-tag { color: var(--prefill); }
+    .decoding .phase-tag { color: var(--decode); }
+    .phase-column p, .phase-column li { color: var(--muted); font-size: 13px; }
+    .phase-column ul { margin: 0; padding-left: 18px; display: grid; gap: 7px; }
+    .table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    thead th { background: var(--panel-strong); color: var(--muted); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--accent-soft); }
+    .row-highlight { background: var(--decode-soft); }
+    .wide-table { min-width: 780px; }
+    .svg-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--line); background: var(--bg-elev); }
+    .architecture-svg, .scenario-svg { display: block; width: 100%; min-width: 860px; height: auto; }
+    .svg-panel { fill: var(--panel); stroke: var(--line-strong); stroke-width: 1.2; }
+    .svg-prefill { fill: var(--prefill-soft); stroke: var(--prefill); stroke-width: 1.4; }
+    .svg-decode { fill: var(--decode-soft); stroke: var(--decode); stroke-width: 1.4; }
+    .svg-kv { fill: var(--kv-soft); stroke: var(--kv); stroke-width: 1.4; }
+    .svg-control { fill: var(--panel-strong); stroke: var(--control); stroke-width: 1.3; }
+    .svg-ghost { fill: var(--panel); stroke: var(--faint); stroke-width: 1.2; stroke-dasharray: 6 6; }
+    .svg-text { fill: var(--text); font-family: var(--font-body); font-size: 14px; }
+    .svg-small { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+    .svg-mono { fill: var(--text); font-family: var(--font-mono); font-size: 12px; }
+    .svg-prefill-text { fill: var(--prefill); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .svg-decode-text { fill: var(--decode); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .svg-kv-text { fill: var(--kv); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+    .svg-control-text { fill: var(--control); font-family: var(--font-mono); font-size: 11px; }
+    .svg-faint { fill: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+    .edge-data, .edge-prefill, .edge-decode, .edge-kv, .edge-control { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .edge-data { stroke: var(--control); }
+    .edge-prefill { stroke: var(--prefill); }
+    .edge-decode { stroke: var(--decode); }
+    .edge-kv { stroke: var(--kv); }
+    .edge-control { stroke: var(--control); stroke-dasharray: 6 6; }
+    .marker-data { fill: var(--control); }
+    .marker-prefill { fill: var(--prefill); }
+    .marker-decode { fill: var(--decode); }
+    .marker-kv { fill: var(--kv); }
+    .badge-circle { fill: var(--bg-elev); stroke: var(--accent); stroke-width: 1.5; }
+    .badge-text { fill: var(--text); font-family: var(--font-mono); font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; }
+    .stepper { border: 1px solid var(--line); background: var(--bg-elev); }
+    .step-tabs { display: grid; grid-template-columns: repeat(7, minmax(128px, 1fr)); overflow-x: auto; border-bottom: 1px solid var(--line); }
+    .step-tab { min-height: 74px; padding: 12px; border: 0; border-right: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; display: grid; gap: 5px; text-align: left; font-size: 12px; line-height: 1.35; }
+    .step-tab span { color: var(--faint); font-family: var(--font-mono); font-size: 10px; }
+    .step-tab:hover { background: var(--accent-soft); color: var(--text); }
+    .step-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 -3px 0 var(--accent); }
+    .step-panel { padding: clamp(20px, 3vw, 34px); display: grid; gap: 24px; }
+    .step-panel[hidden], .scenario-panel[hidden] { display: none; }
+    .step-heading { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 18px; align-items: start; }
+    .step-heading p { margin-top: 8px; color: var(--muted); }
+    .step-index { color: var(--accent); font-family: var(--font-mono); font-size: 32px; line-height: 1; }
+    .step-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+    .step-detail-grid > div { display: grid; gap: 8px; align-content: start; }
+    .step-detail-grid h4 { color: var(--accent); font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em; }
+    .step-detail-grid p { color: var(--muted); font-size: 14px; }
+    .scenario-tabs, .preset-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .scenario-tab, .preset-tabs button { min-height: 40px; padding: 8px 13px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); color: var(--muted); cursor: pointer; font-size: 12px; }
+    .scenario-tab:hover, .preset-tabs button:hover { border-color: var(--accent); color: var(--text); }
+    .scenario-tab[aria-pressed="true"], .preset-tabs button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+    #scenario-stage [data-s] { transition: opacity .22s ease; }
+    #scenario-stage[data-scenario="chatbot"] [data-s]:not([data-s~="chatbot"]),
+    #scenario-stage[data-scenario="code"] [data-s]:not([data-s~="code"]),
+    #scenario-stage[data-scenario="summary"] [data-s]:not([data-s~="summary"]) { opacity: .12; }
+    .scenario-badge { display: none; }
+    #scenario-stage[data-scenario="chatbot"] [data-badge="chatbot"],
+    #scenario-stage[data-scenario="code"] [data-badge="code"],
+    #scenario-stage[data-scenario="summary"] [data-badge="summary"] { display: inline; }
+    @keyframes trace { to { stroke-dashoffset: -32; } }
+    #scenario-stage[data-scenario="chatbot"] [data-s~="chatbot"].flow-edge,
+    #scenario-stage[data-scenario="code"] [data-s~="code"].flow-edge,
+    #scenario-stage[data-scenario="summary"] [data-s~="summary"].flow-edge { stroke-dasharray: 10 6; animation: trace 1.1s linear infinite; }
+    .scenario-panel { padding: 24px 0 4px; display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 30px; }
+    .scenario-summary { display: grid; gap: 12px; align-content: start; }
+    .scenario-summary p { color: var(--muted); font-size: 14px; }
+    .scenario-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+    .scenario-steps li { padding-bottom: 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    .scenario-steps strong { color: var(--accent); font-family: var(--font-mono); margin-right: 8px; }
+    .decision-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .decision-card { border: 1px solid var(--line); background: var(--bg-elev); display: grid; }
+    .decision-title { padding: 20px; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: start; background: var(--panel-strong); }
+    .decision-title > span { color: var(--accent); font-family: var(--font-mono); font-size: 12px; padding-top: 4px; }
+    .decision-title h3 { font-size: 18px; }
+    .decision-part { padding: 16px 20px; border-top: 1px solid var(--line); display: grid; gap: 7px; }
+    .decision-part h4 { color: var(--faint); font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; }
+    .decision-part p { color: var(--muted); font-size: 13px; }
+    .decision-part.tradeoff { background: var(--prefill-soft); }
+    .decision-part.tradeoff h4 { color: var(--prefill); }
+    .evidence-block { padding: 24px; border: 1px solid var(--line); background: var(--bg-elev); display: grid; gap: 22px; min-width: 0; }
+    .evidence-heading { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(240px, .8fr); gap: 20px; align-items: end; }
+    .evidence-heading > div { display: grid; gap: 10px; }
+    .evidence-heading > p { color: var(--muted); font-size: 12px; }
+    .queue-lab { display: grid; gap: 20px; }
+    .queue-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .queue-field { display: grid; gap: 6px; }
+    .queue-field label { color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+    .queue-field input { width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--panel); color: var(--text); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .queue-field small { color: var(--faint); font-size: 10px; }
+    .queue-status { padding: 12px 14px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+    .queue-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .queue-result { padding: 18px; border: 1px solid var(--line); display: grid; gap: 8px; align-content: start; }
+    .queue-result.single { background: var(--panel); }
+    .queue-result.inter { background: var(--kv-soft); }
+    .queue-result.intra { background: var(--prefill-soft); }
+    .queue-result h4 { font-family: var(--font-mono); font-size: 12px; }
+    .queue-value { font-family: var(--font-mono); font-size: 25px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .queue-result p { color: var(--muted); font-size: 11px; }
+    .queue-result.is-invalid { background: var(--danger-soft); }
+    .queue-result.is-invalid .queue-value { color: var(--danger); font-size: 18px; }
+    .critique-group { display: grid; gap: 14px; }
+    .critique-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .critique-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .critique-card { padding: 20px; border: 1px solid var(--line); background: var(--panel); display: grid; gap: 10px; align-content: start; }
+    .critique-card h3 { font-size: 17px; }
+    .critique-card p { color: var(--muted); font-size: 13px; }
+    .engineer-card { border-style: dotted; }
+    .engineer-card h3 { color: var(--kv); }
+    .steal-list { padding: 24px; border: 1px solid var(--decode); background: var(--decode-soft); display: grid; gap: 20px; }
+    .steal-list > div { display: grid; gap: 12px; }
+    .steal-list ol { margin: 0; padding-left: 24px; display: grid; gap: 12px; }
+    .steal-list li { padding-left: 5px; color: var(--muted); font-size: 14px; }
+    .steal-list li::marker { color: var(--decode); font-family: var(--font-mono); }
+    .steal-list strong { color: var(--text); }
+    .report-footer { padding: 50px 0 20px; border-top: 1px solid var(--line); display: grid; gap: 22px; }
+    .report-footer > div:first-child { display: grid; gap: 14px; }
+    .report-footer h2 { font-size: clamp(25px, 3vw, 36px); }
+    .report-footer > p { color: var(--muted); }
+    .report-footer > p strong { color: var(--text); }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 13px; }
+    #selftest-result { padding: 12px; background: var(--panel); color: var(--text); font-family: var(--font-mono); font-size: 11px; }
+    @media (max-width: 1160px) {
+      .shell { grid-template-columns: minmax(0, 1fr); width: min(1120px, calc(100% - 36px)); }
+      .toc-inner { position: sticky; top: var(--topbar); z-index: 30; padding: 10px 0; background: var(--overlay); backdrop-filter: blur(14px); }
+      .toc-title, .toc-note { display: none; }
+      .toc ol { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+      .toc li { flex: 0 0 auto; }
+      .toc a { display: flex; gap: 6px; padding: 7px 10px; border: 1px solid var(--line); white-space: nowrap; }
+      .toc a[aria-current="true"] { border-color: var(--accent); }
+      .content { max-width: none; }
+    }
+    @media (max-width: 1000px) {
+      .decision-grid, .critique-grid.three, .queue-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .hero-grid { grid-template-columns: minmax(0, 1fr); }
+      .hero-figure { max-width: 620px; }
+      .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
+      .metric:nth-child(4) { border-top: 1px solid var(--line); }
+      .two-col, .scenario-panel, .evidence-heading { grid-template-columns: minmax(0, 1fr); }
+      .critique-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 620px) {
+      :root { --topbar: 56px; }
+      .topbar-inner, .shell { width: calc(100% - 24px); }
+      .brand-sub, .phase-badge { display: none; }
+      .theme-toggle { padding-inline: 9px; }
+      .report-section { padding-block: 44px; }
+      .hero { padding-top: 34px; }
+      .paper-title { font-size: clamp(47px, 15vw, 68px); overflow-wrap: anywhere; }
+      .hero-thesis { font-size: 17px; }
+      .metric { padding: 16px 12px; }
+      .metric strong { font-size: 24px; }
+      .phase-compare { grid-template-columns: minmax(0, 1fr); }
+      .phase-column + .phase-column { border-left: 0; border-top: 1px solid var(--line); }
+      .calc-line { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+      .run-example { padding: 17px; }
+      .step-detail-grid { grid-template-columns: minmax(0, 1fr); }
+      .step-heading { grid-template-columns: 40px minmax(0, 1fr); gap: 12px; }
+      .step-index { font-size: 25px; }
+      .scenario-tabs, .preset-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 5px; }
+      .scenario-tab, .preset-tabs button { flex: 0 0 auto; }
+      .evidence-block { padding: 17px; }
+      .queue-controls { grid-template-columns: minmax(0, 1fr); }
+      .decision-title, .decision-part, .critique-card, .steal-list { padding: 17px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+    @media print {
+      .topbar, .toc, .theme-toggle, .step-tabs, .scenario-tabs, .preset-tabs, .queue-controls { display: none !important; }
+      :root, :root[data-theme="dark"], :root[data-theme="light"] { --bg: hsl(0 0% 100%); --bg-elev: hsl(0 0% 100%); --panel: hsl(0 0% 97%); --panel-strong: hsl(0 0% 94%); --text: hsl(0 0% 8%); --muted: hsl(0 0% 28%); --line: hsl(0 0% 78%); --overlay: hsl(0 0% 100%); }
+      body { background: var(--bg); color: var(--text); font-size: 11pt; }
+      .shell { display: block; width: 100%; }
+      .content { max-width: none; }
+      .report-section { break-before: page; }
+      .run-example, .callout, .decision-card, figure, .queue-result { break-inside: avoid; }
+      .svg-scroll, .table-wrap { overflow: visible; }
+      .architecture-svg, .scenario-svg { min-width: 0; }
+      .step-panel[hidden], .scenario-panel[hidden] { display: block !important; }
+      a { color: var(--text); }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#hero" aria-label="返回报告开头"><span class="brand-mark">DS / 2401.09670</span><span class="brand-sub">Paper deep-dive · 工程师版</span></a>
+      <div class="top-actions"><span class="phase-badge">PREFILL ∥ DECODING</span><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换颜色主题">主题：深色</button></div>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="toc" aria-label="报告目录">
+      <div class="toc-inner">
+        <p class="toc-title">Serving trace</p>
+        <ol id="toc-list">
+          <li><a href="#hero" aria-current="true"><span>00</span><span>核心论点</span></a></li>
+          <li><a href="#problem"><span>01</span><span>问题定义</span></a></li>
+          <li><a href="#architecture"><span>02</span><span>架构总览</span></a></li>
+          <li><a href="#flow"><span>03</span><span>核心流程</span></a></li>
+          <li><a href="#workloads"><span>04</span><span>典型负载</span></a></li>
+          <li><a href="#decisions"><span>05</span><span>设计决策</span></a></li>
+          <li><a href="#experiments"><span>06</span><span>实验数据</span></a></li>
+          <li><a href="#critical"><span>07</span><span>批判性阅读</span></a></li>
+        </ol>
+        <p class="toc-note">AMBER = PREFILL<br>GREEN = DECODING<br>VIOLET = KV / CONTROL<br>GOLD = WORKED EXAMPLE</p>
+      </div>
+    </aside>
+    <main class="content" id="main">
+      <section class="hero" id="hero" aria-labelledby="hero-title">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <div class="hero-kicker"><span class="source-chip">ARXIV V3 · 2024-06-06</span><span class="source-chip">LLM SERVING SYSTEM</span></div>
+            <h1 class="paper-title" id="hero-title">DistServe</h1>
+            <p class="hero-thesis"><strong>把 prefill 和 decoding 拆成两类独立实例，再以 TTFT 与 TPOT 双 SLO 为约束，分别优化资源、并行策略和放置。</strong>目标不是最多 token/s，而是每块 GPU 能承载多少“仍满足延迟要求”的请求。</p>
+            <p class="hero-sub">Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving</p>
+            <div class="meta-list"><span>Yinmin Zhong · Shengyu Liu · Junda Chen · Jianbo Hu · Yibo Zhu · Xuanzhe Liu · Xin Jin · Hao Zhang</span><a href="https://arxiv.org/abs/2401.09670">arXiv:2401.09670</a><a href="https://github.com/LLMServe/DistServe">论文所附代码</a></div>
+          </div>
+          <figure class="hero-figure">
+            <svg class="hero-visual" viewBox="0 0 520 390" role="img" aria-labelledby="hero-svg-title hero-svg-desc">
+              <title id="hero-svg-title">请求穿过独立的 prefill 与 decoding 实例</title>
+              <desc id="hero-svg-desc">请求先进入琥珀色 prefill 实例，KV cache 进入紫色缓冲区，再由绿色 decoding 实例拉取并生成后续 token，最后接受双 SLO 检查。</desc>
+              <defs>
+                <marker id="hero-prefill-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-prefill" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="hero-decode-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-decode" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="hero-kv-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-kv" d="M0 0 L10 5 L0 10 z"></path></marker>
+              </defs>
+              <text class="svg-control-text" x="28" y="42">ONE REQUEST / TWO RESOURCE POOLS</text>
+              <rect class="svg-panel" x="28" y="158" width="92" height="66" rx="2"></rect>
+              <text class="svg-mono" x="74" y="185" text-anchor="middle">prompt</text>
+              <text class="svg-small" x="74" y="207" text-anchor="middle">arrival R</text>
+              <rect class="svg-prefill" x="174" y="58" width="160" height="104" rx="2"></rect>
+              <text class="svg-prefill-text" x="254" y="88" text-anchor="middle">PREFILL</text>
+              <text class="svg-mono" x="254" y="116" text-anchor="middle">all prompt tokens</text>
+              <text class="svg-small" x="254" y="140" text-anchor="middle">compute-bound / TTFT</text>
+              <rect class="svg-kv" x="174" y="230" width="160" height="82" rx="2"></rect>
+              <text class="svg-kv-text" x="254" y="260" text-anchor="middle">KV BUFFER</text>
+              <text class="svg-small" x="254" y="287" text-anchor="middle">retain + pull</text>
+              <rect class="svg-decode" x="366" y="142" width="136" height="112" rx="2"></rect>
+              <text class="svg-decode-text" x="434" y="174" text-anchor="middle">DECODING</text>
+              <text class="svg-mono" x="434" y="202" text-anchor="middle">1 token / step</text>
+              <text class="svg-small" x="434" y="228" text-anchor="middle">bandwidth / TPOT</text>
+              <path class="edge-prefill" d="M120 174 C148 174 146 110 168 110" marker-end="url(#hero-prefill-arrow)"></path>
+              <path class="edge-kv" d="M254 162 V224" marker-end="url(#hero-kv-arrow)"></path>
+              <path class="edge-decode" d="M334 254 C356 254 350 224 360 212" marker-end="url(#hero-decode-arrow)"></path>
+              <path class="edge-control" d="M366 264 C346 290 342 288 338 288" marker-end="url(#hero-kv-arrow)"></path>
+              <rect class="svg-control" x="362" y="300" width="140" height="58" rx="2"></rect>
+              <text class="svg-control-text" x="432" y="325" text-anchor="middle">SLO GATE</text>
+              <text class="svg-small" x="432" y="346" text-anchor="middle">TTFT + TPOT ≥ 90%</text>
+              <path class="edge-decode" d="M434 254 V294" marker-end="url(#hero-decode-arrow)"></path>
+              <text class="svg-mono" x="28" y="366">goodput = R meeting both SLOs / GPU</text>
+            </svg>
+            <figcaption>两阶段共享模型语义，却不共享同一套资源与并行配置；KV cache 成为显式数据面和背压边界。依据论文 Figure 1、Figure 6 重绘／示意。</figcaption>
+          </figure>
+        </div>
+        <div class="metric-strip" aria-label="论文关键结果">
+          <div class="metric"><strong>7.4×</strong><span>最高可服务请求率提升</span><small>ABSTRACT · VS BASELINES</small></div>
+          <div class="metric"><strong>12.6×</strong><span>最高可承受更严格 SLO</span><small>§6.2 · SUMMARIZATION</small></div>
+          <div class="metric"><strong>&gt;90%</strong><span>上述结果同时满足的 SLO attainment</span><small>§6.2 · ATTAINMENT GOAL</small></div>
+          <div class="metric"><strong>&lt;0.1%</strong><span>OPT-175B 中 KV 传输占总延迟</span><small>FIGURE 10 · SHAREGPT</small></div>
+        </div>
+      </section>
+
+      <section class="report-section" id="problem" aria-labelledby="problem-title">
+        <div class="section-heading">
+          <span class="eyebrow">01 / Goodput, not throughput</span>
+          <h2 id="problem-title">两个延迟目标，被同一批 GPU 和同一种并行策略绑在一起</h2>
+          <p class="section-deck">现有系统把 prefill 与 decoding 放在同一 GPU 上连续组批，能提高整体 token throughput，却在严格 SLO 下被迫二选一或超额配置。DistServe 的问题定义是：在每块 GPU 成本固定的前提下，最大化同时满足 TTFT、TPOT 与 attainment 目标的请求率。</p>
+          <div class="source-line"><span class="source-chip">论文 §1–2 · Figure 1 / 2</span><span>per-GPU goodput = 满足双 SLO 的最大 request rate / 配置的 GPU 数</span></div>
+        </div>
+        <div class="stack">
+          <div class="two-col">
+            <div class="callout"><span class="callout-label">双 SLO</span><p><strong>TTFT</strong>：从到达到首个 token 的 prefill 延迟。<strong>TPOT</strong>：首个 token 之后，平均每个输出 token 的 decoding 延迟。SLO attainment 是同时满足这两个要求的请求比例。</p></div>
+            <div class="callout engineer"><span class="callout-label">工程师视角 · 指标变换</span><p>tokens/s 只回答“机器做了多少工作”，goodput 回答“多少工作仍被用户视为合格”。提高 batch 可能提升前者，却让排队延迟突破后者；两者并不等价。</p></div>
+          </div>
+          <div class="phase-compare">
+            <div class="phase-column prefill"><span class="phase-tag">PREFILL / 一次性处理整个 prompt</span><h3>计算密集，怕排队，也怕长任务阻塞</h3><ul><li>输入 token 并行计算，长 prompt 往往使 GPU compute-bound。</li><li>较小 batch 更合适；超过饱和阈值 L<sub>m</sub> 后，多加请求只延长整批时间。</li><li>低到达率或严格 TTFT 时，intra-op 降低执行时间更有价值。</li></ul></div>
+            <div class="phase-column decoding"><span class="phase-tag">DECODING / 每步只生成一个 token</span><h3>显存带宽密集，需要大 batch 摊薄权重读取</h3><ul><li>每步仍要读取模型权重和活跃请求的 KV cache。</li><li>大 batch 提高利用率，但受显存容量与 TPOT 限制。</li><li>严格 TPOT 用 intra-op 降延迟；超出后 inter-op 近线性扩容。</li></ul></div>
+          </div>
+          <div class="callout"><span class="callout-label">为什么现有替代方案不够</span><p>Orca／vLLM 的 colocated continuous batching 无法消除相位干扰；DeepSpeed-MII／SARATHI 的 chunked-prefill + piggyback 只是用 TTFT 换 TPOT，并增加 KV 重读；简单优先级或串行调度仍留下排队与 GPU 利用不足。</p></div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 为什么拆开后每 GPU 反而能多做 2.1× 合格工作</div>
+          <div class="calc-line"><span>论文示例</span><strong>13B；input=512，output=64；A100 80GB；P90 + 90% SLO attainment</strong></div>
+          <div class="calc-line"><span>现有 colocated</span><strong>goodput ≈ 1.6 rps / GPU</strong></div>
+          <div class="calc-line"><span>独立相位容量</span><strong>prefill-only 5.6 rps / GPU；decoding-only 10 rps / GPU</strong></div>
+          <div class="calc-line"><span>2P + 1D 配置</span><strong>prefill 容量 2×5.6=11.2 rps；decoding 容量 10 rps → 整体 10 rps</strong></div>
+          <div class="calc-line"><span>按 3 块 GPU 归一化</span><strong>10 / 3 = 3.33 rps/GPU；3.33 / 1.6 ≈ 2.1×</strong></div>
+          <p class="example-note">数据与配置来自论文 §1 对 Figure 1 的文字解释；3.33 与倍率为本报告据其演算。它说明 goodput 必须按总 GPU 数归一化，不能只比较单个相位的峰值。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="architecture" aria-labelledby="architecture-title">
+        <div class="section-heading">
+          <span class="eyebrow">02 / High-level design</span>
+          <h2 id="architecture-title">离线决定“怎么部署”，在线只保持简单、短路径的调度</h2>
+          <p class="section-deck">DistServe 把复杂性前移到放置算法：用历史负载与模拟器搜索每个相位的 TP／PP 和实例数，再按网络约束落到物理集群。运行时由 centralized controller 做 FCFS 分发，prefill 留存 KV，decoding 按需拉取，双方按自己的节奏运行。</p>
+          <div class="source-line"><span class="source-chip">依据 Figure 6 · Algorithm 1 / 2 · §4.3 重绘</span><span>实线：请求与 KV 数据面　虚线：配置、拉取与 replan 控制面</span></div>
+        </div>
+        <figure>
+          <div class="svg-scroll">
+            <svg class="architecture-svg" viewBox="0 0 1100 680" role="img" aria-labelledby="hld-title hld-desc">
+              <title id="hld-title">DistServe 离线放置与在线运行时架构</title>
+              <desc id="hld-desc">顶部是负载、SLO、模拟器和放置算法，底部是控制器、prefill 实例池、KV 缓冲区和 decoding 实例池。prefill 与 decoding 使用独立权重副本和并行策略。</desc>
+              <defs>
+                <marker id="hld-arrow-data" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-data" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="hld-arrow-prefill" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-prefill" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="hld-arrow-decode" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-decode" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="hld-arrow-kv" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-kv" d="M0 0 L10 5 L0 10 z"></path></marker>
+              </defs>
+              <rect class="svg-control" x="28" y="28" width="1044" height="150" rx="3"></rect>
+              <text class="svg-control-text" x="48" y="56">OFFLINE / PLACEMENT + SIMULATION</text>
+              <rect class="svg-panel" x="50" y="78" width="248" height="72" rx="2"></rect>
+              <text class="svg-mono" x="66" y="105">model + workload + R</text>
+              <text class="svg-small" x="66" y="130">TTFT / TPOT / attainment / cluster</text>
+              <rect class="svg-panel" x="394" y="78" width="302" height="72" rx="2"></rect>
+              <text class="svg-mono" x="545" y="105" text-anchor="middle">fit → resample → simulate</text>
+              <text class="svg-small" x="545" y="130" text-anchor="middle">binary search max rate meeting SLO</text>
+              <rect class="svg-panel" x="792" y="78" width="256" height="72" rx="2"></rect>
+              <text class="svg-mono" x="920" y="105" text-anchor="middle">best placement</text>
+              <text class="svg-small" x="920" y="130" text-anchor="middle">TP / PP / n, m / segments</text>
+              <path class="edge-data" d="M298 114 H388" marker-end="url(#hld-arrow-data)"></path>
+              <path class="edge-data" d="M696 114 H786" marker-end="url(#hld-arrow-data)"></path>
+
+              <rect class="svg-control" x="440" y="214" width="220" height="66" rx="3"></rect>
+              <text class="svg-control-text" x="550" y="241" text-anchor="middle">CONTROLLER</text>
+              <text class="svg-small" x="550" y="263" text-anchor="middle">FCFS + shortest queues</text>
+              <path class="edge-control" d="M920 150 V196 H670" marker-end="url(#hld-arrow-data)"></path>
+
+              <rect class="svg-prefill" x="36" y="326" width="306" height="242" rx="3"></rect>
+              <text class="svg-prefill-text" x="58" y="357">PREFILL INSTANCE POOL / n</text>
+              <text class="svg-small" x="58" y="382">完整权重副本 · 独立 TP / PP</text>
+              <rect class="svg-panel" x="60" y="406" width="258" height="58" rx="2"></rect>
+              <text class="svg-mono" x="76" y="431">prompt → first token</text>
+              <text class="svg-small" x="76" y="451">small batch / Lm threshold</text>
+              <rect class="svg-panel" x="60" y="482" width="258" height="58" rx="2"></rect>
+              <text class="svg-mono" x="76" y="508">KV retained in HBM</text>
+              <text class="svg-small" x="76" y="528">兼作突发队列缓冲</text>
+
+              <rect class="svg-kv" x="466" y="352" width="168" height="144" rx="3"></rect>
+              <text class="svg-kv-text" x="550" y="385" text-anchor="middle">KV CACHE</text>
+              <text class="svg-mono" x="550" y="417" text-anchor="middle">layer ↔ layer</text>
+              <text class="svg-small" x="550" y="446" text-anchor="middle">pull as needed</text>
+              <text class="svg-small" x="550" y="470" text-anchor="middle">NVLINK preferred</text>
+
+              <rect class="svg-decode" x="758" y="326" width="306" height="242" rx="3"></rect>
+              <text class="svg-decode-text" x="780" y="357">DECODING INSTANCE POOL / m</text>
+              <text class="svg-small" x="780" y="382">完整权重副本 · 独立 TP / PP</text>
+              <rect class="svg-panel" x="782" y="406" width="258" height="58" rx="2"></rect>
+              <text class="svg-mono" x="798" y="431">KV + first token</text>
+              <text class="svg-small" x="798" y="451">sequential next-token steps</text>
+              <rect class="svg-panel" x="782" y="482" width="258" height="58" rx="2"></rect>
+              <text class="svg-mono" x="798" y="508">large batch / TPOT</text>
+              <text class="svg-small" x="798" y="528">least-loaded dispatch</text>
+
+              <path class="edge-prefill" d="M440 252 C290 252 226 270 190 320" marker-end="url(#hld-arrow-prefill)"></path>
+              <text class="svg-prefill-text" x="272" y="278">① shortest prefill queue</text>
+              <path class="edge-prefill" d="M342 432 H460" marker-end="url(#hld-arrow-prefill)"></path>
+              <path class="edge-kv" d="M634 414 H752" marker-end="url(#hld-arrow-kv)"></path>
+              <text class="svg-kv-text" x="650" y="397">② KV</text>
+              <path class="edge-control" d="M758 466 H640" marker-end="url(#hld-arrow-data)"></path>
+              <text class="svg-control-text" x="652" y="489">③ pull</text>
+              <path class="edge-decode" d="M910 320 V294 H740" marker-end="url(#hld-arrow-decode)"></path>
+              <text class="svg-decode-text" x="786" y="278">④ output tokens</text>
+
+              <rect class="svg-panel" x="36" y="606" width="1028" height="48" rx="2"></rect>
+              <text class="svg-control-text" x="54" y="635">PERIODIC REPLAN</text>
+              <text class="svg-small" x="224" y="635">profile 输入／输出长度与到达率 → 检测分布漂移 → 重新搜索；权重重载为分钟级，负载变化通常为小时级</text>
+            </svg>
+          </div>
+          <figcaption class="diagram-caption">一个 instance 是“恰好管理一份完整模型权重”的资源单元，可由多块 GPU 组成；prefill 与 decoding 各自持有一份权重。低带宽部署进一步把相同 inter-op stage 的 segments 放在同一节点，使对应层 KV 只走 NVLINK。依据 Figure 6 与 §4 重绘／示意。</figcaption>
+        </figure>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 带宽与显存为什么会反过来约束“拆”</div>
+          <div class="calc-line"><span>KV 传输</span><strong>OPT-66B，512-token 请求约 1.13 GB；R=10 rps → 11.3 GB/s ≈ 90.4 Gbps</strong></div>
+          <div class="calc-line"><span>论文对照</span><strong>现代 InfiniBand 例为 800 Gbps；节点内 A100 NVLINK 峰值例为 600 GB/s</strong></div>
+          <div class="calc-line"><span>175B 权重</span><strong>FP16 模型约 350 GB；prefill + decoding 两份 = 700 GB</strong></div>
+          <div class="calc-line"><span>8-GPU 节点</span><strong>8×80 GB = 640 GB &lt; 700 GB：简单“同节点放一对实例”放不下</strong></div>
+          <p class="example-note">原始数值来自 §3.3 与 §4.2；90.4 Gbps 和 700 GB 为据其演算，论文将前者约写为 90 Gbps。Algorithm 2 的 stage-segment 放置同时解决带宽与节点容量约束，而不是无条件拆分。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="flow" aria-labelledby="flow-title">
+        <div class="section-heading">
+          <span class="eyebrow">03 / Placement to request trace</span>
+          <h2 id="flow-title">先找到 goodput 最优放置，再让一个请求穿过它</h2>
+          <p class="section-deck">点击步骤或用左右方向键。前四步发生在部署与周期性 replan，后三步发生在在线请求路径；不要把离线搜索成本误算进每一次请求的 TTFT。</p>
+          <div class="source-line"><span class="source-chip">Algorithm 1 / 2 · §4.3 / §5</span><span>TP = intra-op / tensor parallelism；PP = inter-op / pipeline parallelism</span></div>
+        </div>
+        <div class="stepper" id="flow-stepper">
+          <div class="step-tabs" role="tablist" aria-label="DistServe 放置与请求步骤">
+            <button class="step-tab" id="step-tab-1" role="tab" aria-selected="true" aria-controls="step-panel-1" tabindex="0" data-step="0" type="button"><span>01</span>刻画负载与 SLO</button>
+            <button class="step-tab" id="step-tab-2" role="tab" aria-selected="false" aria-controls="step-panel-2" tabindex="-1" data-step="1" type="button"><span>02</span>搜索 prefill</button>
+            <button class="step-tab" id="step-tab-3" role="tab" aria-selected="false" aria-controls="step-panel-3" tabindex="-1" data-step="2" type="button"><span>03</span>搜索 decoding</button>
+            <button class="step-tab" id="step-tab-4" role="tab" aria-selected="false" aria-controls="step-panel-4" tabindex="-1" data-step="3" type="button"><span>04</span>带宽感知放置</button>
+            <button class="step-tab" id="step-tab-5" role="tab" aria-selected="false" aria-controls="step-panel-5" tabindex="-1" data-step="4" type="button"><span>05</span>执行 prefill</button>
+            <button class="step-tab" id="step-tab-6" role="tab" aria-selected="false" aria-controls="step-panel-6" tabindex="-1" data-step="5" type="button"><span>06</span>拉取 KV 并解码</button>
+            <button class="step-tab" id="step-tab-7" role="tab" aria-selected="false" aria-controls="step-panel-7" tabindex="-1" data-step="6" type="button"><span>07</span>复制与重规划</button>
+          </div>
+          <div class="step-panels">
+            <article class="step-panel" id="step-panel-1" role="tabpanel" aria-labelledby="step-tab-1" data-panel="0">
+              <div class="step-heading"><span class="step-index">01</span><div><h3>把应用需求转成可搜索的输入</h3><p>收集模型、GPU 显存与集群拓扑，以及目标流量 R、TTFT、TPOT、SLO attainment 和历史输入／输出长度。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>从历史 trace 拟合长度分布并重采样，用 Poisson 到达或相应历史模型构造模拟负载；不是试图准确预测下一秒，而是估计较长窗口的统计特征。</p></div><div><h4>工程要点</h4><p>SLO 不是附属标签，而是 goodput 的组成部分。没有 TTFT、TPOT 与 attainment 目标，就无法比较两个放置谁更好。</p></div></div>
+              <span class="formula">input = (G, N, M, C, W, R, TTFT_SLO, TPOT_SLO, attainment_goal)</span><span class="source-chip">§4.1 · §6.1</span>
+            </article>
+            <article class="step-panel" id="step-panel-2" role="tabpanel" aria-labelledby="step-tab-2" data-panel="1" hidden>
+              <div class="step-heading"><span class="step-index">02</span><div><h3>独立搜索 prefill 实例</h3><p>枚举可行的 intra-op 与 inter-op 组合，用模拟器和二分搜索找到满足 TTFT 的最大速率。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>对每个配置计算 goodput，再除以该实例占用的 GPU 数；随后复制 prefill 实例，直到容量覆盖目标 R。</p></div><div><h4>工程要点</h4><p>prefill 通常小 batch。低于 L<sub>m</sub> 时可合并短 prompt 靠近饱和点；严格 TTFT 倾向更强 intra-op，高到达率时 inter-op 可降低排队。</p></div></div>
+              <span class="formula">configₚ* = argmax [ goodput_prefill(configₚ, W, TTFT_SLO) / num_gpus(configₚ) ]</span><span class="source-chip">§3.1 · Algorithm 1</span>
+            </article>
+            <article class="step-panel" id="step-panel-3" role="tabpanel" aria-labelledby="step-tab-3" data-panel="2" hidden>
+              <div class="step-heading"><span class="step-index">03</span><div><h3>独立搜索 decoding 实例</h3><p>对 decoding 做同样的配置枚举与二分搜索，但这次满足的是 TPOT，并显式考虑大 batch 与 KV 显存。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>选择每 GPU goodput 最高的 decoding 配置，再复制实例达到目标速率。多个 prefill 实例可以对应一个 decoding 实例。</p></div><div><h4>工程要点</h4><p>decoding 先用大 batch 提高带宽利用；严格 TPOT 可用 intra-op 降执行时间，超出 latency 拐点后用 inter-op 或复制扩 rate capacity。</p></div></div>
+              <span class="formula">config_d* = argmax [ goodput_decoding(config_d, W, TPOT_SLO) / num_gpus(config_d) ]</span><span class="source-chip">§3.2 · Algorithm 1</span>
+            </article>
+            <article class="step-panel" id="step-panel-4" role="tabpanel" aria-labelledby="step-tab-4" data-panel="3" hidden>
+              <div class="step-heading"><span class="step-index">04</span><div><h3>按节点亲和性选择放置算法</h3><p>高速跨节点网络可独立优化两类实例；低带宽集群必须联合考虑 segment 放置与显存。</p></div></div>
+              <div class="step-detail-grid"><div><h4>高节点亲和 · Algorithm 1</h4><p>分别求 prefill 与 decoding 最优配置，再按目标 R 复制。允许跨任意节点放置，前提是 KV 传输开销足够小。</p></div><div><h4>低节点亲和 · Algorithm 2</h4><p>按 inter-op stage 切分 instance segments，把同一层的 prefill／decoding segments 放同节点，强制 KV 走 NVLINK；同时检查节点 GPU 与显存约束。</p></div></div>
+              <span class="formula">stage ℓ: prefill_segment(ℓ) + decoding_segment(ℓ) → same node → NVLINK</span><span class="source-chip">§4.1 / §4.2</span>
+            </article>
+            <article class="step-panel" id="step-panel-5" role="tabpanel" aria-labelledby="step-tab-5" data-panel="4" hidden>
+              <div class="step-heading"><span class="step-index">05</span><div><h3>控制器选择最短 prefill 队列</h3><p>请求进入 FCFS 控制面，被分到一个 prefill 实例；该实例处理全部 prompt，产出首 token 和 KV cache。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>短请求可组批到总长度接近 L<sub>m</sub>，长请求单独执行，减少 inter-op pipeline 中因输入长度不齐产生的 bubbles。</p></div><div><h4>工程要点</h4><p>prefill 完成后不立即把 KV 推给 decoding，而是先留在自己的 GPU 内存中。这样它可继续服务其他请求，也把缓冲压力显式保留在上游。</p></div></div>
+              <span class="formula">request → prefill instance with shortest queue → first token + KV</span><span class="source-chip">§4.3 · Reducing pipeline bubbles / Combat burstiness</span>
+            </article>
+            <article class="step-panel" id="step-panel-6" role="tabpanel" aria-labelledby="step-tab-6" data-panel="5" hidden>
+              <div class="step-heading"><span class="step-index">06</span><div><h3>decoding 按需 pull KV，逐 token 生成</h3><p>请求被分配到 least-loaded decoding 实例；该实例拉取 KV 与首 token，进入连续 decoding steps。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>节点内用 asynchronous CudaMemcpy，跨节点用 NCCL。传输与计算尽量异步，实例无需复杂全局同步。</p></div><div><h4>工程要点</h4><p>pull 是自然背压：decoding 有能力时才取 KV，避免突发流量瞬间淹没其显存。代价是 prefill 需要承担队列缓冲与故障依赖。</p></div></div>
+              <span class="formula">decoding ready → pull KV → decode token 2 … token T → stream response</span><span class="source-chip">§4.3 / §5 · Figure 6</span>
+            </article>
+            <article class="step-panel" id="step-panel-7" role="tabpanel" aria-labelledby="step-tab-7" data-panel="6" hidden>
+              <div class="step-heading"><span class="step-index">07</span><div><h3>复制实例覆盖流量，周期性重规划</h3><p>当前放置按目标 R 复制 n、m 个实例；profiler 发现负载分布显著变化后重新运行搜索。</p></div></div>
+              <div class="step-detail-grid"><div><h4>发生什么</h4><p>算法搜索是秒到分钟级，权重重载为分钟级，论文把其放在小时级负载变化背景下；运行时不做频繁全局重配置。</p></div><div><h4>工程要点</h4><p>现有实现未包含高级 preemption 与 fault tolerance。FCFS 可能有 convoy effect，且一个 decoding 故障可能影响映射到它的多个 prefill 实例。</p></div></div>
+              <span class="formula">n = ⌈R / goodputₚ⌉　m = ⌈R / goodput_d⌉　　replan(profile_shift)</span><span class="source-chip">§4.1 / §4.3 · Preemption and fault tolerance</span>
+            </article>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · OPT-175B 的“非平凡配置”到底占多少 GPU</div>
+          <div class="calc-line"><span>Table 3 · ShareGPT</span><strong>prefill：TP=3，PP=3；decoding：TP=4，PP=3</strong></div>
+          <div class="calc-line"><span>一个 prefill instance</span><strong>3 × 3 = 9 GPUs，管理一份完整 175B 权重</strong></div>
+          <div class="calc-line"><span>一个 decoding instance</span><strong>4 × 3 = 12 GPUs，管理另一份完整权重</strong></div>
+          <div class="calc-line"><span>一组 1P + 1D</span><strong>共 21 GPUs；再按 n、m 复制以满足目标 R</strong></div>
+          <p class="example-note">配置来自 Appendix B / Table 3；GPU 数量为本报告据 TP×PP 演算。论文没有把这组配置描述为“最小 GPU 数”，而是描述为在 ShareGPT 双 SLO 下平衡负载、降低总成本的选择。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="workloads" aria-labelledby="workloads-title">
+        <div class="section-heading">
+          <span class="eyebrow">04 / Workload dataflow</span>
+          <h2 id="workloads-title">同一条请求路径，因 SLO 不同而偏向不同资源池</h2>
+          <p class="section-deck">三类应用都不改变基本运行时，但会改变搜索出的并行配置和哪一侧更紧迫。切换场景，查看 SLO、Table 3 配置与论文结果如何一一对应。</p>
+          <div class="source-line"><span class="source-chip">Table 1 / 3 · Figure 8 / 9</span><span>所有应用均使用 FP16 OPT；实验集群为 4 节点 × 8×A100-80GB</span></div>
+        </div>
+        <div class="scenario-tabs" role="group" aria-label="选择应用负载">
+          <button class="scenario-tab" type="button" data-scenario-choice="chatbot" aria-pressed="true">Chatbot · OPT-13B</button>
+          <button class="scenario-tab" type="button" data-scenario-choice="code" aria-pressed="false">代码补全 · OPT-66B</button>
+          <button class="scenario-tab" type="button" data-scenario-choice="summary" aria-pressed="false">长文摘要 · OPT-66B</button>
+        </div>
+        <div id="scenario-stage" data-scenario="chatbot">
+          <div class="svg-scroll">
+            <svg class="scenario-svg" viewBox="0 0 1080 520" role="img" aria-labelledby="scenario-svg-title scenario-svg-desc">
+              <title id="scenario-svg-title">三类应用的 DistServe 数据流</title>
+              <desc id="scenario-svg-desc">请求从控制器进入 prefill，再经 KV 缓冲进入 decoding。代码补全强调 prefill，长文摘要强调 decoding 与 KV 传输，chatbot 平衡两侧。</desc>
+              <defs>
+                <marker id="scenario-arrow-data" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-data" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="scenario-arrow-prefill" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-prefill" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="scenario-arrow-decode" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-decode" d="M0 0 L10 5 L0 10 z"></path></marker>
+                <marker id="scenario-arrow-kv" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="marker-kv" d="M0 0 L10 5 L0 10 z"></path></marker>
+              </defs>
+              <g data-s="chatbot code summary"><rect class="svg-control" x="430" y="34" width="220" height="70" rx="3"></rect><text class="svg-control-text" x="540" y="64" text-anchor="middle">CONTROLLER</text><text class="svg-small" x="540" y="87" text-anchor="middle">shortest / least-loaded queues</text></g>
+              <g data-s="chatbot code summary"><rect class="svg-prefill" x="54" y="176" width="270" height="170" rx="3"></rect><text class="svg-prefill-text" x="76" y="208">PREFILL POOL</text><text class="svg-mono" x="76" y="241">prompt → first token</text><text class="svg-small" x="76" y="271">FCFS + Lm-aware batching</text><text class="svg-small" x="76" y="315">KV retained for backpressure</text></g>
+              <g data-s="chatbot code summary"><rect class="svg-kv" x="446" y="184" width="188" height="154" rx="3"></rect><text class="svg-kv-text" x="540" y="218" text-anchor="middle">KV BUFFER</text><text class="svg-mono" x="540" y="254" text-anchor="middle">pull on demand</text><text class="svg-small" x="540" y="287" text-anchor="middle">NVLINK / NCCL</text></g>
+              <g data-s="chatbot code summary"><rect class="svg-decode" x="756" y="176" width="270" height="170" rx="3"></rect><text class="svg-decode-text" x="778" y="208">DECODING POOL</text><text class="svg-mono" x="778" y="241">next token × T</text><text class="svg-small" x="778" y="271">large batch + TPOT</text><text class="svg-small" x="778" y="315">stream output</text></g>
+              <g data-s="chatbot"><rect class="svg-panel" x="360" y="400" width="360" height="82" rx="2"></rect><text class="svg-control-text" x="540" y="429" text-anchor="middle">SLO / BALANCED RESPONSIVENESS</text><text class="svg-mono" x="540" y="458" text-anchor="middle">TTFT 0.25s · TPOT 0.10s</text></g>
+              <g data-s="code"><rect class="svg-panel" x="360" y="400" width="360" height="82" rx="2"></rect><text class="svg-prefill-text" x="540" y="429" text-anchor="middle">SLO / TTFT-CRITICAL</text><text class="svg-mono" x="540" y="458" text-anchor="middle">TTFT 0.125s · TPOT 0.20s</text></g>
+              <g data-s="summary"><rect class="svg-panel" x="360" y="400" width="360" height="82" rx="2"></rect><text class="svg-decode-text" x="540" y="429" text-anchor="middle">SLO / TPOT-CRITICAL</text><text class="svg-mono" x="540" y="458" text-anchor="middle">TTFT 15s · TPOT 0.15s</text></g>
+              <path class="edge-prefill flow-edge" data-s="chatbot code summary" d="M430 90 C300 90 250 108 190 170" marker-end="url(#scenario-arrow-prefill)"></path>
+              <path class="edge-prefill flow-edge" data-s="chatbot code summary" d="M324 260 H440" marker-end="url(#scenario-arrow-prefill)"></path>
+              <path class="edge-kv flow-edge" data-s="chatbot code summary" d="M634 260 H750" marker-end="url(#scenario-arrow-kv)"></path>
+              <path class="edge-control flow-edge" data-s="chatbot code summary" d="M756 318 H640" marker-end="url(#scenario-arrow-data)"></path>
+              <path class="edge-decode flow-edge" data-s="chatbot code summary" d="M890 346 V394" marker-end="url(#scenario-arrow-decode)"></path>
+              <path class="edge-prefill flow-edge" data-s="code" d="M110 156 V126 H324 V166" marker-end="url(#scenario-arrow-prefill)"></path>
+              <text class="svg-prefill-text" data-s="code" x="124" y="148">TP=4 · PP=1 / reduce TTFT</text>
+              <path class="edge-decode flow-edge" data-s="summary" d="M1010 170 C1050 110 950 84 790 110" marker-end="url(#scenario-arrow-decode)"></path>
+              <text class="svg-decode-text" data-s="summary" x="792" y="96">TP=2 · PP=2 / scale TPOT capacity</text>
+              <g class="scenario-badge" data-badge="chatbot" transform="translate(300 124)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">1</text></g>
+              <g class="scenario-badge" data-badge="chatbot" transform="translate(384 238)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">2</text></g>
+              <g class="scenario-badge" data-badge="chatbot" transform="translate(692 238)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">3</text></g>
+              <g class="scenario-badge" data-badge="chatbot" transform="translate(890 374)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">4</text></g>
+              <g class="scenario-badge" data-badge="code" transform="translate(400 110)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">1</text></g>
+              <g class="scenario-badge" data-badge="code" transform="translate(360 146)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">2</text></g>
+              <g class="scenario-badge" data-badge="code" transform="translate(692 238)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">3</text></g>
+              <g class="scenario-badge" data-badge="code" transform="translate(890 374)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">4</text></g>
+              <g class="scenario-badge" data-badge="summary" transform="translate(300 124)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">1</text></g>
+              <g class="scenario-badge" data-badge="summary" transform="translate(384 238)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">2</text></g>
+              <g class="scenario-badge" data-badge="summary" transform="translate(692 238)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">3</text></g>
+              <g class="scenario-badge" data-badge="summary" transform="translate(890 374)"><circle class="badge-circle" r="14"></circle><text class="badge-text" y="1">4</text></g>
+            </svg>
+          </div>
+          <div class="scenario-panels">
+            <article class="scenario-panel" data-scenario-panel="chatbot">
+              <div class="scenario-summary"><span class="source-chip">SHAREGPT / CHATBOT</span><h3>响应速度与阅读速度都要顾及</h3><p>OPT-13B：TTFT=0.25s，TPOT=0.10s。Table 3 选择 prefill TP=2／PP=1，decoding TP=1／PP=1；用最少并行满足较均衡的双 SLO。</p></div>
+              <ol class="scenario-steps"><li><strong>①</strong> 请求进入最短 prefill 队列，避免长 prompt 卡住 decoding。</li><li><strong>②</strong> prefill 以 TP=2 缩短执行，decoding 保持单 GPU 配置。</li><li><strong>③</strong> KV 按需传输，保持两侧独立节奏。</li><li><strong>④</strong> Chatbot 总体结果：相对 vLLM 提升 2.0×–4.6× rate；相对 DeepSpeed-MII 提升 1.6×–7.4×。</li></ol>
+            </article>
+            <article class="scenario-panel" data-scenario-panel="code" hidden>
+              <div class="scenario-summary"><span class="source-chip">HUMANEVAL / CODE COMPLETION</span><h3>编码助手更怕“想了太久才开始写”</h3><p>OPT-66B：TTFT=0.125s，TPOT=0.20s。严格 TTFT 让 prefill 使用 TP=4／PP=1；decoding 为 TP=2／PP=2，与 LongBench 相同但目标不同。</p></div>
+              <ol class="scenario-steps"><li><strong>①</strong> 严格首 token 延迟使 prefill 成为主要约束。</li><li><strong>②</strong> 搜索自动增加 prefill intra-op，降低执行与排队时间。</li><li><strong>③</strong> KV 进入 decoding 后，较宽松 TPOT 允许容量扩展。</li><li><strong>④</strong> 相对 vLLM：5.7× rate、1.4× 更严格 SLO；相对 MII：1.6×、1.4×。</li></ol>
+            </article>
+            <article class="scenario-panel" data-scenario-panel="summary" hidden>
+              <div class="scenario-summary"><span class="source-chip">LONGBENCH / SUMMARIZATION</span><h3>长 prompt 可以等，输出必须持续快速地读完</h3><p>OPT-66B：TTFT=15s，TPOT=0.15s。长输入增大 prefill 和 KV 传输压力，但较宽松 TTFT 让系统能把优化重点放到 decoding 与每 GPU goodput。</p></div>
+              <ol class="scenario-steps"><li><strong>①</strong> 长 prompt 进入 prefill，输入长度被 cap 到 OPT 支持的 2048。</li><li><strong>②</strong> prefill TP=4／PP=1；KV 体积与传输需求随长度增长。</li><li><strong>③</strong> decoding TP=2／PP=2，重点守住 TPOT。</li><li><strong>④</strong> 相对 vLLM：4.3× rate、12.6× 更严格 SLO；相对 MII：1.8×、2.6×。</li></ol>
+            </article>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 两个 OPT-66B 应用的 SLO 差多少</div>
+          <div class="calc-line"><span>代码补全</span><strong>TTFT 0.125s；TPOT 0.20s：首 token 必须非常快</strong></div>
+          <div class="calc-line"><span>长文摘要</span><strong>TTFT 15s；TPOT 0.15s：可等首 token，但生成要更快</strong></div>
+          <div class="calc-line"><span>TTFT 宽松倍数</span><strong>15 / 0.125 = 120×（摘要相对代码补全）</strong></div>
+          <div class="calc-line"><span>TPOT 严格程度</span><strong>0.20 / 0.15 ≈ 1.33×（摘要要求更严格）</strong></div>
+          <p class="example-note">SLO 来自 Table 1，倍率为本报告演算。Table 3 中两者并行配置相同，说明配置并非只由应用名决定；rate、负载分布和 attainment 仍共同决定最终 goodput。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="decisions" aria-labelledby="decisions-title">
+        <div class="section-heading">
+          <span class="eyebrow">05 / Design decisions</span>
+          <h2 id="decisions-title">真正值钱的不是“拆”，而是拆开后的六项配套选择</h2>
+          <p class="section-deck">相位解耦会复制权重、引入 KV 传输和故障依赖。论文的价值在于同时给出 goodput 目标、独立并行搜索、带宽约束、背压和重规划，而不是只画两个资源池。</p>
+        </div>
+        <div class="decision-grid">
+          <article class="decision-card">
+            <div class="decision-title"><span>D1</span><h3>优化 goodput，而不是最大 token throughput</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>系统应该追求“做得多”，还是“在延迟合格的前提下做得多”？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>Orca／vLLM 以 colocated continuous batching 最大化总 token/s；只追求大 batch 也可能让 P90／P99 延迟突破 SLO。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>goodput 把 TTFT、TPOT 和 attainment 同时纳入目标，并除以 GPU 数，直接对应查询成本与服务质量。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>必须获得双 SLO、到达过程和长度分布；没有这些输入，goodput  frontier 无法定义，且离线吞吐场景未必适合。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D2</span><h3>拆分两个阶段，而不是继续优化共置调度</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>怎样消除长 prefill 对 decoding 的干扰，以及资源与并行配置耦合？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>vLLM 共置；DeepSpeed-MII／SARATHI 的 chunked-prefill + piggyback；简单优先级或串行执行仍留排队与利用不足。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>独立实例从执行路径上去除 interference，并让 prefill 与 decoding 各自扩展 batch、GPU 数和 TP／PP。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>两份模型权重、KV 传输、更多部署单元和故障传播。单 GPU 或极少资源环境无法充分利用这套设计。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D3</span><h3>分别搜索 batch 与并行，而不是共享一种配置</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>计算密集的 prefill 与带宽密集的 decoding，如何避免互相迁就？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>为两阶段指定同一并行度；vLLM++ 虽枚举共置并行策略，仍受 interference 限制，在论文消融中没有超过默认 vLLM。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>prefill 小 batch，低 rate／严 TTFT 偏 intra-op，高 rate 偏 inter-op；decoding 大 batch，严 TPOT 用 intra-op，随后用 inter-op 或复制扩容量。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>需要模型执行预测、显存约束和负载模拟；非均匀 prompt 会产生 pipeline bubbles，M/D/1 结论只能作为指导。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D4</span><h3>把带宽写进放置，而不是拆完再付网络账单</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>跨节点 KV 传输可能要求数十到上百 Gbps，如何保证解耦仍有净收益？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>不考虑拓扑，任意跨节点放置；或简单要求每对 prefill／decoding 实例都同节点——175B 两份权重可超过节点容量。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>高速网络用 Algorithm 1 分相优化；低带宽用 Algorithm 2，将相同 layer stage 的 prefill／decoding segments 同节点放置，强制 KV 走 NVLINK。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>低亲和约束缩小搜索空间并可能降低 goodput；节点内配置组合增加求解时间，但换来可忽略的传输延迟。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D5</span><h3>decoding 拉取 KV，而不是 prefill 主动推送</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>突发流量下，如何避免大量 KV 同时涌入 decoding 显存？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>prefill 一完成就 push；这会让下游无法按自身容量控制 KV 到达节奏，突发时增加 memory overload 风险。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>decoding 需要时才 pull，prefill 的 GPU HBM 兼作队列缓冲，形成自然背压，让两类实例以各自节奏运行。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>上游仍需保留 KV，队列与缓存生命周期更复杂；decoding 故障也会阻塞映射到它的 prefill 路径。</p></div>
+          </article>
+          <article class="decision-card">
+            <div class="decision-title"><span>D6</span><h3>模拟 + 周期重规划，而不是逐请求在线求解</h3></div>
+            <div class="decision-part"><h4>决策问题</h4><p>如何在可接受的规划成本下，从大量配置中找到 SLO 最优放置？</p></div>
+            <div class="decision-part"><h4>被否决的备选</h4><p>对所有候选做真实集群 profiling，时间成本过高；或在每次请求时进行全局优化，控制面会进入关键延迟路径。</p></div>
+            <div class="decision-part"><h4>为什么这样选</h4><p>用历史分布重采样、离散事件模拟和二分搜索评估候选，按小时级负载变化周期 replan；Table 2 中模拟与实测误差小于 2%。</p></div>
+            <div class="decision-part tradeoff"><h4>代价 / 权衡</h4><p>历史分布漂移与短期突发不可准确预测；规划需要秒到分钟，权重重载也需分钟级。现有 FCFS 仍无高级抢占与容错。</p></div>
+          </article>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · chunked-prefill 的 KV 重读为什么会变成平方项</div>
+          <div class="calc-line"><span>示例值</span><strong>把一个 prefill 等分为 N=4 个 chunks</strong></div>
+          <div class="calc-line"><span>逐块计算</span><strong>第 1 块读 1 份历史 KV；第 2 块读 2 份；第 3 块读 3 份；第 4 块读 4 份</strong></div>
+          <div class="calc-line"><span>累计</span><strong>4 + 3 + 2 + 1 = 10 个 chunk 份 KV</strong></div>
+          <div class="calc-line"><span>相对不切块</span><strong>不切块累计 4 份；10 / 4 = 2.5×</strong></div>
+          <p class="example-note">N=4 为本报告示例值，推导对应 §2.3 的 N+(N−1)+…+1=O(N²)，不切块为 O(N)。它解释为什么 piggyback 虽能缓解 decoding 等待，却不是无成本替代。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="experiments" aria-labelledby="experiments-title">
+        <div class="section-heading">
+          <span class="eyebrow">06 / Evidence and model lab</span>
+          <h2 id="experiments-title">实测证明净收益，模型解释“为什么这样配置”</h2>
+          <p class="section-deck">实验部分分成三层：真实集群上的应用结果、模拟器与实测的一致性、用于理解排队趋势的公式演算。第三层是示例值，不是论文实测数据。</p>
+          <div class="source-line"><span class="source-chip">Figure 8–14 · Table 1–3 · Eq. 1–3</span><span>主要结果采用 90% attainment；附录另测 99%</span></div>
+        </div>
+        <div class="stack">
+          <div class="evidence-block">
+            <div class="evidence-heading"><div><span class="source-chip">端到端 · 90% ATTAINMENT</span><h3>不同应用的收益来自不同约束</h3></div><p>集群：4 节点，每节点 8×A100-80GB；NVLINK 节点内互联，跨节点 25Gbps；OPT / FP16。</p></div>
+            <div class="table-wrap"><table class="wide-table" aria-label="DistServe 端到端结果汇总"><thead><tr><th>应用 / 模型</th><th>TTFT / TPOT SLO</th><th>相对 vLLM：rate</th><th>相对 vLLM：更严 SLO</th><th>相对 DeepSpeed-MII：rate / SLO</th></tr></thead><tbody>
+              <tr><td>Chatbot · 13B–175B</td><td>Table 1 随模型变化</td><td>2.0×–4.6×</td><td>1.8×–3.2×</td><td>1.6×–7.4× / 1.7×–1.8×</td></tr>
+              <tr><td>代码补全 · OPT-66B</td><td>0.125s / 0.20s</td><td>5.7×</td><td>1.4×</td><td>1.6× / 1.4×</td></tr>
+              <tr class="row-highlight"><td>长文摘要 · OPT-66B</td><td>15s / 0.15s</td><td>4.3×</td><td>12.6×</td><td>1.8× / 2.6×</td></tr>
+            </tbody></table></div>
+            <p class="example-note">“更严 SLO”指同时缩放 Table 1 中 TTFT 与 TPOT 后仍能维持 attainment 的比例倍数，不是延迟本身降低同样倍数。DeepSpeed-MII 无法服务 OPT-175B 的设定见 §6.2 基线说明。</p>
+          </div>
+
+          <div class="evidence-block">
+            <div class="evidence-heading"><div><span class="source-chip">模拟器校准 · TABLE 2</span><h3>误差小于 2%，但只在这组验证设置中被证明</h3></div><p>OPT-66B / ShareGPT；vLLM 与 DistServe-Low 的真实系统和模拟器 SLO attainment 对照。</p></div>
+            <div class="table-wrap"><table aria-label="Table 2 模拟器与真实系统对照"><thead><tr><th>Rate (req/s)</th><th>vLLM 实测</th><th>vLLM 模拟</th><th>DistServe-Low 实测</th><th>DistServe-Low 模拟</th></tr></thead><tbody>
+              <tr><td>1.0</td><td>97.0%</td><td>96.8%</td><td>100.0%</td><td>100.0%</td></tr>
+              <tr><td>1.5</td><td>65.5%</td><td>65.1%</td><td>100.0%</td><td>100.0%</td></tr>
+              <tr><td>2.0</td><td>52.8%</td><td>51.0%</td><td>99.3%</td><td>99.3%</td></tr>
+              <tr><td>2.5</td><td>44.9%</td><td>46.1%</td><td>87.3%</td><td>88.3%</td></tr>
+              <tr><td>3.0</td><td>36.7%</td><td>38.3%</td><td>83.0%</td><td>84.1%</td></tr>
+              <tr><td>3.5</td><td>27.8%</td><td>28.0%</td><td>77.3%</td><td>77.0%</td></tr>
+              <tr><td>4.0</td><td>23.6%</td><td>24.1%</td><td>70.0%</td><td>68.9%</td></tr>
+            </tbody></table></div>
+          </div>
+
+          <div class="evidence-block queue-lab" id="queue-lab">
+            <div class="evidence-heading"><div><span class="source-chip">公式演算器 · EQ. 1–3</span><h3>排队主导后，为什么并行偏好会反转</h3></div><p>示例值：D=0.20s，K=1.60。修改输入或载入预设；公式假设均匀 prefill 长度、Poisson 到达和 M/D/1 稳定区。</p></div>
+            <div class="preset-tabs" role="group" aria-label="载入排队模型示例">
+              <button type="button" data-preset="low" aria-pressed="true">低到达率 · R=2</button>
+              <button type="button" data-preset="high" aria-pressed="false">排队主导 · R=7</button>
+              <button type="button" data-preset="unstable" aria-pressed="false">稳定边界外 · R=11</button>
+            </div>
+            <div class="queue-controls">
+              <div class="queue-field"><label for="input-d">D · 单设备执行时间（s）</label><input id="input-d" type="number" min="0.001" step="0.05" value="0.2"><small>越大表示单次 prefill 越慢</small></div>
+              <div class="queue-field"><label for="input-r">R · 到达率（requests/s）</label><input id="input-r" type="number" min="0" step="0.5" value="2"><small>增大后排队项非线性上升</small></div>
+              <div class="queue-field"><label for="input-k">K · 双路 intra-op speedup</label><input id="input-k" type="number" min="1.01" max="1.99" step="0.1" value="1.6"><small>论文模型取 1&lt;K&lt;2</small></div>
+            </div>
+            <div class="queue-status" id="queue-status" aria-live="polite">RD=0.40；单设备与双路配置均在稳定区内。</div>
+            <div class="queue-grid">
+              <article class="queue-result single" id="result-single"><h4>单设备 · Eq. 1</h4><div class="queue-value" id="value-single">0.267 s</div><p id="detail-single">Avg_TTFT = D + RD² / [2(1−RD)]；稳定条件 RD&lt;1。</p></article>
+              <article class="queue-result inter" id="result-inter"><h4>双路 inter-op · Eq. 2</h4><div class="queue-value" id="value-inter">0.213 s</div><p id="detail-inter">D≈Ds≈2Dm；稳定条件 RD&lt;2。</p></article>
+              <article class="queue-result intra" id="result-intra"><h4>双路 intra-op · Eq. 3</h4><div class="queue-value" id="value-intra">0.146 s</div><p id="detail-intra">执行时间 D/K；稳定条件 RD&lt;K。</p></article>
+            </div>
+            <p class="example-note">这是论文排队模型的可交互演算，不是 DistServe 模拟器，也不预测真实 TTFT。实际系统还有非均匀长度、执行波动、通信和调度误差；论文用真实模拟器与 profiling 做最终放置。</p>
+          </div>
+
+          <div class="evidence-block">
+            <div class="evidence-heading"><div><span class="source-chip">传输、规划与 99% 附录</span><h3>净收益已经扣掉通信与放置成本</h3></div><p>不要只看架构图里的箭头；论文分别测量了传输、模拟器与搜索开销。</p></div>
+            <div class="two-col">
+              <div class="callout"><span class="callout-label">Figure 10 / §6.3</span><p>OPT-175B / ShareGPT 中，KV 传输占总延迟 <strong>&lt;0.1%</strong>；三个 OPT 模型的传输 CDF 中，<strong>&gt;95%</strong> 请求低于 <strong>30ms</strong>，主要来自同 stage 同节点放置。</p></div>
+              <div class="callout"><span class="callout-label">§4.1 / §6.5 / Appendix C</span><p>最大设置下 Algorithm 1 求解低于 <strong>1.3 分钟</strong>。 attainment 提到 99% 后，相对 vLLM 仍有 <strong>3×–8×</strong> rate 与 <strong>1.24×–6.67×</strong> 更严 SLO。</p></div>
+            </div>
+          </div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 怎样读 Table 2 的“误差小于 2%”</div>
+          <div class="calc-line"><span>R=2.0 · vLLM</span><strong>实测 52.8% − 模拟 51.0% = 1.8 个百分点</strong></div>
+          <div class="calc-line"><span>R=2.0 · DistServe-Low</span><strong>实测 99.3% − 模拟 99.3% = 0 个百分点</strong></div>
+          <div class="calc-line"><span>R=3.0 · DistServe-Low</span><strong>实测 83.0%，模拟 84.1%；绝对差 1.1 个百分点</strong></div>
+          <div class="calc-line"><span>正确结论</span><strong>这组表中绝对误差均小于 2 个百分点，不支持“所有负载都不超过 2%”</strong></div>
+          <p class="example-note">数值来自 Table 2，差值为本报告演算。“误差”按 attainment 的绝对百分点差读取；不是相对误差，也不是 TTFT／TPOT 的逐项误差。</p>
+        </aside>
+      </section>
+
+      <section class="report-section" id="critical" aria-labelledby="critical-title">
+        <div class="section-heading">
+          <span class="eyebrow">07 / Critical reading</span>
+          <h2 id="critical-title">拆开以后，性能问题变成了一门容量、拓扑与运维的联合题</h2>
+          <p class="section-deck">论文明确指出离线吞吐、资源受限和极小集群并非最佳场景。进一步看，DistServe 的收益依赖可信的负载分布、足够的 GPU、网络拓扑和可接受的运维复杂度。</p>
+        </div>
+        <div class="stack">
+          <div class="critique-group"><span class="source-chip">论文自认 · §7 / §4.3</span><div class="critique-grid three">
+            <article class="critique-card"><h3>离线吞吐场景可能不占优</h3><p>不敏感于延迟时，chunked-prefill + piggyback 可让每批接近 compute-bound，简单共置架构反而可能更合适。</p></article>
+            <article class="critique-card"><h3>资源很少时搜索空间受限</h3><p>几块甚至单块 GPU 的环境无法充分拆分与调并行，论文承认可能难以奏效，简单系统可降低运维复杂度。</p></article>
+            <article class="critique-card"><h3>没有高级抢占与容错</h3><p>FCFS 有 convoy effect；前后实例依赖引入故障传播，一个 decoding 故障可能影响多个 prefill 实例。</p></article>
+          </div></div>
+          <div class="critique-group"><span class="source-chip">工程师视角 · 进一步质疑</span><div class="critique-grid">
+            <article class="critique-card engineer-card"><h3>SLO 是经验设定，不是行业统一标准</h3><p>作者明确说没有可用的应用 SLO 设置，因此经验选择 Table 1；数据集没有时间戳，到达时间由 Poisson 生成。换一组 SLO 或到达模型，结论边界会改变。</p></article>
+            <article class="critique-card engineer-card"><h3>模拟器校准不能无限外推</h3><p>Table 2 的 &lt;2% 只针对特定模型、负载与配置。非均匀 prompt 会产生 pipeline bubbles，论文也说明 M/D/1 结论会出现偏差。</p></article>
+            <article class="critique-card engineer-card"><h3>两份权重与实例管理不是免费资源</h3><p>per-GPU goodput 已把 GPU 数纳入分母，这是公平之处；但大模型仍需额外权重副本、KV 缓冲与更多实例生命周期管理，节点容量会成为硬约束。</p></article>
+            <article class="critique-card engineer-card"><h3>GQA／MQA 的“会更好”仍是作者推断</h3><p>§6.1 认为新模型因 KV 更小、传输更低会表现更好，这是合理方向，但本文端到端证据主要来自使用经典 MHA 的 OPT，而不是对 GQA／MQA 的直接对照。</p></article>
+            <article class="critique-card engineer-card"><h3>突发背压并不等于完整过载治理</h3><p>pull 能防止 KV 瞬间淹没 decoding，却没有消除 prefill 缓冲占用、请求排队、长任务 convoy 和下游故障。生产部署仍需准入、抢占与恢复策略。</p></article>
+            <article class="critique-card engineer-card"><h3>长上下文结论有机制支持，也有验证边界</h3><p>§7 认为 prefill 二次增长会让传输相对变小、相位差异更大，因此解耦仍有前景；但这不等同于在 1M context 上完成了端到端验证。</p></article>
+          </div></div>
+          <div class="steal-list"><div><span class="source-chip">可以直接偷的思想</span><h3>不实现 DistServe，也能复用这六条</h3></div><ol>
+            <li><strong>把 SLO 写进吞吐指标。</strong>任何“更快”的系统都应先回答多少请求仍满足用户体验约束。</li>
+            <li><strong>先找相互干扰、优化目标不同的阶段。</strong>拆分不是为了微服务化，而是为了独立资源配置。</li>
+            <li><strong>资源数与并行策略必须联合搜索。</strong>只换 GPU 数量，可能错过低延迟与高容量之间的拐点。</li>
+            <li><strong>把网络与显存作为放置约束。</strong>拓扑不是部署后的细节，而是架构成立的前提。</li>
+            <li><strong>用 pull 建立自然背压。</strong>让下游按能力取数据，比上游无节制推送更能抵抗突发。</li>
+            <li><strong>用模拟做慢决策，用简单调度跑热路径。</strong>profiling、模拟和周期 replan 不必进入每个请求的关键路径。</li>
+          </ol></div>
+        </div>
+        <aside class="run-example">
+          <div class="run-title">▶ 跑一遍 · 一个下游故障为什么会被架构放大</div>
+          <div class="calc-line"><span>示例拓扑</span><strong>3 个 prefill 实例 P1/P2/P3 映射到 1 个 decoding 实例 D1</strong></div>
+          <div class="calc-line"><span>正常状态</span><strong>D1 聚合大 batch，三个 prefill 路径共同维持其 decoding 容量</strong></div>
+          <div class="calc-line"><span>D1 故障</span><strong>三条请求的 decoding 路径都受阻；对应 KV 也无法被正常拉取</strong></div>
+          <div class="calc-line"><span>工程结论</span><strong>解耦提高资源效率，但需要重映射、超时、复制或故障隔离来防止传播</strong></div>
+          <p class="example-note">3P+1D 为本报告示例值，用于解释 §4.3 所述 fault propagation，不是论文实测故障率。论文把 preemption 与 fault tolerance 留作后续工作。</p>
+        </aside>
+      </section>
+
+      <footer class="report-footer">
+        <div><span class="source-chip">SOURCE &amp; METHOD</span><h2>读到这里，应该记住的一句话</h2></div>
+        <p>DistServe 的核心不是“prefill 与 decoding 分机器”这句话，而是一个完整的 goodput 优化闭环：<strong>双 SLO 定义合格工作，分相搜索决定资源与并行，带宽约束决定放置，pull 与 replan 维持在线运行。</strong></p>
+        <p class="muted">本报告仅依据用户提供的 arXiv:2401.09670v3（2024-06-06）编写，图表编号均指该 PDF；未混入后续 DistServe 版本或其他解耦系统的结果。论文数值与自行演算、示例值分开标注，重绘图均注明依据。</p>
+        <div class="footer-links"><a href="https://arxiv.org/abs/2401.09670">论文页面</a><a href="https://github.com/LLMServe/DistServe">论文所附开源仓库</a><a href="#hero">回到顶部</a></div>
+      </footer>
+    </main>
+  </div>
+  <script>
+    (function () {
+      'use strict';
+      var root = document.documentElement;
+      var params = new URLSearchParams(window.location.search);
+      var themeButton = document.getElementById('theme-toggle');
+      var scheme = window.matchMedia('(prefers-color-scheme: light)');
+      function storedTheme() { try { return window.localStorage.getItem('distserve-deep-dive-theme'); } catch (error) { return null; } }
+      function applyTheme(theme, persist) {
+        var value = theme === 'light' ? 'light' : 'dark';
+        root.setAttribute('data-theme', value);
+        themeButton.textContent = value === 'light' ? '主题：浅色' : '主题：深色';
+        themeButton.setAttribute('aria-label', value === 'light' ? '切换为深色主题' : '切换为浅色主题');
+        if (persist) { try { window.localStorage.setItem('distserve-deep-dive-theme', value); } catch (error) {} }
+      }
+      applyTheme(root.getAttribute('data-theme'), false);
+      themeButton.addEventListener('click', function () { applyTheme(root.getAttribute('data-theme') === 'light' ? 'dark' : 'light', true); });
+      if (typeof scheme.addEventListener === 'function') scheme.addEventListener('change', function (event) { if (!storedTheme()) applyTheme(event.matches ? 'light' : 'dark', false); });
+
+      var stepTabs = Array.prototype.slice.call(document.querySelectorAll('.step-tab'));
+      var stepPanels = Array.prototype.slice.call(document.querySelectorAll('.step-panel'));
+      function selectStep(index, moveFocus) {
+        var next = Math.max(0, Math.min(stepTabs.length - 1, index));
+        stepTabs.forEach(function (tab, i) { var active = i === next; tab.setAttribute('aria-selected', active ? 'true' : 'false'); tab.tabIndex = active ? 0 : -1; });
+        stepPanels.forEach(function (panel, i) { panel.hidden = i !== next; });
+        document.getElementById('flow-stepper').setAttribute('data-active-step', String(next + 1));
+        if (moveFocus) stepTabs[next].focus();
+      }
+      stepTabs.forEach(function (tab, index) {
+        tab.addEventListener('click', function () { selectStep(index, false); });
+        tab.addEventListener('keydown', function (event) {
+          var current = stepTabs.indexOf(document.activeElement);
+          var next = null;
+          if (event.key === 'ArrowRight') next = (current + 1) % stepTabs.length;
+          if (event.key === 'ArrowLeft') next = (current - 1 + stepTabs.length) % stepTabs.length;
+          if (event.key === 'Home') next = 0;
+          if (event.key === 'End') next = stepTabs.length - 1;
+          if (next !== null) { event.preventDefault(); selectStep(next, true); }
+        });
+      });
+
+      var scenarioStage = document.getElementById('scenario-stage');
+      var scenarioButtons = Array.prototype.slice.call(document.querySelectorAll('[data-scenario-choice]'));
+      var scenarioPanels = Array.prototype.slice.call(document.querySelectorAll('[data-scenario-panel]'));
+      function selectScenario(name) {
+        var valid = ['chatbot', 'code', 'summary'].indexOf(name) >= 0 ? name : 'chatbot';
+        scenarioStage.setAttribute('data-scenario', valid);
+        scenarioButtons.forEach(function (button) { button.setAttribute('aria-pressed', button.getAttribute('data-scenario-choice') === valid ? 'true' : 'false'); });
+        scenarioPanels.forEach(function (panel) { panel.hidden = panel.getAttribute('data-scenario-panel') !== valid; });
+      }
+      scenarioButtons.forEach(function (button) { button.addEventListener('click', function () { selectScenario(button.getAttribute('data-scenario-choice')); }); });
+
+      var dInput = document.getElementById('input-d');
+      var rInput = document.getElementById('input-r');
+      var kInput = document.getElementById('input-k');
+      var presetButtons = Array.prototype.slice.call(document.querySelectorAll('[data-preset]'));
+      var queueStatus = document.getElementById('queue-status');
+      var presets = { low: { d: 0.2, r: 2, k: 1.6 }, high: { d: 0.2, r: 7, k: 1.6 }, unstable: { d: 0.2, r: 11, k: 1.6 } };
+      function setResult(name, value, invalid) {
+        var card = document.getElementById('result-' + name);
+        var output = document.getElementById('value-' + name);
+        card.classList.toggle('is-invalid', invalid);
+        output.textContent = invalid ? '稳定区外' : value.toFixed(3) + ' s';
+      }
+      function calculateQueue() {
+        var d = Number(dInput.value), r = Number(rInput.value), k = Number(kInput.value);
+        var valid = Number.isFinite(d) && Number.isFinite(r) && Number.isFinite(k) && d > 0 && r >= 0 && k > 1 && k < 2;
+        if (!valid) {
+          queueStatus.textContent = '输入无效：D>0，R≥0，且论文模型要求 1<K<2。';
+          ['single', 'inter', 'intra'].forEach(function (name) { setResult(name, 0, true); });
+          return;
+        }
+        var rd = r * d;
+        queueStatus.textContent = 'D=' + d.toFixed(3) + 's，R=' + r.toFixed(2) + ' rps，K=' + k.toFixed(2) + '，RD=' + rd.toFixed(2) + '；稳定条件依次为 RD<1、RD<2、RD<K。';
+        setResult('single', d + r * d * d / (2 * (1 - rd)), rd >= 1);
+        setResult('inter', d + r * d * d / (4 * (2 - rd)), rd >= 2);
+        setResult('intra', d / k + r * d * d / (2 * k * (k - rd)), rd >= k);
+      }
+      function selectPreset(name) {
+        var preset = presets[name] || presets.low;
+        dInput.value = preset.d;
+        rInput.value = preset.r;
+        kInput.value = preset.k;
+        presetButtons.forEach(function (button) { button.setAttribute('aria-pressed', button.getAttribute('data-preset') === name ? 'true' : 'false'); });
+        calculateQueue();
+      }
+      presetButtons.forEach(function (button) { button.addEventListener('click', function () { selectPreset(button.getAttribute('data-preset')); }); });
+      [dInput, rInput, kInput].forEach(function (input) {
+        input.addEventListener('input', function () { presetButtons.forEach(function (button) { button.setAttribute('aria-pressed', 'false'); }); calculateQueue(); });
+      });
+
+      var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#toc-list a'));
+      var sections = tocLinks.map(function (link) { return document.querySelector(link.getAttribute('href')); }).filter(Boolean);
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function () {
+          var current = sections[0];
+          var anchor = window.scrollY + Math.min(window.innerHeight * .28, 260);
+          if (window.scrollY > 80) sections.forEach(function (section) { var top = section.getBoundingClientRect().top + window.scrollY; if (top <= anchor) current = section; });
+          tocLinks.forEach(function (link) { link.setAttribute('aria-current', link.getAttribute('href') === '#' + current.id ? 'true' : 'false'); });
+        }, { rootMargin: '-12% 0px -62% 0px', threshold: [0, 0.05, 0.2, 0.5] });
+        sections.forEach(function (section) { observer.observe(section); });
+      }
+
+      var requestedStep = Number(params.get('step') || '1') - 1;
+      selectStep(Number.isFinite(requestedStep) ? requestedStep : 0, false);
+      selectScenario(params.get('scenario') || 'chatbot');
+      if (params.has('d') || params.has('r') || params.has('k')) {
+        dInput.value = params.get('d') || '0.2';
+        rInput.value = params.get('r') || '2';
+        kInput.value = params.get('k') || '1.6';
+        presetButtons.forEach(function (button) { button.setAttribute('aria-pressed', 'false'); });
+        calculateQueue();
+      } else selectPreset(params.get('preset') || 'low');
+
+      function runSelfTest() {
+        var errors = [];
+        stepTabs.forEach(function (tab, index) { selectStep(index, false); if (stepPanels[index].hidden) errors.push('step panel hidden incorrectly: ' + index); });
+        selectStep(0, false);
+        stepTabs[0].focus();
+        stepTabs[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        if (stepPanels[1].hidden) errors.push('ArrowRight did not advance stepper');
+        ['chatbot', 'code', 'summary'].forEach(function (name) { selectScenario(name); if (scenarioStage.getAttribute('data-scenario') !== name) errors.push('scenario failed: ' + name); });
+        selectPreset('low');
+        var low = [Number(document.getElementById('value-single').textContent.replace(' s', '')), Number(document.getElementById('value-inter').textContent.replace(' s', '')), Number(document.getElementById('value-intra').textContent.replace(' s', ''))];
+        if (!(low[2] < low[1] && low[1] < low[0])) errors.push('low-rate queue ordering failed');
+        selectPreset('high');
+        var inter = Number(document.getElementById('value-inter').textContent.replace(' s', ''));
+        var intra = Number(document.getElementById('value-intra').textContent.replace(' s', ''));
+        if (!(inter < intra) || !document.getElementById('result-single').classList.contains('is-invalid')) errors.push('high-rate queue ordering failed');
+        selectPreset('unstable');
+        if (!document.getElementById('result-inter').classList.contains('is-invalid') || !document.getElementById('result-intra').classList.contains('is-invalid')) errors.push('unstable queue state failed');
+        selectStep(0, false); selectScenario('chatbot'); selectPreset('low');
+        if (!root.getAttribute('data-theme')) errors.push('missing data-theme');
+        if (document.documentElement.scrollWidth > window.innerWidth + 1) errors.push('body horizontal overflow');
+        if (document.querySelectorAll('script[src], link[rel="stylesheet"], img[src^="http"]').length) errors.push('external dependency found');
+        var output = document.createElement('pre');
+        output.id = 'selftest-result';
+        output.textContent = JSON.stringify({ status: errors.length ? 'FAIL' : 'PASS', errors: errors, viewport: [window.innerWidth, window.innerHeight], documentWidth: document.documentElement.scrollWidth, documentHeight: document.documentElement.scrollHeight, sectionOffsets: sections.map(function (section) { return { id: section.id, top: Math.round(section.getBoundingClientRect().top + window.scrollY), height: Math.round(section.getBoundingClientRect().height) }; }), stepCount: stepTabs.length, scenarioCount: scenarioButtons.length, queuePresets: presetButtons.length });
+        document.body.appendChild(output);
+      }
+      if (params.get('selftest') === '1') runSelfTest();
+    }());
+  </script>
+</body>
+</html>
