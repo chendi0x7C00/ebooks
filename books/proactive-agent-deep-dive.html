@@ -301,7 +301,7 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
   </button>
 </header>
 <nav class="toc-chips" aria-label="目录">
-  <a href="#problem">问题</a><a href="#formal">形式化</a><a href="#arch">架构</a><a href="#flow">管线</a><a href="#scenarios">四象限</a><a href="#decisions">决策</a><a href="#eval">实验</a><a href="#critique">批判</a>
+  <a href="#problem">问题</a><a href="#formal">形式化</a><a href="#arch">架构</a><a href="#flow">管线</a><a href="#scenarios">四象限</a><a href="#decisions">决策</a><a href="#eval">实验</a><a href="#critique">批判</a><a href="#opensource">开源</a>
 </nav>
 <div class="shell">
   <aside class="rail">
@@ -316,6 +316,7 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
       <a href="#decisions">06 · 关键设计决策</a>
       <a href="#eval">07 · 实验数据</a>
       <a href="#critique">08 · 批判性阅读</a>
+      <a href="#opensource">09 · 开源对照</a>
     </nav>
   </aside>
   <main>
@@ -326,6 +327,8 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
       <span class="tag">cs.AI · Dec 2024</span>
       <span class="tag">清华 / 人大 / 华为 Noah</span>
       <span class="tag">ProactiveBench</span>
+      <span class="tag">ICLR 2025</span>
+      <span class="tag">thunlp/ProactiveAgent</span>
     </div>
     <h1>ProactiveAgent 深读：<span class="hl">把 LLM Agent 从「等你开口」推到「看见就帮忙」</span></h1>
     <p class="thesis">核心主张：多数 Agent 仍是 <b>reactive</b>（等显式指令再动）；真正有用的个人助手需要 <b>proactive</b>——根据环境事件与用户活动自行推断任务，并在恰当时机提出协助。本文用数据驱动管线造出 <b>ProactiveBench</b>（训练 6,790 / 测试 233 条事件），再训一个对齐人类接受判断的 <b>reward model</b> 当裁判，最后用该数据微调开源模型，把主动协助的 F1 推到 <b>66.47%</b>（Qwen2-7B-Proactive），超过当时对比的闭源与开源基线。</p>
@@ -612,9 +615,79 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
     </ul>
     <div class="note"><b>可直接偷走的工程清单：</b>① 日志里同时记「提议 / 沉默」与用户接受；② 离线训一个接受率裁判再驱动迭代；③ 上线默认偏保守（宁 MN 勿 FD），再按场景放开；④ 多候选只在模型侧生成，UI 仍尽量一条。</div>
     <footer>
-      Proactive Agent: Shifting LLM Agents from Reactive Responses to Active Assistance · arXiv:2410.12361v3 · Lu et al., 2024 ｜ 本页为工程师向架构解析；符号首次出现均给白话；数字以论文 Table 1–3 为准。生成于 2026-11。
+      Proactive Agent: Shifting LLM Agents from Reactive Responses to Active Assistance · arXiv:2410.12361v3 · Lu et al., 2024 ｜ 本页为工程师向架构解析；符号首次出现均给白话；数字以论文 Table 1–3 为准。生成于 2026-11；§09 对照 thunlp/ProactiveAgent 仓库补全。
     </footer>
   </section>
+
+  <section id="opensource">
+    <p class="kicker">09 · Open source</p>
+    <h2>开源对照：对着 <a href="https://github.com/thunlp/ProactiveAgent" target="_blank" rel="noopener">thunlp/ProactiveAgent</a> 读仓库</h2>
+    <p class="lede">上一版深读几乎只吃 PDF。仓库把论文三件套落成可跑代码，并多了一条「真机 Demo」路径：ActivityWatcher 采事件 → <code>ragent.py</code> 周期提议 → 系统 toast 接受 / 拒绝 / 忽略。论文 2025-01 录用 ICLR 2025；2025-03 在 Hugging Face 放出 Proactive Agent 与 Reward Agent 权重。</p>
+
+    <h3>仓库地图</h3>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>路径</th><th>对应论文部件</th><th>你实际会跑什么</th></tr></thead>
+        <tbody>
+          <tr><td><code>gym/</code></td><td>Environment Gym</td><td><code>python -m gym.main gym/example.yaml out.jsonl</code> 按场景 YAML 合成事件</td></tr>
+          <tr><td><code>agent/</code></td><td>Proactive Agent + 真机 Demo</td><td><code>python ragent.py --platform PC --interval 15</code>；<code>ActionListener</code> 读 AW bucket</td></tr>
+          <tr><td><code>dataset/</code></td><td>造数 / 标注 / 训练集</td><td><code>build_scenes.py</code>、<code>run_datagen.py</code>、Gradio 标注台 <code>annotation/main.py</code></td></tr>
+          <tr><td><code>eval/</code></td><td>ProactiveBench 评测</td><td><code>script.py</code> 出 traces → <code>judge_result.sh</code> 用 RM 判 → <code>calculate.sh</code> 出分</td></tr>
+          <tr><td><code>envs/</code></td><td>采集侧扩展</td><td><code>aw-watcher-web</code>、agent watcher；Chrome 扩展 zip 也在 <code>agent/resource/</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>真机 Demo：四个 bucket 如何变成一次提议</h3>
+    <div class="stepper" id="demoJourney" tabindex="0">
+      <div class="steps" role="tablist">
+        <button type="button" role="tab" aria-selected="true">1 安装 AW</button>
+        <button type="button" role="tab" aria-selected="false">2 聚合事件</button>
+        <button type="button" role="tab" aria-selected="false">3 周期推理</button>
+        <button type="button" role="tab" aria-selected="false">4 Toast 反馈</button>
+      </div>
+      <div class="steppanel" id="demoStepPanel" tabindex="-1"></div>
+    </div>
+    <p class="note"><b>反馈语义写进产品：</b>点 toast 本体 / 确认 = <b>Accept</b>（agent 继续相关动作）；点关闭 = <b>Reject</b>（下轮换一种提议）；完全不理 = <b>Ignore</b>（视为忙碌，后续减少提议）。这比论文公式里的二元 R<sub>t</sub> 多了一档「忽略」，是仓库对真实打扰成本的补丁。</p>
+
+    <h3>造数与评测脚本怎么串</h3>
+    <ol class="steal">
+      <li><b>场景：</b><code>dataset/build_scenes.py --seedfile dataset/seedtask.yaml</code> → 场景 YAML。</li>
+      <li><b>Gym 滚事件：</b><code>python -m gym.main &lt;scene.yaml&gt; events.jsonl</code>（读根目录 <code>private.toml</code> 里的 completions 模型）。</li>
+      <li><b>Agent 训练集：</b><code>dataset/build_agent_trainset.py</code>（README 要求先配好 GYM）。</li>
+      <li><b>人工对齐：</b>把测试轨迹放进 <code>dataset/annotation/data</code>，跑 Gradio；可「Reject all」。再 <code>convert_annotations.py</code> → <code>build_reward_trainset.py</code>（LLaMA-Factory 格式）。</li>
+      <li><b>打榜：</b><code>eval/script.py</code> 产 traces → 改 RM 地址后 <code>sh eval/judge_result.sh</code> → <code>sh calculate.sh</code>。</li>
+    </ol>
+
+    <h3>论文数字 vs 仓库 README</h3>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>项</th><th>论文 PDF</th><th>仓库现状（2025 文档）</th></tr></thead>
+        <tbody>
+          <tr><td>训练事件</td><td>6,790</td><td>badge / 表同为 6,790（Coding 2275 / Writing 2354 / Daily 2161）</td></tr>
+          <tr><td>Agent 测试事件</td><td>233</td><td><code>eval/README</code> 写 <b>227</b>——以仓库评测脚本实际加载为准，读数时别混用</td></tr>
+          <tr><td>RM F1</td><td>91.80%</td><td>README 表写 <b>0.9180</b>，与论文一致</td></tr>
+          <tr><td>Qwen2-7B-Proactive F1</td><td>66.47%</td><td>README 主表同数</td></tr>
+          <tr><td>权重</td><td>文中谈微调</td><td><a href="https://huggingface.co/YancyLee/ProactiveAgent" target="_blank" rel="noopener">HF: YancyLee/ProactiveAgent</a>（Agent + Reward）</td></tr>
+          <tr><td>RM↔Agent 联调</td><td>实验用 RM 裁判</td><td>根 README「Connect the Reward Model」仍标 <b>TO BE UPDATE</b>——Demo 默认可不经本地 RM 过滤</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="runbox">
+      <div class="rb-head">▶ 对着仓库补一刀时该看的文件</div>
+      <ol>
+        <li><code>agent/ragent.py</code> + <code>agent/agentmodule.py</code>：周期循环、如何调 LLM、如何弹 toast。</li>
+        <li><code>agent/prompt.py</code>：主动提议的系统提示，和论文 Appendix B 对照。</li>
+        <li><code>gym/components/</code>、<code>gym/models/</code>：事件生成与状态维护是否真按「示例事件采样」做。</li>
+        <li><code>eval/reward_model_template.py</code>、<code>judge_agent_prediction.py</code>：RM 输入格式与 CD/NR/MN/FA 如何落成脚本。</li>
+        <li><code>example_config.toml</code>：必须先复制为 <code>private.toml</code>；Demo 需要名为 <code>activeagent</code> 的 api_key 配置。</li>
+      </ol>
+      <p class="src">对照提交：本页补丁相对书架 HTML；源码树取自 github.com/thunlp/ProactiveAgent main（README 新闻至 2025-03-21）。</p>
+    </div>
+  </section>
+
+
 
   </main>
 </div>
@@ -717,7 +790,42 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
   var links = Array.prototype.slice.call(document.querySelectorAll("#tocNav a"));
   var map = {};
   links.forEach(function(a){ map[a.getAttribute("href").slice(1)] = a; });
+
+  var DEMO_STEPS = [
+    {h:"1 · 安装 ActivityWatcher 四条轨迹", ps:[
+      "装官方 AW 客户端，并加载仓库自带的 Chrome 扩展（agent/resource/aw-watcher-web.zip）与 VS Code 扩展 aw-watcher-vscode。",
+      "打开 http://localhost:5600/#/timeline，确认能看到 afk、vscode、window、web 四条 bucket——缺一条，Demo 的环境感知就不完整。"
+    ]},
+    {h:"2 · ActionListener 聚合「上一段有效焦点」", ps:[
+      "pynput 抓键鼠，剪贴板辅助；Chrome / VS Code 扩展提供标签页、HTML、工程名、语言、当前文件。",
+      "每个周期从四个 bucket 取数，过滤掉焦点不在 Chrome/VS Code 的时段，只把「上一有效时刻」的聚合事件交给 agent。"
+    ]},
+    {h:"3 · ragent.py 按 interval 提议", ps:[
+      "配置：cp example_config.toml private.toml，填 default_completions_model / api_key；Demo 需要名为 activeagent 的密钥项。",
+      "运行：python ragent.py --platform PC [--chromes …] [--interval 15]。成功时终端打印 Demo running Started。"
+    ]},
+    {h:"4 · Toast：Accept / Reject / Ignore", ps:[
+      "Accept：点 toast → agent 继续相关动作。Reject：点关闭 → 下轮换提法。Ignore：不理直到超时消失 → 视为忙碌，后续少打扰。",
+      "仓库根 README 里「Connect the Reward Model」仍 TO BE UPDATE：线上过滤 RM 与 Demo 主路径尚未文档化打通。"
+    ]}
+  ];
+  (function(){
+    var tabs = Array.prototype.slice.call(document.querySelectorAll("#demoJourney .steps button"));
+    var panel = document.getElementById("demoStepPanel");
+    if(!tabs.length || !panel) return;
+    function renderStep(i){
+      tabs.forEach(function(t,j){ t.setAttribute("aria-selected", j===i ? "true":"false"); });
+      var s = DEMO_STEPS[i];
+      panel.innerHTML = "<h4>"+s.h+"</h4>" + s.ps.map(function(p){return "<p>"+p+"</p>";}).join("") +
+        "<p class='kbd-hint'>"+(i+1)+" / "+DEMO_STEPS.length+" · 点击步骤切换</p>";
+      panel.dataset.idx = i;
+    }
+    tabs.forEach(function(t,i){ t.addEventListener("click", function(){ renderStep(i); }); });
+    renderStep(0);
+  })();
+
   if("IntersectionObserver" in window){
+
     var obs = new IntersectionObserver(function(entries){
       entries.forEach(function(en){
         if(en.isIntersecting){
