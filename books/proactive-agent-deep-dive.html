@@ -335,7 +335,8 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
     <p class="meta">
       <span>论文 · Lu et al.</span>
       <span>代码 · <a href="https://github.com/thunlp/ProactiveAgent" target="_blank" rel="noopener">thunlp/ProactiveAgent</a></span>
-      <span>本页 · 架构向深读 · 2026-11</span>
+      <span>权重 · <a href="https://huggingface.co/YancyLee/ProactiveAgent/tree/main" target="_blank" rel="noopener">HF · Active-Agent + Active-RM</a></span>
+      <span>本页 · 架构向深读 · 含仓库实装 · 2026-11</span>
     </p>
     <div class="stats">
       <div class="stat"><div class="v">6,790<small> / 233</small></div><div class="k">训练 / 测试事件（Agent 子集）</div></div>
@@ -622,7 +623,8 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
   <section id="opensource">
     <p class="kicker">09 · Open source</p>
     <h2>开源对照：对着 <a href="https://github.com/thunlp/ProactiveAgent" target="_blank" rel="noopener">thunlp/ProactiveAgent</a> 读仓库</h2>
-    <p class="lede">上一版深读几乎只吃 PDF。仓库把论文三件套落成可跑代码，并多了一条「真机 Demo」路径：ActivityWatcher 采事件 → <code>ragent.py</code> 周期提议 → 系统 toast 接受 / 拒绝 / 忽略。论文 2025-01 录用 ICLR 2025；2025-03 在 Hugging Face 放出 Proactive Agent 与 Reward Agent 权重。</p>
+    <p class="lede">上一版深读几乎只吃 PDF。仓库把论文三件套落成可跑代码，并多了一条「真机 Demo」路径：ActivityWatcher 采事件 → <code>ragent.py</code> 周期提议 → 系统 toast 接受 / 拒绝 / 忽略。论文 2025-01 录用 ICLR 2025；2025-03 在 Hugging Face 放出 <b>LLaMA-3.1-8B-Active-Agent</b> 与 <b>LLaMA-3.1-8B-Active-RM</b>。</p>
+    <div class="note"><b>进度锚点：</b>中文 README 的事件规模徽章可能已高于论文 Table 1 的 6,790——读数时以仓库当前发布为准，论文数字仍作实验对照。HF 权重名是 Active-Agent / Active-RM，与论文里的 “Proactive / reward model” 是同一套东西。</div>
 
     <h3>仓库地图</h3>
     <div class="tblwrap">
@@ -668,7 +670,7 @@ footer{border-top:1px solid var(--line-soft);margin-top:70px;padding:26px 0 10px
           <tr><td>Agent 测试事件</td><td>233</td><td><code>eval/README</code> 写 <b>227</b>——以仓库评测脚本实际加载为准，读数时别混用</td></tr>
           <tr><td>RM F1</td><td>91.80%</td><td>README 表写 <b>0.9180</b>，与论文一致</td></tr>
           <tr><td>Qwen2-7B-Proactive F1</td><td>66.47%</td><td>README 主表同数</td></tr>
-          <tr><td>权重</td><td>文中谈微调</td><td><a href="https://huggingface.co/YancyLee/ProactiveAgent" target="_blank" rel="noopener">HF: YancyLee/ProactiveAgent</a>（Agent + Reward）</td></tr>
+          <tr><td>权重</td><td>文中谈微调</td><td><a href="https://huggingface.co/YancyLee/ProactiveAgent" target="_blank" rel="noopener">HF: YancyLee/ProactiveAgent</a>（LLaMA-3.1-8B-<b>Active-Agent</b> + <b>Active-RM</b>）</td></tr>
           <tr><td>RM↔Agent 联调</td><td>实验用 RM 裁判</td><td>根 README「Connect the Reward Model」仍标 <b>TO BE UPDATE</b>——Demo 默认可不经本地 RM 过滤</td></tr>
         </tbody>
       </table>
