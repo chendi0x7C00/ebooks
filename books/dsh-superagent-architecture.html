@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en" data-textsize="default">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsh-superagent: An Architecture Analysis</title>
+<meta name="description" content="An architecture analysis of dsh-superagent, DeepSeek's research prototype of a proactive coding agent: design goals, high- and low-level design, rationale, a real-world dataflow, and a guide to reading the source.">
+<style>
+  :root {
+    --paper: #faf7f1;
+    --paper-deep: #f3eee4;
+    --ink: #292520;
+    --ink-soft: #5c554b;
+    --muted: #8b8272;
+    --line: #e3dccc;
+    --accent: #2e6f77;
+    --accent-deep: #23545b;
+    --rust: #9a5b2e;
+    --serif: "Charter", "Bitstream Charter", "Iowan Old Style", Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --prose: 46rem;
+    --wide: 68rem;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 17px; scroll-behavior: smooth; }
+  html[data-textsize="large"] { font-size: 20px; }
+  @media (min-width: 1100px) {
+    html { font-size: 17.5px; }
+    html[data-textsize="large"] { font-size: 20.5px; }
+  }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    line-height: 1.72;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: saturate(1.2) blur(10px);
+    -webkit-backdrop-filter: saturate(1.2) blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: var(--wide); margin: 0 auto;
+    padding: 0.55rem 1.25rem;
+    display: flex; align-items: center; gap: 1rem;
+  }
+  .topbar .crumb {
+    font-family: var(--sans);
+    font-size: 0.78rem; letter-spacing: 0.04em;
+    color: var(--ink-soft);
+    text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .topbar .crumb strong { color: var(--ink); font-weight: 600; }
+  .topbar .spacer { flex: 1; }
+  .sizer {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--paper-deep);
+    padding: 2px; gap: 2px;
+    font-family: var(--sans);
+  }
+  .sizer .sizer-label {
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); padding: 0 0.55rem 0 0.65rem;
+    user-select: none;
+  }
+  .sizer button {
+    font: 600 0.78rem var(--sans);
+    color: var(--ink-soft);
+    background: transparent; border: 0; border-radius: 999px;
+    padding: 0.28rem 0.8rem; cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sizer button[aria-pressed="true"] {
+    background: var(--accent); color: #fff;
+  }
+  .sizer button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sizer .aa { font-family: var(--serif); font-weight: 700; margin-right: 0.3rem; }
+
+  main { display: block; }
+
+  /* ---------- cover ---------- */
+  .cover {
+    max-width: var(--prose);
+    margin: 0 auto;
+    padding: 5.5rem 1.5rem 3.5rem;
+  }
+  .cover .kicker {
+    font-family: var(--sans);
+    font-size: 0.75rem; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1.4rem;
+  }
+  .cover h1 {
+    font-size: 2.6rem; line-height: 1.12;
+    font-weight: 700; letter-spacing: -0.015em;
+    margin: 0 0 1.1rem;
+  }
+  .cover .subtitle {
+    font-size: 1.18rem; line-height: 1.5;
+    color: var(--ink-soft);
+    font-style: italic;
+    margin: 0 0 2.2rem;
+  }
+  .cover .meta {
+    font-family: var(--sans); font-size: 0.82rem;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    padding-top: 1.1rem;
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem;
+  }
+  .cover .lede {
+    font-size: 1.06rem;
+    margin-top: 2.6rem;
+  }
+  .cover .lede p { margin: 0 0 1.3rem; }
+  .cover .lede p:first-child::first-letter {
+    initial-letter: 3; -webkit-initial-letter: 3;
+    color: var(--accent-deep);
+    font-weight: 700;
+    padding-right: 0.08em;
+  }
+
+  /* ---------- toc ---------- */
+  .toc {
+    max-width: var(--prose);
+    margin: 0 auto 2rem;
+    padding: 2.6rem 1.5rem 3rem;
+    border-top: 1px solid var(--line);
+  }
+  .toc h2 {
+    font-family: var(--sans);
+    font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.4rem;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; counter-reset: tocch; }
+  .toc ol > li {
+    counter-increment: tocch;
+    margin: 0 0 0.9rem;
+    break-inside: avoid;
+  }
+  .toc ol > li > a {
+    font-weight: 600; font-size: 1.02rem;
+    color: var(--ink); text-decoration: none;
+    display: flex; gap: 0.75rem; align-items: baseline;
+  }
+  .toc ol > li > a::before {
+    content: counter(tocch, decimal-leading-zero);
+    font-family: var(--sans); font-size: 0.72rem; font-weight: 600;
+    color: var(--accent);
+    min-width: 1.6rem; letter-spacing: 0.05em;
+  }
+  .toc ol > li > a:hover { color: var(--accent-deep); }
+  .toc .sections {
+    margin: 0.35rem 0 0 2.35rem; padding: 0;
+    list-style: none;
+    column-count: 2; column-gap: 2rem;
+  }
+  @media (max-width: 640px) { .toc .sections { column-count: 1; } }
+  .toc .sections li { margin: 0 0 0.18rem; }
+  .toc .sections a {
+    font-size: 0.86rem; color: var(--ink-soft);
+    text-decoration: none; line-height: 1.45; display: block;
+  }
+  .toc .sections a:hover { color: var(--accent-deep); }
+
+  /* ---------- chapters ---------- */
+  .chapter {
+    max-width: var(--prose);
+    margin: 0 auto;
+    padding: 3.4rem 1.5rem 1.6rem;
+    border-top: 1px solid var(--line);
+  }
+  .chapter .eyebrow {
+    font-family: var(--sans);
+    font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 0.8rem;
+  }
+  .chapter h1 {
+    font-size: 1.9rem; line-height: 1.18;
+    letter-spacing: -0.01em;
+    margin: 0 0 2.2rem;
+  }
+  .chapter h2 {
+    font-size: 1.28rem; line-height: 1.3;
+    margin: 3rem 0 1.1rem;
+    letter-spacing: -0.005em;
+  }
+  .chapter h2::before {
+    content: ""; display: block;
+    width: 2.2rem; height: 3px;
+    background: var(--accent);
+    opacity: 0.55; border-radius: 2px;
+    margin-bottom: 0.9rem;
+  }
+  .chapter h3 {
+    font-size: 1.05rem;
+    margin: 2.2rem 0 0.8rem;
+    color: var(--ink);
+  }
+  .chapter p { margin: 0 0 1.35rem; }
+  .chapter p:last-child { margin-bottom: 0.4rem; }
+  .chapter strong { font-weight: 700; }
+  .chapter em { font-style: italic; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.82em;
+    background: var(--paper-deep);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0.08em 0.34em;
+    white-space: nowrap;
+  }
+  code.long { white-space: normal; }
+  pre {
+    background: #2b2721;
+    color: #e8e2d5;
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    margin: 0 0 1.5rem;
+  }
+  pre code {
+    background: none; border: 0; padding: 0;
+    color: inherit; font-size: inherit; white-space: pre;
+  }
+
+  /* ---------- figures ---------- */
+  figure {
+    margin: 2.8rem auto;
+    padding: 1.4rem 1.4rem 1.1rem;
+    background: #fffdf9;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(60, 50, 30, 0.05);
+  }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    font-family: var(--sans);
+    font-size: 0.8rem; line-height: 1.5;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 1rem;
+    padding-top: 0.85rem;
+    border-top: 1px dashed var(--line);
+  }
+  .figure-wide { max-width: var(--wide); }
+
+  /* ---------- tables ---------- */
+  .tablewrap { overflow-x: auto; margin: 0 0 1.5rem; }
+  table {
+    border-collapse: collapse;
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    width: 100%;
+    min-width: 30rem;
+  }
+  th, td {
+    text-align: left; vertical-align: top;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600; color: var(--ink-soft);
+    font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+    border-bottom: 2px solid var(--muted);
+  }
+  tr:last-child td { border-bottom: 0; }
+  td code { white-space: normal; }
+
+  /* ---------- footer ---------- */
+  .colophon {
+    max-width: var(--prose);
+    margin: 0 auto;
+    padding: 2.8rem 1.5rem 5rem;
+    border-top: 1px solid var(--line);
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .colophon a { color: var(--ink-soft); }
+  .colophon .top-link { float: right; }
+
+  a { color: var(--accent-deep); }
+
+  @media (max-width: 560px) {
+    .cover { padding-top: 3.6rem; }
+    .cover h1 { font-size: 2.05rem; }
+    .chapter h1 { font-size: 1.55rem; }
+    .sizer .sizer-label { display: none; }
+  }
+  @media (max-width: 700px) {
+    figure { overflow-x: auto; }
+    figure svg { min-width: 760px; }
+    .tablewrap table { min-width: 34rem; }
+  }
+  @media print {
+    .topbar { display: none; }
+    .chapter { padding-top: 2rem; }
+  }
+</style>
+</head>
+<body>
+<a href="#cover" style="position:absolute;left:-9999px" tabindex="0">Skip to content</a>
+
+<header class="topbar" id="top">
+  <div class="topbar-inner">
+    <a class="crumb" href="#cover"><strong>dsh-superagent</strong> · An Architecture Analysis</a>
+    <span class="spacer"></span>
+    <div class="sizer" role="group" aria-label="Text size">
+      <span class="sizer-label">Text size</span>
+      <button type="button" id="size-default" aria-pressed="true"><span class="aa">Aa</span>Default</button>
+      <button type="button" id="size-large" aria-pressed="false"><span class="aa">Aa</span>Large</button>
+    </div>
+  </div>
+</header>
+
+<main id="cover">
+  
+  <section class="cover">
+    <p class="kicker">An Architecture Analysis</p>
+    <h1>The Architecture of dsh-superagent</h1>
+    <p class="subtitle">How a proactive coding agent spends the least human attention — design goals, high and low levels, the reasons behind them, and one request&rsquo;s walk through the source.</p>
+    <div class="meta">
+      <span>Subject: dsh-superagent, a DeepSeek research prototype</span>
+      <span>10 chapters · 6 figures · ~18.8k words</span>
+      <span>November 2026</span>
+    </div>
+    <div class="lede">
+      <p>Every agent system competes for the same scarce resource: the attention of the people it works for. An agent that can act for a whole team can also waste a whole team&rsquo;s attention — with questions nobody needed to answer, notifications nobody needed to see, and pull requests nobody needed to review. dsh-superagent, a research prototype from DeepSeek, is built around that observation. It is a proactive coding agent for one GitHub repository that listens, decides, works, and speaks, and every part of it is judged by how little attention it costs.</p>
+      <p>This book reads that prototype from the outside in. It begins with the design goals and the small domain vocabulary the system is built on, then walks through the high-level runtime and the low-level machinery — a synchronous, transactional core surrounded by a durable effect queue — and asks the more interesting question: why this shape, and not another. A complete request is followed from a GitHub mention to a merged pull request, and the closing chapters equip the reader to walk the source alone.</p>
+      <p>The analysis is grounded in the repository&rsquo;s own code and documents; the file paths cited throughout refer to the public prototype. Like the system&rsquo;s own numbered documents, the chapters are meant to be read in order — each one assumes only what came before.</p>
+    </div>
+  </section>
+    <nav class="toc" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#ch-1">A Coding Agent That Asks to Be Ignored</a>
+        <ul class="sections"></ul></li>
+      <li><a href="#ch-2">Design Goals</a>
+        <ul class="sections"><li><a href="#ch-2-s1">What the principle demands of behavior</a></li><li><a href="#ch-2-s2">What the principle demands of design</a></li><li><a href="#ch-2-s3">What the principle demands of machinery</a></li><li><a href="#ch-2-s4">The operator's side of the contract</a></li></ul></li>
+      <li><a href="#ch-3">The Domain Model: A Small Vocabulary with Strict Rules</a>
+        <ul class="sections"><li><a href="#ch-3-s1">The listening side</a></li><li><a href="#ch-3-s2">The judging side</a></li><li><a href="#ch-3-s3">The working side</a></li><li><a href="#ch-3-s4">What the model refuses</a></li><li><a href="#ch-3-s5">Aggregates and code homes</a></li></ul></li>
+      <li><a href="#ch-4">The High-Level Architecture</a>
+        <ul class="sections"><li><a href="#ch-4-s1">Three layers, one direction</a></li><li><a href="#ch-4-s2">The Engine: one decision point</a></li><li><a href="#ch-4-s3">Two asynchronous engines around a synchronous one</a></li><li><a href="#ch-4-s4">The supporting cast</a></li><li><a href="#ch-4-s5">Starting and stopping</a></li></ul></li>
+      <li><a href="#ch-5">Inside the Machine, Part I: The Pure Core</a>
+        <ul class="sections"><li><a href="#ch-5-s1">5.1 One Engine, Five Parts</a></li><li><a href="#ch-5-s2">5.2 The Gate: Authorization as Computation</a></li><li><a href="#ch-5-s3">5.3 Assessment and Decision</a></li><li><a href="#ch-5-s4">5.4 Persistence: One File, Generated Columns, One Writer per Table</a></li><li><a href="#ch-5-s5">5.5 Shared Predicates</a></li></ul></li>
+      <li><a href="#ch-6">Inside the Machine, Part II: The Edges</a>
+        <ul class="sections"><li><a href="#ch-6-s1">6.1 The Effect Queue: Stored Work</a></li><li><a href="#ch-6-s2">6.2 The Outbox: Ordered Speech</a></li><li><a href="#ch-6-s3">6.3 The DshExecutor: One Session and One Directory per Ticket</a></li><li><a href="#ch-6-s4">6.4 Sessions, Delivery and the MasterAssessor</a></li><li><a href="#ch-6-s5">6.5 Sources: Plugins Behind a Protocol</a></li><li><a href="#ch-6-s6">6.6 The Panel and Health</a></li></ul></li>
+      <li><a href="#ch-7">Why It Is Designed This Way</a>
+        <ul class="sections"><li><a href="#ch-7-s1">7.1 A Synchronous Core in an Asynchronous World</a></li><li><a href="#ch-7-s2">7.2 Commands Today, Effects Tomorrow</a></li><li><a href="#ch-7-s3">7.3 One Writer per State</a></li><li><a href="#ch-7-s4">7.4 Authorization as Recorded Data</a></li><li><a href="#ch-7-s5">7.5 The Ticket Owns Its State, Not the Session</a></li><li><a href="#ch-7-s6">7.6 Prompts as Versioned Data</a></li><li><a href="#ch-7-s7">7.7 Small Vocabulary, Few Settings</a></li></ul></li>
+      <li><a href="#ch-8">A Request Walks Through the System</a>
+        <ul class="sections"><li><a href="#ch-8-s1">8.1 The Figure</a></li><li><a href="#ch-8-s2">8.2 From GitHub to a Trigger</a></li><li><a href="#ch-8-s3">8.3 Gate and Candidate</a></li><li><a href="#ch-8-s4">8.4 The Atomic Accept</a></li><li><a href="#ch-8-s5">8.5 Launch and Work</a></li><li><a href="#ch-8-s6">8.6 Reporting, Binding, and the Reviewer</a></li><li><a href="#ch-8-s7">8.7 Merge and End</a></li><li><a href="#ch-8-s8">8.8 What the Walk Proves</a></li></ul></li>
+      <li><a href="#ch-9">Reading the Source</a>
+        <ul class="sections"><li><a href="#ch-9-s1">9.1 Where to Start</a></li><li><a href="#ch-9-s2">9.2 Three Traces</a></li><li><a href="#ch-9-s3">9.3 The Map</a></li><li><a href="#ch-9-s4">9.4 Conventions a Reader Must Know</a></li><li><a href="#ch-9-s5">9.5 Tests as the Second Documentation</a></li></ul></li>
+      <li><a href="#ch-10">Closing Observations</a>
+        <ul class="sections"><li><a href="#ch-10-s1">What Is Deliberately Left Open</a></li><li><a href="#ch-10-s2">What Transfers</a></li><li><a href="#ch-10-s3">The Philosophy as the Artifact</a></li></ul></li>
+    </ol>
+  </nav>
+  <section class="chapter" id="ch-1">
+<p class="eyebrow">Chapter 1</p>
+<h1>A Coding Agent That Asks to Be Ignored</h1>
+<p>dsh-superagent is a proactive coding agent that serves exactly one GitHub repository. It grew out of a DeepSeek team's day-to-day development work, with much of the engineering done by coding agents, and its README is blunt about its status: research code, adapted for publication, not production-ready software. It ships as a bundle for DeepSeek Harness — DSH, the host application that runs agent sessions, equips them with tools, and serves their web interface. Installed into a DSH profile, the bundle turns the agent into a quiet member of the repository's daily life: it reads issues, comments, pushes branches, and opens pull requests under a GitHub account the whole team can see and talk to.</p>
+<p>What it does with that membership is deliberately narrow. The agent listens to GitHub — normally by polling its own account's notifications, with optional switches for every new issue, pull request, comment and default-branch CI run — and, if the team wants, to Feishu chats through a bot. When someone the team has allowed mentions the agent and asks for work, the request becomes a Ticket, the system's unit of authorized work, usually within the default one-minute polling interval. The agent confirms once, naming what it will do. It then works in its own agent session and its own working directory, and answers in the conversation where it was asked, often as a pull request. A web panel summarizes everything and shows first what needs a person.</p>
+<p>Two kinds of sessions divide the labor. A single main Session, called <code>orchestrator</code> in the code and prompts, receives every incoming event, judges which deserve work, and dispatches; one Executor Session per Ticket, called <code>worker</code>, does the actual coding in its own directory. The split matters for the theme of this book: the part that talks to people is not the part that changes files, so each can be given exactly the permissions, and the manners, its job needs.</p>
+<p>Operationally the system is one small thing rather than a cluster. It runs as a single DSH process, started by a service script inside a tmux session so it survives a detached terminal, with its panel bound to localhost (<code class="long">docs/006-deployment.md</code>). All durable state — every event received, every Ticket, every queued side effect — lives in one SQLite file inside a configured state directory; that file is the thing to back up before an upgrade. The agent's identity is a dedicated GitHub account with write access and its own signed-in GitHub CLI, and the host steers workers' git and GitHub calls onto that account's credentials and away from the operator's.</p>
+<p>Why so much care around what the agent does <em>not</em> do? Because an agent that can act for a whole team can also waste a whole team's attention. The project's founding observation, written down in its philosophy document, is that attention is the resource the system actually consumes: every message, notification, question, setting, panel element and paragraph of documentation costs someone's attention, and each must give back more value than it costs, or it is removed (<code class="long">docs/000-philosophy.md</code>). Code is cheap for an agent to produce and expensive for a person to review; an agent that generates both without limits does not create capacity. It destroys it.</p>
+<p>The title of this chapter compresses that rule. The agent acts only when an allowed person asks, or when a rule the team wrote allows it; work nobody requested begins in an observe mode that records what the agent would have done without doing it, so autonomy is widened from evidence rather than assumed. It speaks only when a person must act or can use a result: one acknowledgement, silence while it works, a message when a result is ready, a decision is needed, or it cannot finish. Between those moments, being ignored is what it is designed for.</p>
+<p>The panel is the other half of the same idea. A supervisor opening it should be able to leave quickly: it answers three questions in order — does anything need me now, is the system healthy, what is the history of this work — and a healthy state takes no space on the screen (<code class="long">docs/005-panel.md</code>). An agent that spends attention carefully and a panel that spends screen time carefully are one design, not two.</p>
+<p>An honest caveat before going further. The README states that this code was adapted for publication, so it is not identical to the team's internal version, nor to the system described in their paper, <em>Exploring Super-agent Design: Towards a More Autonomous Agent System</em>; some designs discussed in the article are directions for future work and are not implemented in this prototype. This book therefore grounds every claim in the published repository — its documents and its TypeScript source — and where the code is rough, it says so.</p>
+<p>The rest of the book follows the repository's own reading order, because the repository numbers its documents so that each builds only on the ones before it. The next chapter states the design goals in full and traces each one to the engineering that makes it hold. A chapter on the domain model then introduces the working vocabulary — Source, Trigger, Thread, Eval, Mandate, Ticket and their neighbors — together with the rules that decide who may start work and how permission becomes recorded data. Two chapters descend to the low level: the pure core where every decision is made, and the edges — the effect queue, the outbox, the executor, the sessions and the Source plugins — where every decision is carried out. The chapter after them asks why this shape and not another. One request is then followed end to end, from a GitHub mention to a merged pull request, and the final chapters are a guide to reading the source alone, and the observations that close the analysis.</p>
+</section>
+<section class="chapter" id="ch-2">
+<p class="eyebrow">Chapter 2</p>
+<h1>Design Goals</h1>
+<p>At the top of its philosophy document, dsh-superagent names the quantity it works to minimize: &quot;Take as little human attention as possible, and give as much value as possible&quot; (<code class="long">docs/000-philosophy.md</code>). The sentence is a unit of account, not a motto. A message, a notification, a question, a setting, a panel element and a paragraph of documentation each cost someone's attention, and every part of the project is judged by that cost: each must give more value than it takes, or it is removed. The rest of the chapter reads the goal through the agent's behavior, the design, the machinery, and finally the operator.</p>
+<h2 id="ch-2-s1">What the principle demands of behavior</h2>
+<p>The behavioral half of the principle is a set of habits the host enforces rather than requests. The agent acts only when asked, or when a written rule allows it. &quot;Asked&quot; has a strict meaning: the request must address the agent directly and come from someone on the allowed list of a Source — a stream of events the agent listens to, such as GitHub or Feishu — and that list is the Source's part of the Policy, the versioned rules for accepting work. Work nobody asked for needs a rule the team wrote, and even then it starts in observe mode: the agent assesses what it would have done and records an ignore marked &quot;would accept&quot;, and nothing is accepted (<code class="long">docs/002-authorization.md</code>).</p>
+<p>The agent speaks only when a person must act or can use a result. It confirms a request once, naming what it will do, stays quiet while it works, and writes again when a result is ready, when it needs a decision, or when it cannot finish. Messages are short, and they go to the conversation where the request was made.</p>
+<p>When it needs a person, the agent asks one concrete question at a time. The question is an Attention — the open question on a Ticket, the system's unit of authorized work, that waits for a person's answer — and it travels as a structured field in the report of the Executor Session, the <code>worker</code> session that runs one Ticket, not as prose. The domain model explicitly rejects inferring &quot;waiting on a person&quot; from a report's free text (<code class="long">docs/001-domain.md</code>); a structured fact reaches the panel and the right conversation, while a question buried in a paragraph stays buried.</p>
+<p>The agent stops by impact, not by effort: a local change goes as far as a reviewable result, and a change that needs a design decision stops with a clear question. And it reports honestly — a draft is marked unfinished, a failure is reported as a failure, and a limit is never bypassed to avoid asking.</p>
+<h2 id="ch-2-s2">What the principle demands of design</h2>
+<p>The design-side goals concern the cost of understanding the system itself. The first is few concepts: the domain holds only its domain concepts — Source, Trigger, Thread, Ticket and their neighbors — plus concrete implementations such as GitHub and Feishu. A business need becomes an attribute of an existing concept or a line of prompt text, never a new concept. The clearest example is a person, which is not a domain concept: a Trigger, one immutable event, carries its actor's identifier as the Source gives it; an allowed list is a Source's part of the Policy; the fact that one human has accounts on two Sources is prompt text the agents read (<code class="long">docs/001-domain.md</code>).</p>
+<p>The second is few settings. A default replaces a setting when one value suits almost every team, and behavior a team can describe in words is prompt text, not a setting. Merging shows the split plainly: the host has no merge-specific decision logic, and when auto-merge is allowed, and under what line-count limit, is governed by a prompt section called Delivery requirements (<code class="long">docs/003-execution.md</code>). The team edits words; the behavior changes.</p>
+<p>The third is a panel that shows only what needs a person. Opening it answers, in order, whether anything needs the reader now, whether the system is healthy, and what became of one piece of work; healthy states take no extra space, and a number appears only when it changes what the supervisor does (<code class="long">docs/005-panel.md</code>). The fourth is documents that read in order: each numbered document builds only on the ones before it, introducing no concept ahead of its turn.</p>
+<h2 id="ch-2-s3">What the principle demands of machinery</h2>
+<p>Each product goal above implies an engineering requirement, visible in the repository as a concrete mechanism. The first is idempotent intake, because discipline begins at the door. A poller sees the same event twice, and a duplicate work item would charge the team twice for one request. A Trigger is therefore stored once: intake checks the Trigger's id and returns <code>duplicate</code> for a repeat (<code class="long">src/core/intake.ts</code>), and accepting a Trigger twice creates one Ticket — a later decision for a Trigger that already started a Ticket returns that Ticket's existing Decision (<code class="long">src/core/engine.ts</code>).</p>
+<p>The second is durable stored work, because an agent that speaks rarely cannot afford to lose its one message. Everything the system does after a decision — relaying a candidate to the main Session, the <code>orchestrator</code> session that judges requests, whose assessment role the code calls MasterAssessor; launching an Assignment, the binding of a Ticket to one Executor instance; delivering an Input to a Ticket; or sending a reply on a Channel, the write side of a Thread — is stored first and done afterwards (<code class="long">docs/003-execution.md</code>). The mechanism is Effects, a durable SQLite-backed queue that persists side effects inside command transactions and dispatches them after commit, with per-kind ordering and exponential backoff (<code class="long">src/app/effects.ts</code>); the Outbox persists outgoing messages as receipts before any send is attempted (<code class="long">src/app/outbox.ts</code>).</p>
+<p>The third is authorization as recorded data. What an accept grants is a Mandate: an immutable record of the request's strength, the scope of work it allows, the Policy version it was accepted under, and the basis — how the Gate, the deterministic first layer of Eval, admitted the Trigger, and from whom (<code class="long">src/core/model.ts</code>). Before an ended Ticket resumes, its Mandate is revalidated against the current Policy; if the sender has left the list or the matched rule has gone, the Mandate is revoked and the work stays ended (<code class="long">src/policy.ts</code>, <code class="long">docs/002-authorization.md</code>). Authorization is data the system can show you, not a recollection it reconstructs.</p>
+<p>The fourth is restartability. All state lives in one SQLite file, <code class="long">&lt;stateDir&gt;/orchestrator.sqlite</code>, opened by the Store (<code class="long">src/app/runtime.ts</code>). After a restart, Assignments that were running end with &quot;host restarted&quot;, and their replacements start with a recovery note telling the worker to check its directory, git history and GitHub before repeating any outside action (<code class="long">docs/003-execution.md</code>). Waiting effect rows sit in SQLite until the next start (<code class="long">src/app/effects.ts</code>).</p>
+<p>The fifth is full auditability, because silence about an input is acceptable only when every input has a visible fate. Each Trigger receives a Disposition, the record of where it went: filtered by its Source's scope, evaluated to a Decision, fanned out to subscribed Tickets, or handed back by an Executor that found it beyond its Ticket (<code class="long">src/core/model.ts</code>). Even a filtered Trigger keeps its record, with the Source's reason (<code class="long">src/core/intake.ts</code>). What happened to a message is a lookup, not an investigation.</p>
+<h2 id="ch-2-s4">The operator's side of the contract</h2>
+<p>The philosophy document ends by turning to the person running the agent: the agent messages people under accounts the team sees every day, every message costs colleagues' attention, and the operator is responsible for it (<code class="long">docs/000-philosophy.md</code>). This is the same contract, seen from the operator's side.</p>
+<p>Start narrow, with a short allowed list and proactive work only recorded, and widen both once what the agent would have done looks right. Tune for less noise: when the agent is noisy, make its prompts shorter and stricter, or pause it — not more messages that explain the noise. Do not use it to produce volume; mass pull requests and broadcast messages cost the team more than they give. And own what it says: read what it posts in your name, and correct it in the prompts when it is wrong.</p>
+<p>The principle thus binds agent, machinery and operator into one budget. Its measure is the philosophy document's closing line: the right help at the right time, and nothing at any other time.</p>
+</section>
+<section class="chapter" id="ch-3">
+<p class="eyebrow">Chapter 3</p>
+<h1>The Domain Model: A Small Vocabulary with Strict Rules</h1>
+<p>Every event that reaches dsh-superagent travels one path, and the domain model is that path written as nouns. A Source watches a stream of events and turns one event into a Trigger. The Trigger lands on a Thread, where the path splits: a Subscription fans it out as context to the Tickets already subscribed to that Thread, while every other Trigger enters an Eval. The Eval ends in a Decision, and an accepting Decision creates a Ticket carrying a Mandate. An Assignment hands the Ticket to an Executor, and the results travel back to the Source through a Channel. The discipline is stated outright: code, tools, panel and documents use these terms and no others (<code class="long">docs/001-domain.md</code>).</p>
+<figure class="figure-wide"><svg viewBox="0 0 1100 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Domain pipeline: Source, Trigger, Thread, Eval, Decision, Ticket, Assignment, Executor, Channel">
+  <style>
+    .box { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.6; rx:10; }
+    .box2 { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.4; rx:10; }
+    .async { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.6; }
+    .term { fill:#faf8f3; stroke:#b7ad9c; stroke-width:1.3; stroke-dasharray:5 4; }
+    .t { font:600 15px -apple-system,'Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 11.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .e { stroke:#857c6e; stroke-width:1.6; fill:none; marker-end:url(#a); }
+    .ed { stroke:#857c6e; stroke-width:1.4; fill:none; stroke-dasharray:5 4; marker-end:url(#a); }
+    .el { font:500 12px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .cap { font:600 11px -apple-system,'Segoe UI',sans-serif; fill:#8b8272; text-anchor:middle; letter-spacing:2px; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/>
+    </marker>
+  </defs>
+
+  <text x="125" y="52" class="cap">LISTEN</text>
+  <text x="730" y="52" class="cap">JUDGE</text>
+  <text x="770" y="248" class="cap">WORK</text>
+  <text x="240" y="248" class="cap">SPEAK</text>
+
+  <!-- top row: listen + judge -->
+  <rect x="50" y="80" width="150" height="62" class="box"/>
+  <text x="125" y="102" class="t">Source</text>
+  <text x="125" y="123" class="ts">GitHub · Feishu</text>
+
+  <rect x="262" y="92" width="110" height="38" class="box2"/>
+  <text x="317" y="112" class="t">Trigger</text>
+
+  <rect x="430" y="80" width="140" height="62" class="box"/>
+  <text x="500" y="102" class="t">Thread</text>
+  <text x="500" y="123" class="ts">time-ordered events</text>
+
+  <rect x="650" y="80" width="160" height="62" class="box"/>
+  <text x="730" y="102" class="t">Eval</text>
+  <text x="730" y="123" class="ts">gate + assessment</text>
+
+  <rect x="880" y="80" width="160" height="62" class="box"/>
+  <text x="960" y="102" class="t">Decision</text>
+  <text x="960" y="123" class="ts">accept · stop · ignore · unavailable</text>
+
+  <line x1="200" y1="111" x2="256" y2="111" class="e"/>
+  <line x1="372" y1="111" x2="424" y2="111" class="e"/>
+  <line x1="570" y1="111" x2="644" y2="111" class="e"/>
+  <line x1="810" y1="111" x2="874" y2="111" class="e"/>
+
+  <!-- policy feeds eval -->
+  <rect x="650" y="188" width="160" height="40" class="box2"/>
+  <text x="730" y="209" class="t" style="font-size:13px">Policy</text>
+  <line x1="730" y1="188" x2="730" y2="146" class="ed"/>
+
+  <!-- decision: recorded terminal -->
+  <rect x="895" y="180" width="130" height="42" class="term"/>
+  <text x="960" y="201" class="ts">recorded — no work</text>
+  <line x1="960" y1="142" x2="960" y2="174" class="ed"/>
+
+  <!-- fan-out from thread down to ticket -->
+  <path d="M500,142 L500,276" class="e"/>
+  <text x="482" y="212" class="el" transform="rotate(-90 482 212)">Subscription fan-out — context only</text>
+
+  <!-- accept from decision to ticket -->
+  <path d="M960,142 L960,236 L576,312" class="e"/>
+  <text x="800" y="242" class="el">accept — creates Mandate</text>
+
+  <!-- bottom row: work -->
+  <rect x="430" y="276" width="146" height="72" class="box"/>
+  <text x="503" y="300" class="t">Ticket</text>
+  <text x="503" y="322" class="ts">+ Mandate · Inputs · Reports</text>
+
+  <rect x="636" y="288" width="130" height="48" class="box2"/>
+  <text x="701" y="314" class="t">Assignment</text>
+
+  <rect x="830" y="276" width="190" height="72" class="box"/>
+  <text x="925" y="298" class="t">Executor</text>
+  <text x="925" y="318" class="ts">one worker Session</text>
+  <text x="925" y="334" class="ts">one directory, per Ticket</text>
+
+  <line x1="576" y1="312" x2="632" y2="312" class="e"/>
+  <line x1="766" y1="312" x2="826" y2="312" class="e"/>
+
+  <!-- reports dashed back -->
+  <path d="M925,276 C925,248 503,248 503,276" class="ed"/>
+  <text x="714" y="242" class="el">Reports: progress · waiting · ready · blocked · failed · dropped</text>
+
+  <!-- channel: ticket speaks -->
+  <rect x="150" y="276" width="140" height="72" class="box"/>
+  <text x="220" y="300" class="t">Channel</text>
+  <text x="220" y="322" class="ts">comment · reply · pull request</text>
+  <line x1="290" y1="312" x2="426" y2="312" class="e"/>
+  <text x="358" y="296" class="el">ack · answer · result</text>
+
+  <!-- channel writes back to the conversation (source) -->
+  <path d="M176,276 C120,240 96,160 96,142" class="e" style="stroke:#4c7a45"/>
+  <text x="76" y="208" class="el" transform="rotate(-90 76 208)">writes to the conversation</text>
+</svg><figcaption>From a raw event to answered work: the domain pipeline</figcaption></figure>
+<h2 id="ch-3-s1">The listening side</h2>
+<p>Five concepts stand where the outside world becomes domain data. A Source is a stream of events; a Source kind is a reusable implementation, and a Source instance is one configuration of it — whether it runs and what it listens to. The Source is the model's customs office: it defines what counts as an event, including conditions that only hold over time — &quot;no assignee for N hours&quot; is an ordinary Source that waits and checks again — and it drops the agent's own messages and out-of-scope events before they enter the domain. It also holds its own read position and bot identity, so a restart never replays old events as new work.</p>
+<p>What passes the door becomes a Trigger: one immutable event carrying the Source's own metadata, such as its actor. The type in <code class="long">src/core/model.ts</code> keeps it that small: <code>text</code> and <code>meta</code> are untrusted external data, and <code>human</code> and <code>addressed</code> are Source-declared facts, not conclusions the core draws. A Trigger belongs to one or more Threads and is the unit of idempotence and of audit: accepting the same Trigger twice creates one Ticket, and <code>Engine.receive</code> in <code class="long">src/core/engine.ts</code> answers <code>stored</code>, <code>duplicate</code> or <code>filtered</code> — a replayed event is recognized, not rejudged.</p>
+<p>A person, pointedly, is not one of these concepts. A Trigger carries its actor's identifier as the Source gives it; an allowed list is a Source's part of the Policy, written in that Source's identities; and one human holding accounts on several Sources is prompt text the agents read when they need it. The model never joins identities across Sources: each Source speaks only its own names.</p>
+<p>A Thread is Triggers in time order, with the Source defining which Triggers form one: an issue's conversation, a chat topic. At most one Eval runs on a Thread at a time, and Triggers that arrive meanwhile merge into the next batch. A Thread may carry several Tickets, and it holds its Subscriptions, its running Eval and its Decision history, giving each Eval a consistent view and its context. One Trigger can land on several Threads; the Threads it spans are Correlated, and Correlation adds context and never routes: it lets an Eval follow related evidence, while routing belongs entirely to Subscriptions.</p>
+<p>A Channel is the write side of a Thread: an address to write to, defined by the Source — a topic reply, a review comment — and a Thread may have several. A Ticket holds a set of Channels rather than one, because acknowledgments, replies, pull requests and resolved reviews are all writes through a Channel (<code>ChannelRef</code> in <code class="long">src/core/model.ts</code>).</p>
+<h2 id="ch-3-s2">The judging side</h2>
+<p>The Policy is the versioned rulebook: the assessment rules, plus each Source's part of it — who may originate work through that Source, in that Source's identities, how the list is synchronized, and which bots may produce candidates. Rules, accept mode and Source parts together form a Policy version. A change that bears on a live Ticket, such as a changed rule it was accepted under, is delivered to its Assignment as an Input; it does not revoke Mandates, but it discards a running Eval rather than let it finish against a rulebook that no longer holds.</p>
+<p>The Eval is the judgement on a batch of Triggers, in two layers. The first, the Gate, is deterministic: it checks the sender against the Source's Policy and answers who may originate work, and with what strength. The second, the Assessment, is the model's judgement, run by the main Session through the MasterAssessor (<code class="long">src/app/assessment.ts</code>). An Eval's inputs are exactly the Trigger batch, a snapshot of the Thread, every Ticket on the Thread including ended ones, and the current Policy; its output is a Decision; it holds no state between those moments. Each Source's Policy also carries an admission table, whose cells decide whether a message becomes an explicit request, an inferred candidate, or nothing (<code class="long">docs/002-authorization.md</code>).</p>
+<p>The Decision is the recorded outcome: accept, stop, ignore or unavailable. Decisions explain themselves in structured reason codes — <code>timeout</code>, <code>policyChanged</code>, <code>stopNotExplicit</code> — defined in <code class="long">src/core/reasons.ts</code>, with <code>said</code> carrying words an assessor or a person wrote.</p>
+<p>Strength belongs to the vocabulary itself, not to any one module: an Eval carries it, a Decision records it, and a Mandate freezes it. An explicit request comes from a listed person who addresses the agent, from a person's follow-up on a Thread that already has a Ticket, or from an admission cell set to explicit. An inferred candidate is everything the system might act on without a direct ask: a follow-up from an unlisted person, a cell set to inferred, or the message of a bot on the Source's bot list — a listed bot can produce an inferred candidate, never an explicit request. Everything else is not admitted.</p>
+<p>The accept mode, part of the Policy version, is the Policy's answer to how far inferred strength may carry. In <code>off</code>, nothing inferred becomes a candidate. In <code>observe</code>, the default, inferred candidates are assessed but a positive assessment is recorded as an ignore marked &quot;would accept&quot;, and nothing starts. In <code>auto</code>, a positive assessment accepts. Explicit requests work in every mode, which is why the intended path is to start in <code>observe</code> and switch to <code>auto</code> once the recorded Decisions look right.</p>
+<h2 id="ch-3-s3">The working side</h2>
+<p>An accepted Decision grants a Mandate: the Policy version it relied on, the scope, the strength, the matched rules, the sender's identity on that Source, and how the Source received the Trigger (<code>MandateBasis</code> in <code class="long">src/core/model.ts</code>). The Mandate is a warrant, not a lease. It is immutable — wider scope means a new Ticket — and a Ticket's end does not end it. Exactly three operations change a Mandate: an accept creates it, a person's stop withdraws it, and a failed revalidation revokes it. Before an ended Ticket resumes, its Mandate is revalidated against the current Policy, where a weakened admission cell or a removed sender quietly catches up with old work.</p>
+<p>The Ticket is the unit of authorized work, and only an Eval creates one. It refers to its Mandate and holds its Channels and Inputs. Its life is its own: it goes open to ended, and back to open when a person's message on one of its Threads resumes it — unless a person stopped it — defining its own state instead of following the Executor's session, because a Ticket can be handed off, resumed, or run by several Executors.</p>
+<p>The Executor itself, with its Sessions and directories, is outside the domain. It connects through an Assignment, the binding of a Ticket to one Executor instance. A Ticket has several over time, each going pending, running, ended independently of the Ticket; on the Executor's side, only an Assignment's final report may end the Ticket. Who executes is inside the domain; how execution lives is not.</p>
+<p>The Subscription is the many-to-many relation between Tickets and Threads, held by the Thread. A matching Trigger fans out to every live subscribed Ticket with no check of who sent it — which is the point: later discussion reaches the Executor without anyone mentioning the agent again. A person's message that reaches a Ticket this way takes no Eval; it belongs to that Ticket's Executor to decide. An Executor may also follow a Thread for context only, which reaches its Ticket the same way but lends no authority and does not resume it. An ended Ticket keeps its Subscriptions — even that of a closed or merged pull request — so a person's message resumes the same work under the same Mandate, with no Eval or Decision; a Ticket a person stopped receives nothing.</p>
+<p>Inside a Ticket, the remaining concepts record the conversation. A Report is the state an Assignment reports to its Ticket — progress, waiting, ready, blocked, failed or dropped; the predicate <code>waitsForPerson</code> in <code class="long">src/core/model.ts</code> reads them: a Ticket waits for a person when its latest Assignment reported blocked or failed and no human message has arrived since. An Attention is a question that waits for a person's answer, carrying the Trigger that raised it so the answer returns to its conversation. An Input is any context delivered to a Ticket: a fanned-out Trigger, a Policy change, a resume, or plain text. A Disposition records where a Trigger went — filtered, evaluated or fanned out. It grants nothing, but it decides who decides a person's follow-up: the fact the resume and hand-back rules turn on.</p>
+<h2 id="ch-3-s4">What the model refuses</h2>
+<p>The most instructive page of <code class="long">docs/001-domain.md</code> may be its last table: concepts considered and turned away. Recording rejections is itself a design artifact: a vocabulary stays small only if the pressure to re-grow it is answered in writing, and each rejection encodes a rule that would otherwise live in a maintainer's memory — the next contributor who wants &quot;just a simple wait state&quot; meets the documented reason why waiting belongs to Sources.</p>
+<div class="tablewrap"><table><thead><tr><th>Rejected concept</th><th>Why it was turned away</th></tr></thead><tbody><tr><td>Principal or Membership as an entity, or mapping identities across Sources</td><td>A person is Trigger metadata; an allowed list is a Source's part of the Policy; a cross-Source mapping is prompt text</td></tr><tr><td>Eval scheduling its own delayed Triggers</td><td>A condition that needs waiting is an ordinary Source, so Eval never depends back on Sources</td></tr><tr><td>At most one live Ticket per Thread</td><td>One Thread can carry several independent pieces of work; the assessment avoids duplicates from the Ticket list</td></tr><tr><td>An &quot;append to Ticket&quot; Decision</td><td>Appending is Subscription fan-out and needs no Eval</td></tr><tr><td>Admission checks on Subscriptions</td><td>A Subscription covers the whole Thread; the Mandate separates authorization from context</td></tr><tr><td>Ticket state that follows the DSH Session</td><td>A Ticket can be handed off, resumed, or run by several Executors, so it defines its own state</td></tr></tbody></table></div>
+<h2 id="ch-3-s5">Aggregates and code homes</h2>
+<p>The model groups its concepts into three aggregates, each one boundary of consistency. A Source holds its read position, so replay is its problem alone. A Thread holds its Subscriptions, its running Eval — serial, merging Triggers that arrive meanwhile into the next batch — and its Decision history. A Ticket holds its Assignments, Channels and Inputs, and refers to Decisions by id.</p>
+<p>In code, the vocabulary has two homes. <code class="long">src/core/model.ts</code> defines the types — <code>Trigger</code>, <code>Thread</code>, <code>Evaluation</code>, <code>Decision</code>, <code>Mandate</code>, <code>Ticket</code>, <code>Assignment</code>, <code>TriggerDisposition</code> — and the predicates that keep those rules consistent: <code>followupOwners</code>, <code>settled</code>, <code>waitsForPerson</code>, <code>liveTicket</code>. <code class="long">src/core/stage.ts</code> classifies a Ticket's stage — waiting on a person, working, idle or ended — in <code>ticketStage</code>, reading the same Reports. The deterministic halves of judgement sit just outside the core: the Gate and Mandate revalidation in <code class="long">src/policy.ts</code>, the reason codes in <code class="long">src/core/reasons.ts</code>. And every record above has one writer, the Engine in <code class="long">src/core/engine.ts</code>, so the vocabulary is not just shared but centrally enforced.</p>
+</section>
+<section class="chapter" id="ch-4">
+<p class="eyebrow">Chapter 4</p>
+<h1>The High-Level Architecture</h1>
+<p>dsh-superagent does not run as a service beside DeepSeek Harness (DSH); it runs as plugins inside a single DSH host process. The main entry, <code class="long">src/index.ts</code>, exports an <code>apply</code> function that constructs one <code>Runtime</code> and awaits its readiness. The same package builds two more plugins — <code class="long">src/sources/github.ts</code> and <code class="long">src/sources/feishu.ts</code>, bundled by <code>tsdown.config.ts</code> and exported in <code>package.json</code> as <code class="long">./github-watch</code> and <code class="long">./feishu-watch</code> — and the bundle's <code>cordis.patch.yml</code> inserts all three into the host, with Feishu disabled until a bot is configured, alongside the two agent presets the Sessions run under. A Source, the term for a connection to a platform such as GitHub or Feishu, is therefore not a watcher process of its own: each Source plugin injects the <code>orchestrator</code> service that the Runtime publishes on the Cordis context and registers its kind through it (<code class="long">src/sources/github.ts:111</code>).</p>
+<p>One process owns one state directory and one SQLite file. The Runtime's constructor creates <code>machine.stateDir</code>, locks the directory with <code>lockSync</code> from <code>proper-lockfile</code> (<code class="long">src/app/runtime.ts</code>, the lock considered stale after thirty seconds), and only then opens the Store on <code class="long">&lt;stateDir&gt;/orchestrator.sqlite</code>. The lock sits on the directory rather than the database file because opening the database may migrate its schema, and a second process writing the same state would race that migration. If construction fails, the Runtime closes the Store and releases the lock, so an in-process restart can reacquire both. Everything durable lives behind that one lock: Triggers, Tickets, queued effect rows, outbox receipts, settings and prompt versions.</p>
+<figure class="figure-wide"><svg viewBox="0 0 1100 880" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Runtime layers: DeepSeek Harness host containing source plugins and the main dsh-superagent plugin with panel, application layer, pure core, store; executor and DSH sessions below; GitHub and Feishu outside, reached through CLIs">
+  <style>
+    .host { fill:none; stroke:#b7ad9c; stroke-width:1.5; stroke-dasharray:7 5; rx:14; }
+    .plug { fill:none; stroke:#9a5b2e; stroke-width:1.4; stroke-dasharray:6 4; rx:12; }
+    .layer { fill:#fdfcf9; stroke:#c9c0af; stroke-width:1.4; rx:12; }
+    .box { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.6; rx:9; }
+    .async { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.5; rx:9; }
+    .ext { fill:#edf3ea; stroke:#4c7a45; stroke-width:1.6; rx:9; }
+    .neutral { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.4; rx:9; }
+    .chip { fill:#ffffff; stroke:#2e6f77; stroke-width:1.2; rx:7; }
+    .t { font:600 14.5px -apple-system,'Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 11px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .tc { font:500 10.5px -apple-system,'Segoe UI',sans-serif; fill:#2e6f77; text-anchor:middle; dominant-baseline:middle; }
+    .cap { font:600 11.5px -apple-system,'Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; }
+    .e { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#la); }
+    .ev { stroke:#9a5b2e; stroke-width:1.5; fill:none; marker-end:url(#la2); }
+    .eg { stroke:#4c7a45; stroke-width:1.5; fill:none; marker-end:url(#la3); }
+    .el { font:500 11.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; paint-order:stroke; stroke:#fdfcf9; stroke-width:4px; }
+  </style>
+  <defs>
+    <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+    <marker id="la2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9a5b2e"/></marker>
+    <marker id="la3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4c7a45"/></marker>
+  </defs>
+
+  <!-- host -->
+  <rect x="230" y="64" width="850" height="780" class="host"/>
+  <text x="250" y="90" class="cap">DEEPSEEK HARNESS HOST PROCESS</text>
+
+  <!-- externals -->
+  <rect x="24" y="140" width="172" height="58" class="ext"/>
+  <text x="110" y="161" class="t">GitHub</text>
+  <text x="110" y="181" class="ts">through the gh CLI</text>
+  <rect x="24" y="232" width="172" height="58" class="ext"/>
+  <text x="110" y="253" class="t">Feishu</text>
+  <text x="110" y="273" class="ts">through the lark CLI</text>
+
+  <!-- source plugins -->
+  <rect x="250" y="112" width="200" height="206" class="plug"/>
+  <text x="266" y="132" class="cap">SOURCE PLUGINS</text>
+  <rect x="264" y="142" width="172" height="70" class="neutral"/>
+  <text x="350" y="166" class="t">github-watch</text>
+  <text x="350" y="188" class="ts">notifications · PRs · CI</text>
+  <rect x="264" y="228" width="172" height="70" class="neutral"/>
+  <text x="350" y="252" class="t">feishu-watch</text>
+  <text x="350" y="274" class="ts">events · topics · history</text>
+
+  <!-- main plugin -->
+  <rect x="480" y="104" width="580" height="612" class="layer"/>
+  <text x="498" y="126" class="cap">DSH-SUPERAGENT — MAIN PLUGIN (src/index.ts)</text>
+
+  <!-- panel + http -->
+  <rect x="500" y="138" width="232" height="50" class="neutral"/>
+  <text x="616" y="157" class="t">Panel</text>
+  <text x="616" y="175" class="ts">shows what needs a person</text>
+  <rect x="764" y="138" width="276" height="50" class="neutral"/>
+  <text x="902" y="157" class="t">HTTP routes</text>
+  <text x="902" y="175" class="ts">/orchestrator/api — views read the Store</text>
+  <line x1="732" y1="163" x2="760" y2="163" class="e"/>
+
+  <!-- app layer: two rows of chips with a left channel at x=712 and a right channel after x=1030 -->
+  <rect x="500" y="206" width="540" height="240" class="layer"/>
+  <text x="516" y="226" class="cap">APPLICATION LAYER (src/app)</text>
+  <rect x="520" y="240" width="180" height="60" class="box"/>
+  <text x="610" y="261" class="t">Runtime</text>
+  <text x="610" y="281" class="ts">composition root</text>
+
+  <rect x="724" y="234" width="68" height="40" class="neutral"/>
+  <text x="758" y="254" class="t" style="font-size:12.5px">Passes</text>
+  <rect x="800" y="234" width="68" height="40" class="async"/>
+  <text x="834" y="254" class="t" style="font-size:12.5px">Effects</text>
+  <rect x="876" y="234" width="68" height="40" class="neutral"/>
+  <text x="910" y="254" class="t" style="font-size:12.5px">Outbox</text>
+  <rect x="952" y="234" width="78" height="40" class="neutral"/>
+  <text x="991" y="254" class="t" style="font-size:12.5px">Prompts</text>
+
+  <rect x="724" y="284" width="108" height="44" class="neutral"/>
+  <text x="778" y="306" class="t" style="font-size:11.5px">MasterAssessor</text>
+  <rect x="852" y="284" width="74" height="44" class="neutral"/>
+  <text x="889" y="306" class="t" style="font-size:12.5px">Settings</text>
+  <rect x="934" y="284" width="96" height="44" class="neutral"/>
+  <text x="982" y="306" class="t" style="font-size:12.5px">Sessions</text>
+
+  <!-- core layer -->
+  <rect x="500" y="470" width="540" height="168" class="layer"/>
+  <text x="516" y="490" class="cap">PURE CORE (src/core) — SYNCHRONOUS, NO I/O</text>
+  <rect x="530" y="502" width="300" height="92" class="box"/>
+  <text x="680" y="524" class="t">Engine</text>
+  <rect x="542" y="544" width="48" height="26" class="chip"/><text x="566" y="558" class="tc">Intake</text>
+  <rect x="596" y="544" width="44" height="26" class="chip"/><text x="618" y="558" class="tc">Evals</text>
+  <rect x="646" y="544" width="54" height="26" class="chip"/><text x="673" y="558" class="tc">Tickets</text>
+  <rect x="706" y="544" width="72" height="26" class="chip"/><text x="742" y="558" class="tc">Assignments</text>
+  <rect x="784" y="544" width="56" height="26" class="chip"/><text x="812" y="558" class="tc">Replies</text>
+  <text x="680" y="604" class="ts" style="font-size:10px">ports: Repositories · Policy · SourceScope · Assessor · Executor</text>
+  <text x="680" y="620" class="ts" style="font-size:10px">Outbox — every method synchronous</text>
+
+  <!-- store + sqlite -->
+  <rect x="520" y="658" width="200" height="50" class="neutral"/>
+  <text x="620" y="677" class="t">Store</text>
+  <text x="620" y="695" class="ts">src/app/store.ts</text>
+  <rect x="750" y="658" width="200" height="50" class="neutral"/>
+  <text x="850" y="677" class="t">orchestrator.sqlite</text>
+  <text x="850" y="695" class="ts">one file, one directory lock</text>
+  <line x1="720" y1="683" x2="746" y2="683" class="e"/>
+
+  <!-- executor + sessions row -->
+  <rect x="480" y="742" width="366" height="64" class="async"/>
+  <text x="663" y="764" class="t">DshExecutor</text>
+  <text x="663" y="786" class="ts">one worker Session + one directory, per Ticket</text>
+  <rect x="870" y="742" width="190" height="64" class="neutral"/>
+  <text x="965" y="764" class="t">DSH Sessions</text>
+  <text x="965" y="786" class="ts">main router + workers</text>
+
+  <!-- arrows -->
+  <line x1="196" y1="162" x2="260" y2="168" class="eg"/>
+  <line x1="262" y1="188" x2="198" y2="182" class="eg"/>
+  <line x1="196" y1="254" x2="260" y2="260" class="eg"/>
+  <line x1="262" y1="280" x2="198" y2="274" class="eg"/>
+
+  <!-- triggers: source plugins down and into engine's left edge -->
+  <path d="M350,318 L350,556 L528,556" class="e"/>
+  <text x="332" y="440" class="el" transform="rotate(-90 332 440)">Triggers — via a narrow SourceContext</text>
+
+  <!-- passes -> engine, through the left channel beside Runtime -->
+  <path d="M724,254 L712,254 L712,498" class="e"/>
+  <text x="650" y="384" class="el">evaluateDue — every pass</text>
+
+  <!-- engine -> store -->
+  <path d="M680,594 L660,654" class="e"/>
+  <text x="742" y="632" class="el">repositories</text>
+
+  <!-- outbox -> source plugins (channel send), routed above the app layer -->
+  <path d="M910,234 L910,197 L452,197" class="ev"/>
+  <text x="680" y="197" class="el">reply effect → Channel send</text>
+
+  <!-- effects -> executor, right margin lane, entering from below -->
+  <path d="M842,274 L842,458 L1066,458 L1066,820 L663,820 L663,812" class="ev"/>
+  <text x="1052" y="610" class="el" transform="rotate(-90 1052 610)">launch · delivery effects</text>
+
+  <!-- executor -> engine (reports), left margin lane -->
+  <path d="M480,788 L460,788 L460,584 L528,584" class="e"/>
+  <text x="444" y="690" class="el" transform="rotate(-90 444 690)">assignmentStarted · report</text>
+
+  <!-- sessions -> DSH sessions -->
+  <path d="M982,328 L982,738" class="e"/>
+  <text x="1000" y="540" class="el" transform="rotate(-90 1000 540)">manages the Sessions of both roles</text>
+</svg><figcaption>The runtime stack: plugins in a DeepSeek Harness host, a pure core, adapters at the edges</figcaption></figure>
+<h2 id="ch-4-s1">Three layers, one direction</h2>
+<p>The layering is a rule about imports, and the repository holds to it. At the center sits the pure core, <code class="long">src/core</code>: the Engine, the domain types in <code class="long">src/core/model.ts</code>, and the ports the Engine consumes. It is synchronous, performs no I/O, and imports nothing outside itself except Node's hashing (<code>node:crypto</code> in <code class="long">src/core/ids.ts</code>, used to derive ids). The rule is stated in <code class="long">docs/007-architecture.md</code> under &quot;Dependency rules&quot;; the directory's imports amount to exactly that. The payoff is that every domain rule — batching, resume, the attention lifecycle — can be exercised against the in-memory repositories of <code class="long">src/core/memory.ts</code> with no database, no clock and no network.</p>
+<p>Around the core sits the application layer, <code class="long">src/app</code>. The Runtime (<code class="long">src/app/runtime.ts</code>) is the composition root, the one class that knows how all the parts connect; it contains no domain rules. Alongside it live the Store (SQLite persistence), the Effects queue, the Outbox, Sessions, Settings, Prompts (revisioned configuration), and <code class="long">src/app/http.ts</code> with the panel's routes. This layer owns durability and timing, and it implements the ports the core declared: the Store realizes <code>Repositories</code>, the Outbox realizes the core's <code>Outbox</code> interface, so the core never learns which database or chat platform stands behind its types.</p>
+<p>At the edges, adapters translate. <code class="long">src/sources</code> implements GitHub and Feishu behind the <code>SourceKind</code> protocol (<code class="long">src/sources/kind.ts</code>) and imports nothing from <code class="long">src/app</code>; its plugins reach the application only through the injected <code>SourceHost</code> interface, and a kind's own code sees the narrower <code>SourceContext</code>. <code class="long">src/executor</code> holds the DshExecutor, which turns accepted work into agent Sessions. <code class="long">src/client</code> is the management panel, a browser bundle that imports only types from the host side plus a fixed list of plain values such as error codes and filter lists, so it can be bundled without pulling the server along. Dependencies point inward: the edges may know the core's types, and the core knows nobody.</p>
+<h2 id="ch-4-s2">The Engine: one decision point</h2>
+<p>Every state change that matters passes through one class. The Engine (<code class="long">src/core/engine.ts</code>) is the only writer of Triggers (inbound events), Threads (conversations), Decisions (recorded outcomes), Tickets (units of accepted work) and Assignments (the runs of a Ticket); Sources, Executors and the panel all ask it to change these things rather than changing them. It receives its collaborators as ports from <code class="long">src/core/ports.ts</code>: <code>Repositories</code> for durable state, a getter for the current Policy (the versioned authorization rules), <code>SourceScope</code> for whether a Source listens to a Trigger, an <code>Assessor</code> for judging candidates, an <code>Executor</code> for running accepted work, and an <code>Outbox</code> for Channel writes (a Channel names the conversation a reply goes to).</p>
+<p>All Engine methods are synchronous, and each command wraps its work in one transaction through <code>repo.atomic(...)</code>; <code>evaluateDue</code> opens a separate transaction for each Eval or Ticket it changes, so a failure abandons little. Invalid requests throw <code>UserError</code>. Callers do not receive the Engine itself but the <code>Pick</code> of their role: <code>EngineForSources</code> exposes <code>receive</code>, <code>bindThread</code> and <code>threadClosed</code>; <code>EngineForMainSession</code> carries <code>decide</code> and <code>attach</code>; <code>EngineForPeople</code> the stop and retry commands; <code>EngineForSettings</code> only <code>policyChanged</code>; <code>EngineForExecutor</code> the past-tense facts such as <code>assignmentStarted</code> and <code>report</code>. The naming encodes the contract — commands are imperative (<code>stopTicket</code>), facts reported by adapters are past tense — and a Source literally cannot stop a Ticket, because the type it holds has no such method.</p>
+<h2 id="ch-4-s3">Two asynchronous engines around a synchronous one</h2>
+<p>The Engine's synchrony is half the design; the other half is what happens outside its transactions. Two schedulers turn the synchronous core into a running system.</p>
+<p>Passes (<code class="long">src/app/passes.ts</code>) is the heartbeat. Started by the Runtime, it runs one pass every two seconds — <code>setInterval(..., 2000)</code> — and immediately whenever a Source stores a Trigger, or a tool, a settings save or an HTTP route asks for one. A pass is <code>effects.kick()</code> followed by <code>Engine.evaluateDue()</code>: dispatch whatever queued work has come due, then let the Engine start the Evals (the evaluations of queued Triggers, each ending in a Decision) whose time arrived. Only one pass runs at a time; requests that arrive mid-pass coalesce into a single follow-up, and while setup is incomplete or the system is closing, a pass returns without doing anything.</p>
+<p>Effects (<code class="long">src/app/effects.ts</code>) is the durable queue that makes side effects survive crashes. A command calls <code class="long">enqueue(kind, key, payload)</code> inside its own transaction, so the row is written with the state change, and handlers run only after commit. Each kind and key has one row — re-enqueuing a waiting key replaces its payload but keeps its queue position — failures retry with exponential backoff, and throwing <code>Later</code> defers work without counting a failure, as when no worker slot is free. Six kinds exist, each owned by one adapter: <code>assessment</code> (MasterAssessor), <code>launch</code> and <code>delivery</code> (DshExecutor), <code>relay</code> and <code>notice</code> (Sessions), and <code>reply</code> (Outbox).</p>
+<p>This command/effect split is the load-bearing idea of the architecture. A command changes state and enqueues work inside one transaction; adapters perform the work only after commit. The system can therefore crash between decision and delivery without inconsistency — on restart the effect rows are still in SQLite, and what was decided still happens. The Engine stays synchronous because nothing it calls waits for the world; the world is queued.</p>
+<h2 id="ch-4-s4">The supporting cast</h2>
+<p>The Store (<code class="long">src/app/store.ts</code>) owns the one SQLite database, opened with WAL and <code>synchronous=FULL</code>, and groups its surface by purpose: domain repositories wrapped in <code>atomic</code>, read queries that never write, revisioned settings, outbox receipts, and typed key-value records. Generated columns with partial indexes define the working sets — open Tickets, active Threads — so a pass scans only live rows, and only the Store ever opens the file.</p>
+<p>The Outbox (<code class="long">src/app/outbox.ts</code>) implements the core's <code>Outbox</code> port. <code>send</code> records a receipt and queues a <code>reply</code> effect in one transaction, and the effect's handler pushes the message through its Source. Ordering is per conversation: a later message for the same Ticket and conversation waits behind an earlier pending one, everything waits while its Source is off, and a receipt settles as <code>dropped</code> when the conversation is gone or no longer listened to.</p>
+<p>Sessions (<code class="long">src/app/sessions.ts</code>) manages the DSH agent conversations of both roles: the main Session, the coordinator that routes and decides, and one worker (Executor) Session per Ticket, named <code>worker-&lt;ticketId&gt;</code> (<code class="long">src/executor/dsh.ts</code>). It decorates each with prompts, skills and tools, delivers each message once per request id, and binds each model request to the current prompt revision — a record kept durably, so a worker may reread exactly the prompt it worked under and nothing newer.</p>
+<p>MasterAssessor (<code class="long">src/app/assessment.ts</code>) lets the main Session assess inferred candidates: work nobody explicitly requested. <code>request</code> queues an <code>assessment</code> effect that steers a candidate card into the main Session's turn, and the <code>orchestrator_eval</code>, <code>orchestrator_eval_read</code> and <code>orchestrator_eval_decide</code> tools give the Session bounded Thread context and a decision path back into <code>Engine.decide</code>. The Eval's deadline starts only when the card is delivered (<code>candidateDelivered</code>), so a busy Session does not burn evaluation time.</p>
+<p>DshExecutor (<code class="long">src/executor/dsh.ts</code>) gives each Ticket one Session and one working directory. <code>start</code> and <code>deliver</code> enqueue <code>launch</code> and <code>delivery</code> effects; <code>stop</code> cancels a worker's turn through <code>Store.afterCommit</code>, so a command that rolls back never stops a worker; and <code>prepare</code> supplies the Engine's <code>prepareTicket</code> hook with the Ticket's short name, directory and assignment text.</p>
+<p>The panel (<code class="long">src/client</code>, over the loopback-only, same-origin <code class="long">/orchestrator/api</code> routes of <code class="long">src/app/http.ts</code>) shows a person only what needs a person: Tickets waiting on a human, problems, unavailable Evals, the workers' load. Some actions exist only there — dismissing an unavailable Decision, rerunning setup — because no agent should be able to take them.</p>
+<h2 id="ch-4-s5">Starting and stopping</h2>
+<p>Startup is ordered so that failure degrades rather than crashes. <code>initialize()</code> in <code class="long">src/app/runtime.ts</code> registers the HTTP routes first, so an operator can reach the panel even when setup cannot complete. Setup then probes the repository and accounts; if it fails, the Runtime reports <code>setupPending</code> and stops there — Sources still record incoming Triggers, but nothing evaluates or sends. Once setup resolves, the Runtime installs the Session and Executor hooks, ensures the main Session exists, syncs each syncable Source's Policy part, resumes interrupted Assignments through <code>assignmentInterrupted</code>, and only then starts passes and effects. <code>ready</code> resolves when startup has finished, including the case where setup stopped it short.</p>
+<p>Shutdown runs the same list backward. <code>stop()</code> is idempotent; it sets the closing flag, stops the passes, and aborts the lifetime signal that cancels running reads and subprocesses. It cancels the turns of the main and every worker Session, keeping their inboxes, then waits for the last pass, the effect drain — pending rows stay in SQLite for the next start — and the agents to go idle, stopping the workers' background jobs and subagents. After disposing the hooks and flushing Session persistence, a <code>finally</code> block restores the process environment Setup had changed, closes the Store, and releases the directory lock, in that order, so no other process can open the database mid-write.</p>
+</section>
+<section class="chapter" id="ch-5">
+<p class="eyebrow">Chapter 5</p>
+<h1>Inside the Machine, Part I: The Pure Core</h1>
+<p>Everything dsh-superagent knows about work — what may start it, how it proceeds, when it ends — lives in one directory. <code class="long">src/core</code> imports nothing outside itself apart from Node's hashing and does no I/O; its rules are pure functions over stored records, and the whole domain also runs on in-memory repositories in tests (<code class="long">src/core/memory.ts</code>). The tour runs from the inside out: the Engine and its five parts, authorization as computation, assessment, the store beneath, and the predicates that keep every part's answers consistent.</p>
+<h2 id="ch-5-s1">5.1 One Engine, Five Parts</h2>
+<p>The Engine (<code class="long">src/core/engine.ts</code>) is the domain's single entry point and the only writer of Triggers, Threads, Decisions, Tickets and Assignments. A Trigger is one immutable event delivered by a Source, the adapter for GitHub or Feishu; a Thread is the conversation it belongs to; a Ticket is a unit of accepted work. Every method is synchronous and wraps its command in one <code>repo.atomic</code> transaction: repositories change inside it, ports enqueue external work inside it, and adapters perform that work after commit. Callers never hold the whole Engine; each role receives a <code>Pick</code> of the methods it may call (<code>EngineForSources</code>, <code>EngineForMainSession</code>, <code>EngineForPeople</code>, <code>EngineForSettings</code>, <code>EngineForExecutor</code>).</p>
+<figure class="figure-wide"><svg viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The Engine and its five parts: Intake, Evals, Tickets, Assignments, Replies, with one-way dependencies and the callers on each side">
+  <style>
+    .eng { fill:#fdfcf9; stroke:#2e6f77; stroke-width:1.8; rx:14; }
+    .box { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.5; rx:10; }
+    .rep { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.4; rx:10; }
+    .in { font:600 12px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:end; dominant-baseline:middle; }
+    .out { font:600 12px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:start; dominant-baseline:middle; }
+    .t { font:600 15px -apple-system,'Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 10.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .cap { font:600 11.5px -apple-system,'Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; text-anchor:middle; }
+    .e { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#ea); }
+    .ed { stroke:#857c6e; stroke-width:1.4; fill:none; stroke-dasharray:5 4; marker-end:url(#ea); }
+  </style>
+  <defs>
+    <marker id="ea" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+  </defs>
+
+  <rect x="170" y="56" width="700" height="330" class="eng"/>
+  <text x="520" y="80" class="cap">ENGINE — ONE ENTRY POINT, FIVE PARTS, ONE TRANSACTION PER COMMAND</text>
+
+  <rect x="200" y="100" width="150" height="66" class="box"/>
+  <text x="275" y="122" class="t">Intake</text>
+  <text x="275" y="142" class="ts">store once · fan out</text>
+  <text x="275" y="156" class="ts">to subscribed Tickets</text>
+
+  <rect x="410" y="100" width="170" height="66" class="box"/>
+  <text x="495" y="122" class="t">Evals</text>
+  <text x="495" y="142" class="ts">batching · deadline · expiry</text>
+  <text x="495" y="156" class="ts">ends in a Decision</text>
+
+  <rect x="300" y="236" width="200" height="76" class="box"/>
+  <text x="400" y="258" class="t">Tickets</text>
+  <text x="400" y="278" class="ts">lifecycle · Mandate</text>
+  <text x="400" y="292" class="ts">Subscriptions · Inputs</text>
+
+  <rect x="590" y="146" width="190" height="76" class="box"/>
+  <text x="685" y="168" class="t">Assignments</text>
+  <text x="685" y="188" class="ts">what Executors report:</text>
+  <text x="685" y="202" class="ts">started · delivered · ended</text>
+
+  <rect x="590" y="296" width="190" height="66" class="rep"/>
+  <text x="685" y="318" class="t">Replies</text>
+  <text x="685" y="338" class="ts">ack · answer · result</text>
+  <text x="685" y="352" class="ts">attention — by rule</text>
+
+  <path d="M275,166 L275,200 L365,236" class="e"/>
+  <path d="M495,166 L445,236" class="e"/>
+  <path d="M590,184 L496,232" class="e"/>
+  <path d="M685,222 L685,294" class="e"/>
+  <path d="M500,296 L588,326" class="e"/>
+
+  <text x="160" y="118" class="in">Source Triggers</text>
+  <path d="M162,124 L198,124" class="ed"/>
+  <text x="160" y="146" class="in">receive()</text>
+
+  <text x="495" y="88" class="in" style="text-anchor:middle">pass: evaluateDue()</text>
+  <path d="M495,92 L495,98" class="ed"/>
+
+  <text x="880" y="164" class="out">Executor facts</text>
+  <path d="M878,170 L782,170" class="ed"/>
+  <text x="880" y="186" class="out">report · inputsRead</text>
+  <text x="880" y="202" class="out">turnEnded</text>
+
+  <text x="880" y="316" class="out">Outbox</text>
+  <path d="M878,322 L782,322" class="ed"/>
+
+  <text x="520" y="412" class="ts">dependencies flow one way — Intake and Evals read Tickets; Tickets and Assignments write through Replies; no part depends back</text>
+  <text x="520" y="434" class="ts">callers see only their role: EngineForSources · EngineForMainSession · EngineForPeople · EngineForSettings · EngineForExecutor</text>
+</svg><figcaption>The Engine's five parts and the one-way flow of dependencies between them</figcaption></figure>
+<p>The Engine delegates to five parts, each extending <code>EnginePart</code> (<code class="long">src/core/part.ts</code>), a base class of shared reads and helpers. Replies depends on nothing, Tickets on Replies, Assignments on Tickets and Replies, Intake and Evals on Tickets — one way only; the Engine sequences a command that spans parts, such as <code>attach</code>, inside its transaction. The naming grammar is uniform: commands take imperative names (<code>stopTicket</code>, <code>bindThread</code>, <code>retryTicket</code>) and may be refused; facts that adapters report take past-tense names (<code>assignmentStarted</code>, <code>inputsDelivered</code>, <code>deliveryFailed</code>, <code>threadClosed</code>) and are recorded, not refused; the query <code>candidate</code> uses a noun.</p>
+<p>Intake (<code class="long">src/core/intake.ts</code>) owns a Trigger's arrival. Reception is store-once: a known id answers <code>duplicate</code>; a Trigger no Source listens to is stored with a Disposition — the record of where a Trigger went — marked <code>filtered</code>; everything else answers <code>stored</code>. A stored Trigger fans out to every Ticket subscribed to its Threads, a delivery that bypasses the Gate of Section 5.2 because it grants nothing: the message arrives as an Input, a message or fact delivered to a worker. Only a person's message, on a Thread not followed merely for context, resumes an ended Ticket — never a stopped one. A person's message that reached a Ticket stays with that Ticket: <code>receive</code> queues a Trigger for an Eval — the evaluation of a Thread's queued Triggers — only when <code>followupOwners</code> finds no Ticket whose worker decides it.</p>
+<p>Evals (<code class="long">src/core/evals.ts</code>) owns the Eval lifecycle and the Decision — the recorded outcome — each Eval ends with. Batching is per Thread: all queued Triggers form one batch, and Triggers that arrive while an Eval runs wait for the next one. The batch takes its strength, actor and Gate basis from its strongest admissible Trigger. The deadline counts from candidate delivery: <code>candidateDelivered</code> starts the clock when the candidate card reaches the main Session, the coordinating agent, and an undelivered candidate never expires. An expired Eval queues its Triggers again, at most <code>REQUEUES</code> (two) times in a row; the third expiry records an <code>unavailable</code> Decision with reason <code>timeout</code>.</p>
+<p>Tickets (<code class="long">src/core/tickets.ts</code>) owns the Ticket lifecycle. Creation from an accept is atomic: in one transaction, <code>Tickets.create</code> writes the Ticket, its Mandate — the authorization an accept produces — the first Assignment (one worker run), a Subscription — a Ticket's following of a Thread — for each Thread of each Trigger in the batch, and the acknowledgement the accept carries; all of it commits or none of it does. The part also owns the end rule for Tickets that follow Threads: <code>followsDone</code> holds once no Thread the Ticket opened is still open or, when it opened none, once every followed Thread closed, and the Ticket ends with the latest close's outcome, <code>merged</code> or <code>closed</code>. Inputs are added once by id; automated Inputs — CI results, bot messages, notes — are held while the Ticket <code>waitsForPerson</code>.</p>
+<p>Assignments (<code class="long">src/core/assignments.ts</code>) owns what the Executor and its workers report: past-tense facts — an Assignment started, Inputs delivered or failed, Inputs read into a step, a turn ended, a host restart interrupted. A worker's Report has six states from <code>progress</code> to <code>dropped</code>. A <code>blocked</code> or <code>failed</code> report holds back automated Inputs until a person writes; a <code>dropped</code> report ends the Ticket; a <code>ready</code> report ends it as <code>completed</code>, or with the <code>followsDone</code> outcome when it follows Threads. A report may carry a question for a person — an Attention — asked, kept or cleared; a replaced question withdraws its unsent reply from the Outbox, the outgoing-message queue.</p>
+<p>Replies (<code class="long">src/core/replies.ts</code>) owns the Engine's messages to Channels — write-only addresses on Threads — each purpose allowed by its own rule. An acknowledgement requires an open Ticket, a message that reached it on a Thread it does not follow merely for context, and a person as its author; an answer requires that the worker's report answered that person's question; a result is allowed only for a Ticket that is ready, completed, merged or dropped; an attention message must match the Ticket's currently open question. Each message is queued at most once, under a deterministic id such as <code>key('ack', trigger.id)</code>.</p>
+<h2 id="ch-5-s2">5.2 The Gate: Authorization as Computation</h2>
+<p>Authorization is not a checkpoint a request passes once but a computation the system can re-run at any time. <code>settingsPolicy</code> (<code class="long">src/policy.ts</code>) builds a fresh, stateless Policy — the configuration of who may start what — on every use; nothing is cached, so a save takes effect on the next call. Its surface is small: <code>version</code>, <code>paused</code>, <code>evalTimeoutMs</code>, the <code>gate</code> function, <code>revalidate</code> for existing Mandates, and <code>admitsInferred</code> for proactive accepts.</p>
+<p>The Gate is <code class="long">gate(trigger, thread, tickets)</code>: its answer is an admission — explicit or inferred — plus a basis, <code>via: 'addressed'</code> for a listed sender who addressed the agent, <code>'followup'</code> for a message on a Thread with participating Tickets, <code>'admission'</code> for an admission-table cell, <code>'bot'</code> for a listed bot. An allowed sender who addresses the agent is always explicit. An admission cell set to <code>explicit</code> is checked before follow-up strength, so a Thread's Tickets never weaken an explicit request. A follow-up on a participating Thread is explicit for an allowed sender and inferred for anyone else, unless the accept mode is <code>off</code>. Machines take a separate path: only listed bots pass, as inferred candidates at most, a senderless CI event uses the unlisted-unaddressed cell, and every other bot is rejected as <code>not_human</code>.</p>
+<p>The admission table (<code class="long">src/admission.ts</code>) is per Source; its rows are receiving scopes — Feishu chats and direct messages; GitHub new Issues, pull requests, comments and default-branch CI. A row has up to three cells, by whether the sender is listed and addresses the agent: <code>listedUnaddressed</code> may be inferred or ignore, <code>unlistedAddressed</code> may be explicit, inferred or ignore, <code>unlistedUnaddressed</code> may be inferred or ignore — an unaddressed message can never be explicit. Defaults are inferred, ignore and ignore; unaddressed cells exist only where the Source receives every message in that scope.</p>
+<p>What an admitted candidate may become depends on the accept mode. In <code>off</code>, nothing inferred becomes a candidate. In <code>observe</code>, the default, inferred candidates are assessed, but a positive assessment is recorded as an ignore marked &quot;would accept&quot; and nothing is accepted. In <code>auto</code>, a positive assessment accepts. Explicit requests work in every mode.</p>
+<p>All of this rolls into the Policy version: <code>policyVersion</code> hashes the rules, the accept mode and each Source's policy parts — allowed lists, admission tables, bot lists — under a revision tag, <code>mandate-v3</code>. Every Mandate and Decision records its version; a Decision arriving under an older one is recorded <code>unavailable</code> and its batch queued again. A version change does not reach every Ticket: <code>policyEffects</code> (<code class="long">src/policy.ts</code>) computes which live Tickets it bears on — a matched rule changed or disabled, the requester no longer allowed, proactive work no longer accepted — and only those receive a policy-changed Input.</p>
+<p>An ended Ticket keeps its Mandate, and a person's message on one of its Threads resumes it without a new Decision, but only after <code>revalidate(mandate)</code> passes under the current Policy: the Source must still listen to the original Thread, an explicit follow-up Mandate passes, an inferred one needs <code>auto</code> mode with its matched rules still enabled, a table-cell Mandate must still receive at least its original strength, and a bot's needs the bot still listed. A Ticket that fails stays ended and releases its waiting messages to Eval. Only three operations ever change a Mandate: an accept creates it, a person's stop withdraws it, a failed revalidation revokes it.</p>
+<h2 id="ch-5-s3">5.3 Assessment and Decision</h2>
+<p>An inferred candidate becomes a Decision through the MasterAssessor (<code class="long">src/app/assessment.ts</code>), the Engine's Assessor port. When an Eval starts, the assessor enqueues a durable <code>assessment</code> effect; its handler steers the candidate card into the main Session's turn and then calls <code>candidateDelivered</code>, the moment the Eval's deadline begins to count. Explicit candidates never come here: the assessor refuses them with a pointer to <code>orchestrator_route</code>, because an explicit request is routed, not assessed.</p>
+<p>The main Session works with three tools. <code>orchestrator_eval</code> returns context, not instructions: the Trigger's text up to 4,000 characters, its batch peers, up to eight related Tickets, the Policy version the Eval was built from, and a bounded Thread window — the first five messages and five on either side of the Trigger, truncated to 400 characters, or 1,200 for the two nearest neighbors. <code>orchestrator_eval_read</code> expands any of it — full messages, further thread pages, files, images — under cursors that must be copied from a returned reference. <code>orchestrator_eval_decide</code> submits the judgement, the Assessment.</p>
+<p><code>assessmentOutcome</code> (<code class="long">src/policy.ts</code>) converts that judgement into an Engine outcome, and it is strict. It requires exactly one rule assessment for every enabled rule, matched or not; anything else throws. An accept must carry a settled direction — implementation requested, a target specified or resting on an existing standard, no open design decision (<code>directionAllowed</code>) — or it is downgraded to an ignore with reason <code>directionUnsettled</code>; it must match at least one enabled rule, else <code>noRuleMatched</code>; and it must quote <code>intent_evidence</code>, the words that establish intent. Outside <code>auto</code> mode an inferred accept becomes an ignore marked <code>would_accept</code> with reason <code>observed</code>. The Engine takes none of this on faith: <code>Evals.decide</code> re-checks every inferred accept against <code>admitsInferred</code> and refuses it with <code>notExplicit</code>.</p>
+<p>One shortcut spares the trivial cases. An inferred candidate whose card clearly touches no enabled rule — plain chat, unrelated discussion — may be ignored directly from its card, and the Decision records the code <code>ignoredFromCard</code> beside the supplied reason, distinguishing it from a full assessment.</p>
+<h2 id="ch-5-s4">5.4 Persistence: One File, Generated Columns, One Writer per Table</h2>
+<p>Beneath the core sits one SQLite file, <code class="long">&lt;stateDir&gt;/orchestrator.sqlite</code>, opened only by the Store (<code class="long">src/app/store.ts</code>) after Runtime, the composition root, locks the state directory, so no second process can write the same state. It runs in WAL mode with <code>synchronous=FULL</code>, and its nine tables split the state by who may write it.</p>
+<figure class="figure-wide"><svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Persistence: one SQLite file with tables trigger, disposition, trigger_thread, thread, ticket, decision written by the Engine; effect written by Effects; outbox written by the Outbox; kv written by the part that names the key; generated columns and the directory lock noted below">
+  <style>
+    .file { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.6; }
+    .tbl { fill:#ffffff; stroke:#c9c0af; stroke-width:1.4; rx:10; }
+    .eng { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.4; }
+    .eff { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.4; }
+    .kvb { fill:#edf3ea; stroke:#4c7a45; stroke-width:1.4; }
+    .t { font:600 14px -apple-system,'Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 10.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .w { font:600 10px -apple-system,'Segoe UI',sans-serif; text-anchor:middle; dominant-baseline:middle; letter-spacing:.5px; }
+    .note { fill:#fdfcf9; stroke:#b7ad9c; stroke-width:1.2; stroke-dasharray:5 4; rx:10; }
+    .cap { font:600 11.5px -apple-system,'Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; text-anchor:middle; }
+  </style>
+
+  <rect x="380" y="26" width="240" height="52" class="file" rx="10"/>
+  <text x="500" y="48" class="t">orchestrator.sqlite</text>
+  <text x="500" y="66" class="ts">one file in the state dir — opened only by the Store</text>
+
+  <text x="500" y="104" class="cap">TABLES · EACH WITH ONE WRITER</text>
+
+  <!-- row 1 -->
+  <rect x="40" y="120" width="215" height="72" class="tbl"/>
+  <text x="147" y="142" class="t">trigger</text>
+  <text x="147" y="160" class="ts">one immutable event, stored once</text>
+  <rect x="167" y="168" width="72" height="18" class="eng" rx="9"/><text x="203" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="278" y="120" width="215" height="72" class="tbl"/>
+  <text x="385" y="142" class="t">disposition</text>
+  <text x="385" y="160" class="ts">where each Trigger went</text>
+  <rect x="405" y="168" width="72" height="18" class="eng" rx="9"/><text x="441" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="516" y="120" width="215" height="72" class="tbl"/>
+  <text x="623" y="142" class="t">trigger_thread</text>
+  <text x="623" y="160" class="ts">a Thread's Triggers, in time order</text>
+  <rect x="643" y="168" width="72" height="18" class="eng" rx="9"/><text x="679" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="754" y="120" width="215" height="72" class="tbl"/>
+  <text x="861" y="142" class="t">thread</text>
+  <text x="861" y="160" class="ts">Subscriptions · running Eval · meta</text>
+  <rect x="881" y="168" width="72" height="18" class="eng" rx="9"/><text x="917" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <!-- row 2 -->
+  <rect x="40" y="212" width="215" height="72" class="tbl"/>
+  <text x="147" y="234" class="t">ticket</text>
+  <text x="147" y="252" class="ts">Mandate · Assignments · Inputs · follows</text>
+  <rect x="167" y="260" width="72" height="18" class="eng" rx="9"/><text x="203" y="270" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="278" y="212" width="215" height="72" class="tbl"/>
+  <text x="385" y="234" class="t">decision</text>
+  <text x="385" y="252" class="ts">Eval's record, by Thread</text>
+  <rect x="405" y="260" width="72" height="18" class="eng" rx="9"/><text x="441" y="270" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="516" y="212" width="215" height="72" class="tbl"/>
+  <text x="623" y="234" class="t">effect</text>
+  <text x="623" y="252" class="ts">the durable work queue, one row per kind+key</text>
+  <rect x="630" y="260" width="66" height="18" class="eff" rx="9"/><text x="663" y="270" class="w" fill="#9a5b2e">EFFECTS</text>
+
+  <rect x="754" y="212" width="215" height="72" class="tbl"/>
+  <text x="861" y="234" class="t">outbox</text>
+  <text x="861" y="252" class="ts">receipts: pending · sent · dropped</text>
+  <rect x="862" y="260" width="78" height="18" class="eff" rx="9"/><text x="901" y="270" class="w" fill="#9a5b2e">OUTBOX</text>
+
+  <!-- kv wide -->
+  <rect x="40" y="304" width="929" height="88" class="tbl"/>
+  <text x="504" y="328" class="t">kv</text>
+  <text x="504" y="348" class="ts">every other record — schema version · settings and prompt versions · the main Session id · Sources' read cursors and PR fingerprints · display names</text>
+  <rect x="415" y="362" width="180" height="18" class="kvb" rx="9"/><text x="505" y="372" class="w" fill="#4c7a45">THE PART THAT NAMES THE KEY</text>
+  <text x="504" y="386" class="ts" style="font-size:10px">the registry in src/kv.ts gives every key one owner and one type</text>
+
+  <!-- notes -->
+  <rect x="40" y="418" width="450" height="82" class="note"/>
+  <text x="265" y="443" class="t" style="font-size:13px">generated columns, indexed</text>
+  <text x="265" y="463" class="ts">thread.active · thread.subscribed · ticket.open · ticket.active</text>
+  <text x="265" y="480" class="ts">computed from the row's JSON, so a pass reads only active work</text>
+
+  <rect x="510" y="418" width="459" height="82" class="note"/>
+  <text x="739" y="443" class="t" style="font-size:13px">one directory, one lock</text>
+  <text x="739" y="463" class="ts">Runtime locks the state dir before opening the Store,</text>
+  <text x="739" y="480" class="ts">so a second process can never migrate or write the same state</text>
+
+  <text x="500" y="540" class="ts">times are stored as Date#toISOString text, so they compare as text · afterCommit runs only when the transaction commits · nothing deletes old records yet</text>
+  <text x="500" y="560" class="ts">SCHEMA_VERSION only increases: a newer database refuses to start, an older one migrates once at startup (src/app/migration.ts)</text>
+</svg><figcaption>The SQLite tables and the single component allowed to write each</figcaption></figure>
+<div class="tablewrap"><table><thead><tr><th>Table</th><th>Written by</th></tr></thead><tbody><tr><td><code>trigger</code>, <code>disposition</code></td><td>Engine</td></tr><tr><td><code>thread</code></td><td>Engine; Sources write only their <code>meta</code></td></tr><tr><td><code>ticket</code>, <code>decision</code></td><td>Engine</td></tr><tr><td><code>trigger_thread</code></td><td>Store, as an index with each Trigger it saves</td></tr><tr><td><code>effect</code></td><td>Effects</td></tr><tr><td><code>outbox</code></td><td>Outbox</td></tr><tr><td><code>kv</code></td><td>The component that names the key in <code>KV</code></td></tr></tbody></table></div>
+<p>One writer per state is the rule the table encodes; everyone else reads or asks. <code>trigger_thread</code> is not domain data but an index the Store maintains with each Trigger it saves, so a Thread's timeline reads in order of time and then id without scanning every Trigger.</p>
+<p>Rows are JSON, and the working columns are generated from it: <code>ticket.open</code> while <code class="long">value -&gt; '$.ended' IS NULL</code>; <code>ticket.active</code> while Inputs are undelivered or the latest Assignment is pending or running; <code>thread.active</code> while Triggers are queued or an Eval runs; <code>thread.subscribed</code>, the Source, while any Ticket subscribes. Each carries a partial index over its set, so a pass — the two-second sweep that runs due effects and <code>Engine.evaluateDue</code> — reads only active work. A database predating a column gets it added on open, populated by SQLite from the stored JSON.</p>
+<p>Time is text, deliberately. Every Trigger timestamp is normalized at intake by <code>isoTime</code> (<code class="long">src/core/model.ts</code>) into the one form <code>Date#toISOString</code> produces, so stored times compare lexicographically in memory and in SQL — <code>deadline &lt;= now</code> is a string comparison.</p>
+<p>Transactions nest through savepoints, and <code>afterCommit</code> is the seam between commit and consequence: a callback queued inside a transaction runs only after the outermost commit, a rollback discards its level's callbacks, and a throwing callback is reported without failing the committed transaction. It serves in-memory follow-ups that need not survive a crash; durable side effects belong to the Effects queue instead.</p>
+<p>The <code>kv</code> table holds everything else, and <code>KV</code> (<code class="long">src/kv.ts</code>) is its registry: each key-value record is declared once, with its type and the single component that owns it — the schema version to the Store, settings revisions to Settings, the main Session's id to Runtime, read cursors to the Sources. A key is spelled once, with its owner plain.</p>
+<p>Schema movement is deliberately conservative. <code>SCHEMA_VERSION</code> is 11 and only increases (<code class="long">src/app/migration.ts</code>): a newer database refuses to start, one older than <code>OLDEST_SCHEMA</code> (10) is refused outright, and a schema 10 database is rewritten into its schema 11 shapes in one transaction at open; a failure leaves the file unchanged.</p>
+<h2 id="ch-5-s5">5.5 Shared Predicates</h2>
+<p>The rules that span parts live not in the parts but beside the model, as small predicates each part calls. <code>waitsForPerson</code> (<code class="long">src/core/model.ts</code>) answers whether a Ticket's latest Assignment reported <code>blocked</code> or <code>failed</code> and no person's message has reached it since. While it holds, <code>Tickets.addInput</code> holds back automated Inputs, <code>ticketStage</code> classifies the Ticket as waiting on a person, and <code>canRetry</code> (<code class="long">src/core/stage.ts</code>) makes it retryable; a later report that is neither, a person's message, or a retry lifts it.</p>
+<p><code>followupOwners</code> answers who decides a person's follow-up: the Tickets it reached on their own Threads that can still decide it and have not handed it back — live ones, and ended ones not stopped by a person with the message waiting to resume them. While any owner exists the message takes no Eval, and the main Session may only stop the work on it, a refusal <code>Evals.decide</code> enforces through <code>leftToWorkers</code>. <code>settled</code> answers whether a Decision resolved the request — stops, unavailables, refused stops and routings do not count — which is what lets a Ticket end without sending already-decided messages back to Eval.</p>
+<p><code>ticketStage</code> (<code class="long">src/core/stage.ts</code>) is the stage table of <code class="long">docs/003-execution.md</code> as code, read top to bottom with the first matching row winning: a failed delivery, an open Attention or a <code>ready</code> report puts the Ticket in a person stage, a blocked or failed report only when <code>waitsForPerson</code> holds, then queued, idle and working. <code>canRetry</code> closes the loop, making exactly the person-stage stalls a person may remedy — a held Ticket or a failed delivery — retryable.</p>
+<p>The reason to centralize these is not elegance but sameness. Whether a Ticket waits for a person is asked by Input delivery, the stage classifier, the retry command and the panel; if each answered with its own reading of reports and Inputs, the held Inputs and the &quot;Blocked&quot; label would eventually disagree. As pure functions over stored records — <code>followupOwners</code> takes a records interface, so the same code runs against SQLite, in memory and in the panel — they give one answer everywhere, change in one place, and are pinned by their own tests (<code class="long">tests/stage.spec.ts</code>).</p>
+</section>
+<section class="chapter" id="ch-6">
+<p class="eyebrow">Chapter 6</p>
+<h1>Inside the Machine, Part II: The Edges</h1>
+<p>Part I followed the Engine, the synchronous core that owns every decision. A core that only decides would be a brain in a jar. This part follows the machinery that connects it to the world: the queue that remembers promised work, the outbox that makes the agent speak in order, the executor that gives each Ticket — the system's unit of accepted work — a shell and a worker, the manager of its model conversations, and the Source plugins that listen to GitHub and Feishu. One rule repeats: decide inside a transaction, do the work afterwards, from storage.</p>
+<h2 id="ch-6-s1">6.1 The Effect Queue: Stored Work</h2>
+<p>Everything dsh-superagent does after a decision — relaying a worker's Report, launching an Assignment (one run of a Ticket's work), delivering an Input, a message bound for that worker, sending a reply — is stored first and done later. The durable bridge is <code>Effects</code> (<code class="long">src/app/effects.ts</code>). A command calls <code class="long">enqueue(kind, key, payload)</code> inside its transaction; the row lands in SQLite with the decision, and execution begins only after commit. A crash between the two moments loses nothing.</p>
+<p>The queue keeps one row per kind/key pair. Re-enqueuing a waiting key replaces its payload, resets its failure count and makes it due immediately, while the row keeps the sequence number it was first given — coalescing never costs queue order. A generation counter marks each replacement, so a running attempt cannot delete a newer payload. Handlers register once per kind with a concurrency limit and backoff bounds; due rows dispatch oldest first, and failures retry with exponential backoff up to the kind's cap.</p>
+<p>Not every refusal is a failure. Throwing the <code>Later</code> exception — no worker slot free, processing paused — reschedules the row after the initial delay without counting it. Real failures count, and once one item of a kind has failed three times in a row (<code>FAILURES_BEFORE_ERROR</code> in <code class="long">src/app/effects.ts</code>), the kind's health entry turns to <code>error</code> for the panel.</p>
+<p>Six kinds cover the edges. The <code>assessment</code> effect steers the candidate card of an Eval — the assessment of a proactive request — into the main Session's turn; once received, the MasterAssessor tells the Engine, which starts the Eval's deadline. The <code>launch</code> effect starts a pending Assignment — prepare command, Executor Session, assignment message. The <code>delivery</code> effect hands a Ticket's waiting Inputs to its running Assignment, in order; its failures are quiet, since they already show on their Ticket. The <code>relay</code> effect steers a worker's Report or question, or a person's follow-up, into the main Session's turn, and the <code>notice</code> effect injects without waking it; both are strictly ordered, a failed one holding back the later ones of its kind. The <code>reply</code> effect carries the Outbox's messages. A pass — the two-second sweep of <code class="long">src/app/passes.ts</code> — also picks up due rows.</p>
+<h2 id="ch-6-s2">6.2 The Outbox: Ordered Speech</h2>
+<p>When the Engine decides to speak on a Channel, the address a reply goes to — the acknowledgement of an accepted request, the answer to a question, the result of finished work — the <code>Outbox</code> (<code class="long">src/app/outbox.ts</code>) makes the message real. <code>send</code> records a receipt and enqueues a <code>reply</code> effect in one transaction; receipts are inserted ignore-on-duplicate and kept forever, so a message id is never queued twice, even across restarts.</p>
+<p>Ordering is per Ticket and per conversation. Before sending, the handler asks <code>receipts.behind</code> (<code class="long">src/app/store.ts</code>) whether an earlier message of the same Ticket to the same conversation is still pending with fewer than three failures; if so, the later one waits. The threshold is an escape hatch: once the earlier message has failed three times and surfaced as a problem, its successors go out rather than pile up behind it. Messages of other Tickets never wait.</p>
+<p>Waiting and dropping are kept distinct. While a message's Source is off or not installed, it waits. It is dropped only when the conversation can never receive it: the Source answers <code>gone</code> for a deleted Issue or a locked conversation on GitHub, or a recalled Feishu message (<code>channelGone</code>), or the Source no longer listens to that conversation (<code>channelIgnored</code>). Dropped receipts stay on record, with when, why and the Ticket they were for, and a dropped acknowledgement reads as dropped, not sent. Retries back off from 5 seconds doubling to 300. The order exists because conversations are chronological and read by people: the acknowledgement must precede the answer, and the answer the result, or a reader will conclude the agent never heard them.</p>
+<h2 id="ch-6-s3">6.3 The DshExecutor: One Session and One Directory per Ticket</h2>
+<p>Each Ticket gets one worker Session, named <code>worker-&lt;ticket id&gt;</code> (<code>workerSessionId</code> in <code class="long">src/executor/dsh.ts</code>), and one directory. The <code>prepare(ticket, outcome)</code> hook fills the execution facts at acceptance: a kebab-case short name of one to four words plus a 12-character id suffix, the directory under the configured execution root (default <code class="long">&lt;stateDir&gt;/work</code>), and the assignment text.</p>
+<p>Before the first Assignment, if the directory does not exist, the configured prepare command runs once through <code>sh -c</code> in the execution root, with ten minutes to finish; the typical command is a <code>git worktree</code> checkout. A failed prepare is deliberately not retried — an existing directory counts as prepared, so a retry would bless whatever the failed command left behind. The Ticket is marked failed and waits for a person or a retry to prepare it again.</p>
+<p><code>WorkerSlots</code> governs concurrency. Work reaches the executor as the <code>launch</code> and <code>delivery</code> effects above. A Ticket holds a slot from the start of a launch, including preparation, or from the delivery that wakes its idle worker, and keeps it through the turn. The configured <code>maxWorkers</code> applies, plus one extra slot that only a person's message may take; wakes take priority over launches, so new work can never prevent a person from continuing an existing Ticket. Launches run concurrently, and a slow prepare delays only its own Ticket.</p>
+<p>Passing failures get three tries: the <code>transient</code> test recognizes HTTP 408, 429 and 5xx, and refused, reset or timed-out connections. A transient launch failure runs again on effect backoff; a failed turn receives a &quot;continue where it stopped&quot; message after 15, 30 and 60 seconds. Any other failure fails the Ticket.</p>
+<p>A turn may end with shell jobs or subagents still running. The Ticket keeps its slot and stays working; <code>untilQuiet</code> (<code class="long">src/executor/background.ts</code>) watches both, and a finished job or subagent wakes the worker with its result. After each turn, background work has at most thirty minutes: at the limit shell jobs are killed — the worker is told which at its next turn — while subagents continue, since stopping them would only wake the worker again, and the Ticket is reported waiting with the worker's last words. When an Assignment ends, jobs are killed and subagents released, their wake-up turns dropped. A handoff to a person frees the slot at once: subagents stop, but jobs left for review, such as a running server, go on until the Assignment ends, exempt from limits, their ends collected.</p>
+<p>A restart follows the same discipline. At startup <code>resume()</code> walks open Tickets oldest first: a running Assignment is reported <code>assignmentInterrupted</code>, which starts a new Assignment carrying a recovery note — check the directory, git history and GitHub before repeating any outside action — and a pending launch is enqueued again unless its Ticket waits for a person. The prepare command and the worker's prompt receive the same execution variables from <code class="long">src/app/execution-environment.ts</code>: <code>DSH_SUPERAGENT_DIR</code>, <code>NAME</code>, <code>TICKET</code> and <code>BLOCKED_COMMANDS</code> from the Executor, repository and pull-request variables from GitHub, chat and bot variables from Feishu; none contains credentials.</p>
+<h2 id="ch-6-s4">6.4 Sessions, Delivery and the MasterAssessor</h2>
+<p><code>Sessions</code> (<code class="long">src/app/sessions.ts</code>) manages the conversations of both roles: the main Session that routes and assesses, and the workers. <code>ensure</code> creates a Session under its role's model — seeded once at creation by <code class="long">src/app/role-models.ts</code>, without touching the host's global default — and under its preset. The presets, <code>dsh-superagent-router</code> and <code>dsh-superagent-worker</code>, are defined in <code>cordis.patch.yml</code>: both move a foreground shell command to a background job after 5 seconds and cap job waits at 5 seconds; the router keeps only routing tools, the worker only work tools.</p>
+<p>Prompts are versioned, and each model request binds the Session to the current revision; the revisions a Session has worked under are stored durably, and <code>promptVersion</code> with <code>mayRead</code> restrict a worker to the prompt text it actually ran under. Content flows in through two effect kinds: <code>relay</code> steers into the main Session's turn, <code>notice</code> injects without waking it. The <code>noWait</code> guard keeps that Session from idling — it refuses a shell command that runs <code>sleep</code> at a command position, a <code>timeoutMs</code> above 30 seconds, and a job wait above 5 seconds — explaining that what it waits for arrives on its own.</p>
+<p>Delivery is deduplicated by <code>AgentDelivery</code> (<code class="long">src/app/delivery.ts</code>): a message goes in once per request id, across live and restored Sessions, with delivered ids tracked from session events, persisted history and pending inboxes. Every message carries the plugin's own source marker, so the system's words can never pass for a person's.</p>
+<p>The <code>MasterAssessor</code> (<code class="long">src/app/assessment.ts</code>) is the main Session's window into an Eval. Its <code>context</code>, <code>read</code> and <code>decide</code> serve the three <code>orchestrator_eval</code> tools. <code>context</code> returns the candidate — the Trigger's text up to 4,000 characters, batch peers, related open Tickets, the Policy version — plus a bounded Thread window read through the Source's own reader: the first five messages and five on either side of the Trigger, cut to 400 characters, or 1,200 for its two nearest neighbors, everything else a 50-character stub (<code class="long">src/sources/admission-context.ts</code>). <code>read</code> expands stubs, pages the Thread, and reads repository files and images from a per-Eval cache. <code>decide</code> converts the assessment for the Engine, which re-checks it against the current Policy; when the Eval ends, <code>release</code> drops the cached state and later reads are refused.</p>
+<h2 id="ch-6-s5">6.5 Sources: Plugins Behind a Protocol</h2>
+<p>A Source is a plugin that connects one outside service to the domain: it turns events into Triggers, the normalized records the Engine stores, answers scope questions, sends replies and reads Thread context for assessments. The contract is <code>SourceKind</code> (<code class="long">src/sources/kind.ts</code>): identity, configuration schema and form fields, derived facts, and owned health entries; the rest is optional — a <code>scope</code> listening rule, a <code>channel</code> with <code>allowed</code>, <code>send</code> and <code>link</code>, a <code>threadContext</code> reader, search <code>find</code>, a Policy part, execution variables.</p>
+<p>The <code>SourceRegistry</code> (<code class="long">src/sources/registry.ts</code>) owns the installed kinds and stored instances, and implements the Engine's <code>SourceScope</code>, answering scope questions through the kind. Registration claims the kind's health entries — duplicates and reserved <code>sync:</code> names are refused — and a Source whose stored configuration no longer validates is disabled. Plugins receive a <code>SourceHost</code> (<code class="long">src/sources/host.ts</code>); the kind's code sees only the narrow <code>SourceContext</code> built by <code class="long">src/app/source-context.ts</code>: <code>receive</code> a Trigger, read and patch its own Threads and state, change Tickets only through <code>bindThread</code> and <code>threadClosed</code>, <code>notify</code> through the Outbox, and <code>report</code> on exactly its declared entries.</p>
+<p>The GitHub Source (<code class="long">src/sources/github.ts</code>) runs a poll round: notifications first, then observed repository streams of new Issues, comments and default-branch CI, then the pull requests of open Tickets with their CI, then subscribed Threads. Each Issue, pull request and Thread is read independently; a failed read keeps its error on its Thread and counts toward the Source's error, reported after three failed rounds by default, while a deleted Issue (HTTP 410) is dropped at once and a read failing for a day is abandoned. <code>github-trigger.ts</code> normalizes comments, reviews, Issue bodies and CI transitions into Triggers. <code>github-pull.ts</code> binds pull requests to Tickets — <code>claimPull</code> accepts the origin pull request or an agent-authored one whose branch's last path segment is the Ticket's short name; <code>observePull</code> reconciles closes; <code>pullEndNotices</code> writes the terminal chat notice. <code>github-channel.ts</code> posts comments and review replies with an embedded idempotency marker, falling back to the pull request's conversation when the target review comment is gone; <code>github-read.ts</code> serves CI snapshots and repository reads.</p>
+<p>The Feishu Source (<code class="long">src/sources/feishu.ts</code>) rests on three loops in <code>feishu-loops.ts</code>: a live event consumer spawned from the bot's <code>lark-cli</code>, restarted with backoff and reporting every failure; a history pass over configured chats and known direct chats each minute, which also recovers topic replies the live stream missed; and polling of subscribed topics. One translation rule in <code>feishu-trigger.ts</code> serves live events, history pages and topic pages alike, so every read path derives the same deterministic Trigger id for a message. <code>feishu-channel.ts</code> replies in the target's topic with the message id as idempotency key, and a recalled target is <code>gone</code>; <code>feishu-read.ts</code> reads a Trigger's message, root, parent, thread and surrounding chat; <code>feishu-image.ts</code> downloads an image by its <code>img_</code> key from the message that carries it.</p>
+<p>Both stand on <code class="long">src/sources/poll.ts</code>. <code>POLL_HORIZON_MS</code>, fourteen days, bounds how long a subscribed Thread with no live Ticket is still polled; <code>cursorAt</code> steps each poll's start back five seconds so late events are not missed, with Trigger id deduplication absorbing the overlap; and <code>pollThreads</code> keeps a failure on its Thread as <code>pollError</code>, cleared on the next success, so one bad read neither poisons the others nor disappears silently.</p>
+<h2 id="ch-6-s6">6.6 The Panel and Health</h2>
+<figure class="figure-wide"><svg viewBox="0 0 1000 810" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ticket lifecycle: the stage ladder read top to bottom where the first matching row wins, the events that open and release a Ticket, and the four ways a Ticket ends">
+  <style>
+    .person { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.5; rx:10; }
+    .auto { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.5; rx:10; }
+    .end { fill:#faf8f3; stroke:#8b8272; stroke-width:1.4; rx:12; }
+    .evt { fill:#ffffff; stroke:#c9c0af; stroke-width:1.3; rx:9; }
+    .t { font:600 14px -apple-system,'Segoe UI',sans-serif; fill:#2b2620; dominant-baseline:middle; }
+    .ts { font:400 10.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; dominant-baseline:middle; }
+    .cap { font:600 11.5px -apple-system,'Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; text-anchor:middle; }
+    .n { font:600 11px -apple-system,'Segoe UI',sans-serif; fill:#fff; text-anchor:middle; dominant-baseline:middle; }
+    .e { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#ta); }
+    .ed { stroke:#9a5b2e; stroke-width:1.5; fill:none; stroke-dasharray:6 4; marker-end:url(#ta2); }
+    .el { font:500 11.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+  </style>
+  <defs>
+    <marker id="ta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+    <marker id="ta2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9a5b2e"/></marker>
+  </defs>
+
+  <text x="300" y="42" class="cap">AN OPEN TICKET'S STAGE — FIRST MATCHING ROW WINS</text>
+
+  <!-- ladder -->
+  <g>
+    <circle cx="76" cy="84" r="11" fill="#9a5b2e"/><text x="76" y="85" class="n">1</text>
+    <rect x="96" y="62" width="410" height="44" class="person"/>
+    <text x="112" y="78" class="t">person / delivery</text>
+    <text x="112" y="96" class="ts">an Input failed to reach the Executor Session</text>
+
+    <circle cx="76" cy="140" r="11" fill="#9a5b2e"/><text x="76" y="141" class="n">2</text>
+    <rect x="96" y="118" width="410" height="44" class="person"/>
+    <text x="112" y="134" class="t">person / answer</text>
+    <text x="112" y="152" class="ts">an Attention — a question — waits for its answer</text>
+
+    <circle cx="76" cy="196" r="11" fill="#9a5b2e"/><text x="76" y="197" class="n">3</text>
+    <rect x="96" y="174" width="410" height="44" class="person"/>
+    <text x="112" y="190" class="t">person / review</text>
+    <text x="112" y="208" class="ts">the latest Report is ready</text>
+
+    <circle cx="76" cy="252" r="11" fill="#9a5b2e"/><text x="76" y="253" class="n">4</text>
+    <rect x="96" y="230" width="410" height="44" class="person"/>
+    <text x="112" y="246" class="t">person / blocked · failed</text>
+    <text x="112" y="264" class="ts">blocked or failed, and no person has written since</text>
+
+    <circle cx="76" cy="308" r="11" fill="#2e6f77"/><text x="76" y="309" class="n">5</text>
+    <rect x="96" y="286" width="410" height="44" class="auto"/>
+    <text x="112" y="302" class="t">working / queued</text>
+    <text x="112" y="320" class="ts">no Assignment yet, or a pending one waiting for a slot</text>
+
+    <circle cx="76" cy="364" r="11" fill="#2e6f77"/><text x="76" y="365" class="n">6</text>
+    <rect x="96" y="342" width="410" height="44" class="auto"/>
+    <text x="112" y="358" class="t">idle</text>
+    <text x="112" y="376" class="ts">waiting for a Trigger on a subscribed Thread</text>
+
+    <circle cx="76" cy="420" r="11" fill="#2e6f77"/><text x="76" y="421" class="n">7</text>
+    <rect x="96" y="398" width="410" height="44" class="auto"/>
+    <text x="112" y="414" class="t">working</text>
+    <text x="112" y="432" class="ts">everything else — the Executor is busy</text>
+  </g>
+
+  <text x="300" y="466" class="ts" style="font-size:10px; text-anchor:middle">ticketStage (src/core/stage.ts) answers this ladder in one place</text>
+
+  <!-- events entering from the right, short stubs -->
+  <line x1="556" y1="252" x2="510" y2="252" class="e"/>
+  <text x="612" y="240" class="el">a person's message</text>
+  <text x="612" y="256" class="ts" style="font-size:10px; text-anchor:middle">releases a blocked or failed hold</text>
+
+  <line x1="556" y1="308" x2="510" y2="308" class="e"/>
+  <text x="612" y="296" class="el">accept</text>
+  <text x="612" y="312" class="ts" style="font-size:10px; text-anchor:middle">a Ticket opens, entering at 5</text>
+
+  <!-- end states -->
+  <text x="795" y="508" class="cap">HOW A TICKET ENDS</text>
+  <rect x="640" y="528" width="310" height="52" class="end"/>
+  <text x="660" y="548" class="t">completed</text>
+  <text x="660" y="566" class="ts">a ready Report with no pull request to wait for</text>
+
+  <rect x="640" y="592" width="310" height="52" class="end"/>
+  <text x="660" y="612" class="t">dropped</text>
+  <text x="660" y="630" class="ts">the Executor found nothing for a person to act on</text>
+
+  <rect x="640" y="656" width="310" height="52" class="end"/>
+  <text x="660" y="676" class="t">merged · closed</text>
+  <text x="660" y="694" class="ts">every pull request it opened has closed — followsDone</text>
+
+  <rect x="640" y="720" width="310" height="52" class="end"/>
+  <text x="660" y="740" class="t">stopped</text>
+  <text x="660" y="758" class="ts">a person withdrew the Mandate — it never resumes</text>
+
+  <!-- fan of ends from the ladder's bottom-right -->
+  <path d="M510,452 L636,554" class="e"/>
+  <path d="M510,452 L636,618" class="e"/>
+  <path d="M510,452 L636,682" class="e"/>
+  <path d="M510,452 L636,746" class="e"/>
+  <text x="600" y="436" class="ts" style="font-size:10px; text-anchor:middle">final Report · threadClosed · a person's stop</text>
+
+  <!-- resume path, below every pill and up the left margin -->
+  <path d="M795,708 L795,790 L60,790 L60,84 L92,84" class="ed"/>
+  <text x="427" y="779" class="el" style="fill:#9a5b2e">a person's message on its Thread resumes an ended Ticket — same Mandate, no new Eval</text>
+</svg><figcaption>A Ticket's stages: what each open stage waits for, and how Tickets end</figcaption></figure>
+<p>The panel's backbone is the Ticket stage model, implemented by <code>ticketStage</code> (<code class="long">src/core/stage.ts</code>): every open Ticket has one stage, determined by what it waits for. The table is read from the top; the first matching row wins.</p>
+<div class="tablewrap"><table><thead><tr><th>Stage</th><th>The Ticket waits for</th><th>Panel label</th></tr></thead><tbody><tr><td>person / delivery</td><td>delivering an Input to the Executor Session failed, retried with backoff</td><td>Input undelivered</td></tr><tr><td>person / answer</td><td>it has an Attention — a question for a person</td><td>Awaiting answer</td></tr><tr><td>person / review</td><td>its latest Report is <code>ready</code></td><td>Awaiting review</td></tr><tr><td>person / blocked, failed</td><td>its latest Report is <code>blocked</code> or <code>failed</code>, and no person's message reached it since</td><td>Blocked · Failed</td></tr><tr><td>working / queued</td><td>no Assignment, or a pending one waiting for a worker slot</td><td>Queued</td></tr><tr><td>idle</td><td>its latest Report is <code>waiting</code>, or its Assignment ended</td><td>Waiting for a Trigger</td></tr><tr><td>working</td><td>everything else</td><td>Working</td></tr></tbody></table></div>
+<p>A <code>person</code> stage means the Ticket cannot continue without a human, and a person's message releases a blocked or failed one back to its Executor. The ladder is exhaustive and mutually exclusive by construction, so every panel row states a checkable definition, not an internal status code.</p>
+<p>The endings mirror that honesty. A <code>ready</code> Report on a Ticket that follows no pull request completes it; a <code>dropped</code> Report ends it without a message unless a matched rule asks for one, keeping its Subscriptions so a later human comment resumes it. A Ticket that follows pull requests is done only when none it opened remain open — or, having opened none, when every pull request it follows has closed — and then ends with the outcome of the last relevant close, <code>merged</code> or <code>closed</code>, with one final notice to chat Channels from <code>pullEndNotices</code> (<code class="long">src/sources/github-pull.ts</code>). &quot;Awaiting review&quot; therefore means a <code>ready</code> Report with a pull request.</p>
+<p>Health follows the same single-writer rule as everything else. <code>HealthBoard</code> (<code class="long">src/infra/health.ts</code>) holds one entry per part — <code>runtime</code>, <code>evals</code>, <code>models</code>, one per effect kind, <code>worker</code>, each Source kind's entries, <code>sync:&lt;id&gt;</code> for Policy syncs — and each entry is claimed by exactly one writer; a second claim throws. Errors surface only after three consecutive failures, so a one-off network error stays quiet, and a failed Input delivery shows on its own Ticket instead. That is the panel's promise (<code class="long">docs/005-panel.md</code>): a healthy state takes no space, and what the supervisor does see is either work that needs them or a problem they can act on.</p>
+</section>
+<section class="chapter" id="ch-7">
+<p class="eyebrow">Chapter 7</p>
+<h1>Why It Is Designed This Way</h1>
+<p>dsh-superagent turns event streams into teammate work. A Source — a GitHub repository or a Feishu chat — produces immutable events called Triggers, gathered into Threads, the conversations they belong to; an Eval decides whether a batch of Triggers may start work; an accept grants a Mandate (the work's recorded authorization) and opens a Ticket, which an Assignment hands to an Executor running in an Executor Session (worker). One Session, the main Session, does the judging and routing. The philosophy that governs the whole (<code class="long">docs/000-philosophy.md</code>) is an attention budget — take as little human attention as possible. Six structural decisions carry that budget, and each exists because a cheaper-looking alternative was refused on paper; the strongest artifacts here are the refusals.</p>
+<h2 id="ch-7-s1">7.1 A Synchronous Core in an Asynchronous World</h2>
+<p>The Engine (<code class="long">src/core/engine.ts</code>) is the only writer of Triggers, Threads, Decisions, Tickets and Assignments, and every one of its methods is synchronous. Each command wraps its work in a single call to <code>Repositories.atomic</code>: <code>receive</code>, <code>decide</code>, <code>attach</code>, <code>stopTicket</code> and <code>report</code> all share that shape. Even the sweep method <code>evaluateDue</code>, which visits many Threads and Tickets, opens a separate transaction for each Eval or Ticket it changes (<code class="long">src/core/engine.ts:75</code>). The core also does no I/O. <code class="long">src/core</code> imports nothing outside itself except Node's hashing (<code>node:crypto</code> in <code class="long">src/core/ids.ts</code>), and it touches the world only through the ports of <code class="long">src/core/ports.ts</code>, whose every method is synchronous &quot;so <code>atomic</code> can wrap a unit of work.&quot;</p>
+<p>The rejected alternative is the familiar async orchestration core: create the Ticket, <code>await</code> the launch, record the Subscription that fans a Thread's future messages out to the Ticket, <code>await</code> the acknowledgement. Every <code>await</code> is a crash window, and every crash window is a distinct observable state — a Ticket with no Assignment, a Subscription pointing at work that never started. The domain tests state the intended invariant as a test name: &quot;records an accept with its ticket, subscriptions and acknowledgement together, or none of them&quot; (<code class="long">tests/core-engine.spec.ts:136</code>). When the <code>prepareTicket</code> hook throws mid-accept, the Decision, Ticket, Subscription and queued acknowledgement all disappear; nothing interleaves because nothing can.</p>
+<p>The payoff compounds outward. Because the core does no I/O, the whole domain runs on <code>MemoryRepositories</code> (<code class="long">src/core/memory.ts</code>), whose <code>atomic</code> snapshots its maps and restores them on throw. The 1,600 lines of <code class="long">tests/core-engine.spec.ts</code> — intake, Eval batching, fan-out, resume, pause, Policy changes, interrupted Assignments, failed deliveries — mock no network at all; the ports are small in-memory doubles and the clock is injected through the Engine's optional <code>now</code>. Determinism is structural: ids derive from their inputs (<code>key</code> in <code class="long">src/core/ids.ts</code>), and a test ticks time forward by hand. The asynchronous world — polling Sources, thinking Sessions, retrying deliveries — has been pushed to the edges, where a crash costs a retry and not a lie.</p>
+<h2 id="ch-7-s2">7.2 Commands Today, Effects Tomorrow</h2>
+<p>Every state change the Engine commits has a shadow: the side effects it licenses. Launching a worker, delivering an Input (context for a Ticket) to its running Assignment, relaying a worker's Report to the main Session, sending a reply on a Channel (the write side of a Thread) — none of these happen inside the command. The command calls <code class="long">Effects.enqueue(kind, key, payload)</code> inside its transaction (<code class="long">src/app/effects.ts:61</code>), the transaction commits, and only then does a handler run. This is the transactional-outbox pattern generalized to all side effects: the intent is a SQLite row, as durable as the state it follows. A crash between &quot;decided&quot; and &quot;did&quot; is therefore unobservable, because the record of intent was written in the same transaction as the decision; on restart the rows replay instead of losing work.</p>
+<p>Two refinements matter. Coalescing by kind and key — an <code>INSERT ... ON CONFLICT</code> — replaces a still-waiting row's payload, resets its failure count and makes it due immediately without losing its queue position: five Inputs arriving together produce one delivery. And <code>Later</code> (<code class="long">src/app/effects.ts:5</code>) is backpressure made explicit: an effect that throws it — processing paused, worker slots full — is rescheduled without counting as a failure.</p>
+<p>The Outbox (<code class="long">src/app/outbox.ts</code>) is the purest instance. <code>send</code> records a message's receipt and queues its <code>reply</code> effect in one transaction; a message id recorded once is never re-queued, and receipts are kept permanently, so an acknowledgement that was sent stays sent. Delivery is ordered per Ticket and conversation: <code>receipts.behind</code> (<code class="long">src/app/store.ts:259</code>) holds a message while an earlier one for the same Ticket and conversation is still pending, until that one has failed three times and surfaces as a problem instead. That is why an acknowledgement can never overtake the answer that follows it: a person who reads &quot;done&quot; before the result would stop trusting the agent.</p>
+<h2 id="ch-7-s3">7.3 One Writer per State</h2>
+<p>The dependency rules of <code class="long">docs/007-architecture.md</code> state a plain invariant: each kind of state has exactly one writer. The Engine owns Triggers, Threads, Decisions, Tickets and Assignments; Settings owns settings and their history; Prompts owns prompt versions; Effects owns effect rows; the Outbox owns receipts; each health entry belongs to the part that claimed it on the HealthBoard, which refuses a second claim; a Source owns its read positions and its Thread metadata. A Source cannot even edit a Ticket directly — it may only call <code>bindThread</code> and <code>threadClosed</code>, which are Engine commands.</p>
+<p>The rejected alternatives are locks and conventions. A mutex serializes access but assigns no responsibility; a convention (&quot;Sources should not write Tickets&quot;) rots silently until a bug proves it was never load-bearing. Here the invariant is checkable by reading type signatures, because the Engine never hands itself out whole. Each caller receives its role's <code>Pick</code>:</p>
+<pre><code class="language-ts">export type EngineForSources = Pick&lt;Engine, 'receive' | 'bindThread' | 'threadClosed'&gt;
+export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 'reevaluate' | 'unsubscribe' | 'dismiss'&gt;</code></pre>
+<p>The full set — <code>EngineForSources</code>, <code>EngineForMainSession</code>, <code>EngineForPeople</code>, <code>EngineForSettings</code>, <code>EngineForExecutor</code> (<code class="long">src/core/engine.ts:261</code>) — makes misuse unrepresentable: a Source's code has no method that could stop a Ticket, and the Executor's interface is almost entirely past-tense facts (<code>assignmentStarted</code>, <code>inputsDelivered</code>, <code>turnEnded</code>) rather than imperatives. One writer per state, plus one process per Store (the Runtime locks the state directory), buys concurrency discipline without a single lock in the domain.</p>
+<h2 id="ch-7-s4">7.4 Authorization as Recorded Data</h2>
+<p>An accept could simply mean &quot;this was allowed once.&quot; Instead it produces a Mandate (<code class="long">src/core/model.ts:126</code>): an immutable record of the Policy version — the Policy is the versioned rules for accepting work — the strength, the scope, the sender's identity on that Source, and a <code>basis</code> saying how the gate admitted the Trigger — <code>addressed</code> by a listed sender, a <code>followup</code> on a Thread with Tickets, an <code>admission</code>-table cell, or a <code>bot</code> on the Source's bot list, each with the matched rules where rules decided it. The rejected alternative is the access-control list checked at every action, which would make current rules govern work accepted under older ones and would scatter permission logic across call sites, where it drifts.</p>
+<p>The design lets work outlive the rules it was accepted under. When the Policy changes, <code>policyEffects</code> (<code class="long">src/policy.ts:144</code>) computes exactly which open Tickets the change bears on — a matched rule changed or was disabled, the requester may no longer start work, proactive acceptance ended — and <code>Engine.policyChanged</code> delivers that as an Input to those Tickets only. Nothing is cancelled; the rejected-concepts table in <code class="long">docs/001-domain.md</code> refuses &quot;cancelling running Tickets on a Policy change&quot; because a cancelled change leaves half-finished work. Revalidation happens only at resume: an ended Ticket that a person's message wakes must still pass <code>revalidate</code> against today's Policy (<code class="long">src/core/tickets.ts:113</code>, <code class="long">src/core/tickets.ts:257</code>), or it stays ended and the message goes to Eval. Between those moments, the Mandate is the truth.</p>
+<p>The same document refuses a deeper temptation: a person as a domain concept. A Trigger carries its actor's identifier as the Source gives it; an allowed list is a Source's part of the Policy in that Source's own identities; that one human has accounts on GitHub and Feishu is prompt text the agents read when they need it — <code class="long">src/policy.ts</code> says so in its header comment. Mapping identities across Sources would build a shadow identity system with its own sync failures, buying nothing the Mandate does not record.</p>
+<h2 id="ch-7-s5">7.5 The Ticket Owns Its State, Not the Session</h2>
+<p>The obvious way to know what a Ticket is doing is to ask the agent Session running it. The repository refuses this: &quot;Ticket state that follows the DSH Session&quot; is on the rejected list, because a Ticket can be resumed after it ended, retried, restarted after a host crash, or carried by several Assignments over time. The Executor Session is one assignment's container, outside the domain and reached only through Assignments. So the Ticket's stage is computed from its own recorded facts by <code>ticketStage</code> (<code class="long">src/core/stage.ts:9</code>): ended; a delivery that failed; an open Attention (a question awaiting a person's answer); a <code>ready</code> Report awaiting review; blocked or failed work waiting for a person; queued; idle; working.</p>
+<p>The subtlest of these is <code>waitsForPerson</code> (<code class="long">src/core/model.ts:349</code>): a Ticket waits for a person when its latest Assignment reported <code>blocked</code> or <code>failed</code> and no human message has reached it since. That is computed from stored Reports and Inputs, never inferred from a report's prose — the rejected list refuses inferring &quot;waiting on a person&quot; from free text. Because the computation reads only durable rows, a restart keeps it (<code class="long">docs/003-execution.md</code>: &quot;It is worked out from the stored Reports and Inputs, so a restart keeps it&quot;), and a retry — which ends the stalled Assignment and starts a new one under the same Mandate — lifts it by writing new facts, not by probing a process. The Session may lie or die; the Ticket's state is what the domain recorded.</p>
+<h2 id="ch-7-s6">7.6 Prompts as Versioned Data</h2>
+<p>Most of the agents' instructions live in <code class="long">prompts/*.md</code>, written one sentence per line so that edits make readable diffs; <code>promptFile</code> (<code class="long">src/app/skill-files.ts:29</code>) joins each paragraph's lines with spaces at load time. <code>Prompts</code> (<code class="long">src/app/prompts.ts</code>) stores configurations as numbered <code>Versions</code>, with team sections for communication, scope and delivery, and overrides of built-in parts that record the hash of the text they were edited from, so an upgrade can report exactly what changed underneath a team's wording.</p>
+<p>The rejected alternative is behavior-as-settings or behavior-as-code. The philosophy draws the line directly: &quot;Behaviour that a team describes in words is prompt text, not a setting&quot; (<code class="long">docs/000-philosophy.md</code>). When the agent is noisy, the remedy is shorter, stricter words — a save, applied on the next request — not a deploy. Attribution is the second purchase: each model request binds its Session to the current prompt revision, recorded durably (<code>promptFor</code> in <code class="long">src/app/sessions.ts:329</code>, stored under <code>KV.sessions.prompts</code>), so any action can be traced to the words that produced it. <code class="long">tests/model-surface.spec.ts</code> keeps these surfaces honest: it checks the prompts, tool descriptions and delivered messages against the tool schemas and the glossary, retires old terminology, bans known-misleading phrases and enforces a character budget per role. Prompt text changes what the agents are told, never what the system allows; the gate and the tools stay in code.</p>
+<h2 id="ch-7-s7">7.7 Small Vocabulary, Few Settings</h2>
+<p>The philosophy's design rules read as subtractions: few concepts, so a business need becomes an attribute of an existing concept or a paragraph of prompt text rather than a new entity; few settings, so a default replaces an option whenever one value suits almost every team; a panel that lists first what waits for a person, because a healthy state takes no space. The overview does exactly that — Tickets in the <code>person</code> stage come first, from the same <code>ticketStage</code> computation (<code class="long">src/app/views/overview.ts</code>).</p>
+<p>The codebase polices its own vocabulary. Why the core recorded a Decision is a <code>Reason</code> code from the closed <code>REASONS</code> list (<code class="long">src/core/reasons.ts</code>); what a person or agent can be refused is a <code>UserError</code> from the fixed <code>USER_ERRORS</code> codes (<code class="long">src/core/errors.ts</code>), which the management API answers with a status and the panel words in its language. The glossary of <code class="long">docs/001-domain.md</code> is consumed by the panel itself — its question-mark button opens the same terms, in both languages, from <code>GLOSSARY</code> in <code class="long">src/client/locales.ts</code>. A new concept cannot slip in half-introduced: the words on the screen, the reasons in the records and the terms in the documents are one list.</p>
+<p>The strongest discipline, though, is the last table in <code class="long">docs/001-domain.md</code>: the rejected concepts. Principal or Membership; Eval scheduling its own delays; waiting Eval states; one live Ticket per Thread; Ticket state that follows the Session; cancellation on Policy change; locks on a failed worker's tools. Each row is a design that almost fit, with the reason it was refused. Most architectures can say what they do; this one can say what it refuses to become — and a design that knows where it ends can keep everything inside that line simple.</p>
+</section>
+<section class="chapter" id="ch-8">
+<p class="eyebrow">Chapter 8</p>
+<h1>A Request Walks Through the System</h1>
+<h2 id="ch-8-s1">8.1 The Figure</h2>
+<figure class="figure-wide"><svg viewBox="0 0 1160 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Sequence of the example request: a GitHub mention becomes a Trigger, an Eval, an accepted Ticket with Mandate, an acknowledgement, a worker that opens a pull request, a reviewer follow-up, CI, merge, and the Ticket ending merged">
+  <style>
+    .hd { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.5; rx:10; }
+    .hdx { fill:#edf3ea; stroke:#4c7a45; stroke-width:1.5; rx:10; }
+    .hde { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.5; rx:10; }
+    .t { font:600 13px -apple-system,'Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .life { stroke:#cfc7b8; stroke-width:1.2; stroke-dasharray:4 5; }
+    .m { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#da); }
+    .mg { stroke:#4c7a45; stroke-width:1.5; fill:none; marker-end:url(#dg); }
+    .mo { stroke:#9a5b2e; stroke-width:1.5; fill:none; marker-end:url(#do_); }
+    .lbl { font:500 11.5px -apple-system,'Segoe UI',sans-serif; fill:#4a443c; text-anchor:middle; dominant-baseline:middle; }
+    .note { fill:#fdfcf9; stroke:#c9c0af; stroke-width:1.2; rx:8; }
+    .nt { font:400 10.5px -apple-system,'Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .n { font:600 10.5px -apple-system,'Segoe UI',sans-serif; fill:#fff; text-anchor:middle; dominant-baseline:middle; }
+    .nc { fill:#2e6f77; }
+    .nco { fill:#9a5b2e; }
+    .ncg { fill:#4c7a45; }
+  </style>
+  <defs>
+    <marker id="da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+    <marker id="dg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4c7a45"/></marker>
+    <marker id="do_" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9a5b2e"/></marker>
+  </defs>
+
+  <!-- lifeline headers -->
+  <rect x="20" y="24" width="140" height="42" class="hdx"/><text x="90" y="46" class="t">GitHub</text>
+  <rect x="185" y="24" width="140" height="42" class="hd"/><text x="255" y="46" class="t">Source</text>
+  <rect x="355" y="24" width="140" height="42" class="hd"/><text x="425" y="46" class="t">Engine</text>
+  <rect x="525" y="24" width="140" height="42" class="hde"/><text x="595" y="46" class="t">Effects</text>
+  <rect x="695" y="24" width="150" height="42" class="hd"/><text x="770" y="46" class="t">main Session</text>
+  <rect x="905" y="24" width="140" height="42" class="hde"/><text x="975" y="46" class="t">Worker</text>
+
+  <line x1="90" y1="66" x2="90" y2="872" class="life"/>
+  <line x1="255" y1="66" x2="255" y2="872" class="life"/>
+  <line x1="425" y1="66" x2="425" y2="872" class="life"/>
+  <line x1="595" y1="66" x2="595" y2="872" class="life"/>
+  <line x1="770" y1="66" x2="770" y2="872" class="life"/>
+  <line x1="975" y1="66" x2="975" y2="872" class="life"/>
+
+  <!-- 1 -->
+  <line x1="90" y1="104" x2="249" y2="104" class="mg"/>
+  <circle cx="105" cy="104" r="10" class="ncg"/><text x="105" y="105" class="n">1</text>
+  <text x="172" y="93" class="lbl">comment: “@agent the scheduler test flakes — please fix”</text>
+
+  <!-- 2 -->
+  <line x1="255" y1="142" x2="419" y2="142" class="m"/>
+  <circle cx="270" cy="142" r="10" class="nc"/><text x="270" y="143" class="n">2</text>
+  <text x="340" y="131" class="lbl">receive(Trigger) — stored once, queued for Eval</text>
+
+  <!-- 3 note at engine -->
+  <rect x="330" y="170" width="270" height="40" class="note"/>
+  <text x="465" y="184" class="nt">3 · a pass calls evaluateDue — the gate reads the Policy:</text>
+  <text x="465" y="200" class="nt">allowed sender, addressed → explicit strength</text>
+
+  <!-- 4 -->
+  <line x1="595" y1="238" x2="764" y2="238" class="mo"/>
+  <circle cx="610" cy="238" r="10" class="nco"/><text x="610" y="239" class="n">4</text>
+  <text x="683" y="227" class="lbl">assessment effect: candidate card</text>
+
+  <!-- 5 -->
+  <line x1="770" y1="276" x2="431" y2="276" class="m"/>
+  <circle cx="755" cy="276" r="10" class="nc"/><text x="755" y="277" class="n">5</text>
+  <text x="600" y="265" class="lbl">orchestrator_route: accept</text>
+
+  <!-- 5 note -->
+  <rect x="322" y="298" width="286" height="56" class="note"/>
+  <text x="465" y="316" class="nt">one transaction: Decision + Ticket + Mandate</text>
+  <text x="465" y="332" class="nt">+ first Assignment + Subscriptions + acknowledgement</text>
+  <text x="465" y="348" class="nt">— all committed, or none of it</text>
+
+  <!-- 6 -->
+  <line x1="595" y1="384" x2="259" y2="384" class="mo"/>
+  <circle cx="580" cy="384" r="10" class="nco"/><text x="580" y="385" class="n">6</text>
+  <text x="420" y="373" class="lbl">reply effect → the Source posts the acknowledgement</text>
+  <line x1="255" y1="410" x2="94" y2="410" class="mg"/>
+
+  <!-- 7 -->
+  <line x1="595" y1="452" x2="969" y2="452" class="mo"/>
+  <circle cx="610" cy="452" r="10" class="nco"/><text x="610" y="453" class="n">7</text>
+  <text x="783" y="441" class="lbl">launch effect: prepare (git worktree) · worker Session · assignment</text>
+
+  <!-- 8 note at worker -->
+  <rect x="872" y="478" width="206" height="56" class="note"/>
+  <text x="975" y="496" class="nt">8 · the worker investigates the race,</text>
+  <text x="975" y="512" class="nt">pushes a branch, opens a pull request</text>
+  <text x="975" y="528" class="nt">with the gh CLI</text>
+
+  <!-- 9 -->
+  <line x1="975" y1="562" x2="431" y2="562" class="mo"/>
+  <circle cx="960" cy="562" r="10" class="nco"/><text x="960" y="563" class="n">9</text>
+  <text x="700" y="551" class="lbl">orchestrator_report: ready — the Ticket binds the PR's Thread</text>
+
+  <!-- 10 -->
+  <line x1="90" y1="606" x2="249" y2="606" class="mg"/>
+  <circle cx="105" cy="606" r="10" class="ncg"/><text x="105" y="607" class="n">10</text>
+  <text x="170" y="595" class="lbl">a reviewer requests changes</text>
+
+  <!-- 11 -->
+  <line x1="255" y1="644" x2="419" y2="644" class="m"/>
+  <circle cx="270" cy="644" r="10" class="nc"/><text x="270" y="645" class="n">11</text>
+  <text x="345" y="633" class="lbl">Trigger fans out — a follow-up Input, no Eval</text>
+
+  <!-- 12 -->
+  <line x1="595" y1="682" x2="969" y2="682" class="mo"/>
+  <circle cx="610" cy="682" r="10" class="nco"/><text x="610" y="683" class="n">12</text>
+  <text x="783" y="671" class="lbl">delivery effect: the Input reaches the running worker</text>
+
+  <!-- 13 -->
+  <line x1="90" y1="726" x2="249" y2="726" class="mg"/>
+  <circle cx="105" cy="726" r="10" class="ncg"/><text x="105" y="727" class="n">13</text>
+  <text x="168" y="715" class="lbl">CI green on the PR; the fix is pushed (answers go back through the Outbox)</text>
+
+  <!-- 14 -->
+  <line x1="90" y1="770" x2="249" y2="770" class="mg"/>
+  <circle cx="105" cy="770" r="10" class="ncg"/><text x="105" y="771" class="n">14</text>
+  <text x="168" y="759" class="lbl">a maintainer merges the pull request</text>
+
+  <!-- 15 -->
+  <line x1="255" y1="808" x2="419" y2="808" class="m"/>
+  <circle cx="270" cy="808" r="10" class="nc"/><text x="270" y="809" class="n">15</text>
+  <text x="342" y="797" class="lbl">threadClosed → followsDone — the Ticket ends merged</text>
+
+  <!-- 16 -->
+  <line x1="595" y1="846" x2="259" y2="846" class="mo"/>
+  <circle cx="580" cy="846" r="10" class="nco"/><text x="580" y="847" class="n">16</text>
+  <text x="420" y="835" class="lbl">final notice; the whole trail sits auditable in the Store</text>
+</svg><figcaption>The life of one request: from a GitHub mention to a merged pull request and a closed Ticket</figcaption></figure>
+<p>The scene is a small team's repository watched by dsh-superagent, a host process that turns messages into authorized work. Its GitHub Source — the adapter that observes one repository for the agent's account — is enabled, and the team's Policy (the configuration of who may originate work) lists a teammate we will call Mara among the accounts that may. The accept mode is <code>observe</code>, so proactive work is only assessed, never started on its own, and one proactive rule is enabled; it will play no part here, because what Mara writes is an explicit request. She opens issue #412, &quot;Flaky test: scheduler occasionally drops a job,&quot; and comments: &quot;@agent the scheduler test flakes about one run in five on CI — please find the race and fix it.&quot;</p>
+<p>Everything that follows is a chain of named modules. The Source translates her comment into a Trigger (the domain's record of one incoming message); the Engine — the transactional core that is the only writer of Triggers, Threads, Decisions, Tickets and Assignments — gates it, evaluates it, and on the main Session's routing turns it into a Ticket (an authorized unit of work) with a Mandate (the record of why it is authorized); an Executor Session does the work; and the GitHub Channel carries the agent's words back. This chapter walks that chain hop by hop.</p>
+<h2 id="ch-8-s2">8.2 From GitHub to a Trigger</h2>
+<p>The GitHub Source has no webhook; it polls. A <code>watch</code> loop in <code class="long">src/sources/github.ts</code> runs <code>pollRound</code> every <code>pollSeconds</code> (sixty by default, or longer if GitHub's <code>x-poll-interval</code> header asks). A round reads, in order: the agent account's notifications, any repository-wide streams the team has switched on, the pull requests of open Tickets with their CI, and finally every subscribed Thread. All reads go through <code>Commands</code> in <code class="long">src/infra/commands.ts</code>, a subprocess wrapper whose <code>api</code> method shells out to the deployment's <code>gh</code> CLI (<code class="long">gh api repos/&lt;owner&gt;/&lt;name&gt;/...</code>), restricted to the configured repository and schema-validated on return.</p>
+<p>Mara's mention produces a notification, so <code>pollNotifications</code> schedules issue #412 for a read. <code>readNotified</code> fetches the issue, emits a Trigger for its body only if the issue was opened since the cursor by someone other than the agent, and then <code>intakeComments</code> reads the conversation comments since the same cursor. The issue's own body, arriving in an earlier round without a mention and with <code>observeIssues</code> off, had been gated out as <code>no_mention</code> and recorded as an ignored Decision — which is why the comment, not the issue, is the request.</p>
+<p>Each comment becomes a Trigger through <code>commentTrigger</code> in <code class="long">src/sources/github-trigger.ts</code>. The Trigger carries a deterministic id built from the comment's URL, id and update time; the actor (<code>human: true</code>, since Mara is a person and not the agent itself); the Thread (<code>github:412</code>, the conversation the Trigger belongs to); a Channel back to reply on (<code>githubChannel</code>); and, because <code>mentions</code> finds <code>@agent</code> in the body, <code>addressed: 'mention'</code> — the Source-declared fact that the sender addressed the agent.</p>
+<p>Deduplication is a property of those deterministic ids plus the cursor. <code>readNotified</code> advances the per-thread cursor to <code>cursorAt(round.started)</code> — <code class="long">src/sources/poll.ts</code> steps the timestamp back five seconds so late-arriving remote events are re-read — and re-reading is harmless: <code>Intake.receive</code> in <code class="long">src/core/intake.ts</code> opens one Engine transaction, finds the Trigger id already stored, and answers <code>duplicate</code>. On the first read the Trigger is stored, Thread <code>github:412</code> records its time and Correlation, and the fan-out loop finds no Ticket subscribed to the Thread, so nothing is reached. Because no Ticket's worker decides this message and its sender addresses the agent, <code>queueForEval</code> places the Trigger id on the Thread's pending queue. The Source reached the Engine through <code>SourceContext.receive</code> (<code class="long">src/sources/host.ts</code>), which routes through <code>Passes.receive</code> (<code class="long">src/app/passes.ts</code>) so a stored Trigger also requests an immediate pass.</p>
+<h2 id="ch-8-s3">8.3 Gate and Candidate</h2>
+<p>A pass is the Runtime's heartbeat: <code>Passes</code> (<code class="long">src/app/passes.ts</code>) runs one every two seconds and one more whenever a command asks, first kicking due Effects (the durable side-effect queue) and then calling <code>Engine.evaluateDue</code> (<code class="long">src/core/engine.ts</code>). That method finds Thread <code>github:412</code> with a pending Trigger and no Eval in progress — an Eval being the Thread-level assessment that ends in a Decision — and <code>Evals.start</code> (<code class="long">src/core/evals.ts</code>) begins one transactionally.</p>
+<p>First the Gate. <code>settingsPolicy</code> in <code class="long">src/policy.ts</code> builds a fresh, stateless Policy whose <code class="long">gate(trigger, thread, tickets)</code> classifies the message: Mara is on the allowed list and the Trigger is addressed, so the answer is admissible with <code>strength: 'explicit'</code> and a basis of <code>via: 'addressed'</code> naming the mention and the sender. Had she not mentioned the agent, the admission table and the accept mode would decide between an inferred candidate and rejection. The Eval record lands on the Thread (<code>thread.evaluating</code>) with the gate's strength, actor, basis and the Policy version, the pending queue empties into it, and <code>assessor.request</code> hands its candidate to the <code>MasterAssessor</code> (<code class="long">src/app/assessment.ts</code>), which enqueues an <code>assessment</code> effect.</p>
+<p>The effect's handler builds the candidate card (<code>candidateCard</code> in <code class="long">src/app/links.ts</code>) — the message rendered the way workers will read it, with its source link and replied-to preview, the Thread, the batch, related and referenced Tickets, the strength and the mode — and steers it into the main Session's turn (<code class="long">sessions.prompt(..., 'steer')</code>), then calls <code>Engine.candidateDelivered</code> so the Eval's deadline counts from the moment the Session actually received the card. The bounded Thread window and the Policy version that <code>MasterAssessor.context</code> serves through <code>orchestrator_eval</code> belong to inferred candidates; an explicit card says to route it, and <code class="long">prompts/dispatch.md</code> tells the main Session how.</p>
+<p>The main Session — the persistent orchestrator-facing Session the Runtime owns — reads the card and calls <code>orchestrator_route</code> with one accept item: a title, a <code>worktree_name</code>, and an acknowledgement naming the change. <code>route()</code> in <code class="long">src/app/tools/main.ts</code> turns that into <code class="long">Engine.decide(triggerId, { kind: 'accept', ... })</code>, each item its own Engine command.</p>
+<h2 id="ch-8-s4">8.4 The Atomic Accept</h2>
+<p><code>Engine.decide</code> wraps <code>Evals.decide</code> in a single repository transaction, and everything the accept means happens inside it. <code>Evals.accept</code> builds the Mandate — strength <code>explicit</code>, the gate's basis, the Policy version, the actor, and the scope the main Session wrote — derives the Ticket id deterministically from the Eval id, and records the accept Decision. <code>Tickets.create</code> (<code class="long">src/core/tickets.ts</code>) then writes the Ticket: its origin Trigger, the Channel taken from Mara's comment, a first Assignment in state <code>pending</code> (an Assignment being one run of the Ticket's worker), and Subscriptions on every Thread of the Eval's Triggers, so issue #412 now belongs to this Ticket. The <code>prepareTicket</code> hook lets <code>DshExecutor.prepare</code> (<code class="long">src/executor/dsh.ts</code>) fill the execution facts — the worktree name, the workspace directory, the assignment text. Finally, if the accept carried an acknowledgement, <code class="long">Replies.acknowledgeAccepted</code> (<code class="long">src/core/replies.ts</code>) queues it through the Outbox, and <code>executor.start</code> enqueues the launch. Decision, Ticket, Mandate, Assignment, Subscription, acknowledgement receipt, launch row: one transaction, one crash domain.</p>
+<p>The acknowledgement cannot be lost or reordered because it is a fact before it is a message. <code>Outbox.send</code> (<code class="long">src/app/outbox.ts</code>) persists a receipt under the deterministic id <code>key('ack', trigger.id)</code> and enqueues a <code>reply</code> effect in the same transaction; only after commit does the effect run, and it retries with backoff from five seconds up to five minutes for as long as it takes. Ordering is enforced twice: the <code>reply</code> effect kind runs one at a time in queue order, and <code>receipts.behind</code> holds a later message of the same Ticket to the same conversation behind an earlier pending one. When <code>sendGithub</code> (<code class="long">src/sources/github-channel.ts</code>) finally posts the comment, it embeds an HTML marker holding the message id and first scans for its own marker, so a retry after a lost response posts nothing new. Mara sees a reply on #412 saying what the agent will do.</p>
+<h2 id="ch-8-s5">8.5 Launch and Work</h2>
+<p>After the commit, the <code>launch</code> effect runs (<code>launchQueued</code> in <code class="long">src/executor/dsh.ts</code>), reserving one of the <code>WorkerSlots</code> before any awaiting work so two launches cannot take the last slot. <code>launch</code> finds no workspace directory, so <code>prepareDirectory</code> runs the team's configured <code>executor.prepare</code> command — typically <code>git worktree</code> — with the Ticket's execution variables (<code>DSH_SUPERAGENT_DIR</code>, <code>DSH_SUPERAGENT_NAME</code>, <code>DSH_SUPERAGENT_TICKET</code>, and the GitHub account and repository), under a ten-minute cap; a failed prepare fails the Ticket rather than retrying over a half-built directory.</p>
+<p><code>Sessions.ensure</code> (<code class="long">src/app/sessions.ts</code>) then creates the worker Session <code>worker-&lt;ticket&gt;</code> in that directory with the <code>dsh-superagent-worker</code> preset, seeds it with the executor model, decorates it with the composed prompt — the role instructions from <code class="long">prompts/worker.md</code> and its sections, plus the Mandate's own limits, which for an explicit request add nothing — and registers its six work tools. The first message is queued under the id <code class="long">assignment:&lt;ticket&gt;:&lt;assignment&gt;</code>: a JSON card with the Ticket id, the title, up to 1,500 characters of assignment text, and the origin Trigger rendered inline; once the Session accepts it, <code>Engine.assignmentStarted</code> marks the Assignment running.</p>
+<p>The worker owns the technical work. It reads the repository's instructions and the bundled GitHub skill, reproduces the race, edits the scheduler, and reaches GitHub only through <code>gh</code> as the agent account, committing with the account and its <code class="long">DSH_SUPERAGENT_GITHUB_COMMIT_EMAIL</code>. Long test runs are not a problem for the message loop: the preset moves foreground commands to background jobs after five seconds, and a Ticket holds its worker slot while such work runs, up to the thirty-minute <code>BACKGROUND_LIMIT_MS</code>, past which shell jobs are killed and reported while subagents continue.</p>
+<h2 id="ch-8-s6">8.6 Reporting, Binding, and the Reviewer</h2>
+<p>The worker finishes with <code>orchestrator_report</code> (<code class="long">src/app/tools/executor.ts</code>), state <code>ready</code> and the pull request's number. The tool reads the PR, then in one transaction claims and records. <code>claimPull</code> (<code class="long">src/sources/github-pull.ts</code>) checks that the PR was opened by the agent account from a branch whose last path segment is the Ticket's short name, and binds it — <code>ctx.tickets.bindThread</code> with <code>own: true</code> adds a Subscription on Thread <code>github:413</code> and a <code>follows</code> entry, so the PR's lifecycle, not a bare report, will end this Ticket. <code>Engine.report</code> (<code class="long">src/core/assignments.ts</code>) records the Report on the running Assignment; because the Ticket now follows an open PR, <code>ready</code> does not end it, and its stage becomes <code class="long">person/review</code>.</p>
+<p>The same transaction queues <code>reportRelay</code> (<code class="long">src/app/notices.ts</code>) as a <code>relay</code> effect, which steers a <code>worker_report</code> message into the main Session; per <code class="long">prompts/dispatch.md</code> it completes the handoff in the originating conversation with <code>orchestrator_reply</code> <code>purpose=result</code>, which lands as a comment on issue #412 linking the PR.</p>
+<p>Then a reviewer requests changes. Their review arrives — through a notification or the subscribed-Thread poll, both ending in <code>intakeComments</code> — as a human Trigger on <code>github:413</code>. This time the Thread has a subscriber: <code>Intake.receive</code> fans the Trigger out as an Input on the Ticket, and because a live Ticket's worker decides messages on its own Threads (<code>followupOwners</code> in <code class="long">src/core/model.ts</code>), no Eval is queued and the gate's follow-up strength never comes into play. The Runtime's event hook relays a <code>follow_up</code> notice to the main Session — its ticket's worker has it and decides — while the <code>delivery</code> effect, reserving the extra slot kept for a person's message, steers the rendered Trigger into <code>worker-&lt;ticket&gt;</code> and reports <code>Engine.inputsDelivered</code>; when the worker's Session takes the message into a step, <code>Engine.inputsRead</code> records that too. The worker pushes the fix and reports <code>progress</code>, which stays internal. CI results on the PR arrive the same way as machine Triggers: fanned out to the Ticket as Inputs, with the Gate filing the batch as <code>not_human</code> in an ignore Decision — recorded, delivered, never mistaken for a request.</p>
+<h2 id="ch-8-s7">8.7 Merge and End</h2>
+<p>A maintainer merges the PR. On the next poll round, <code>pollTicketPulls</code> re-reads the PRs of open Tickets; <code>observePull</code> sees <code>merged</code>, and <code>closePull</code> reports the fact through <code class="long">SourceContext.tickets.threadClosed</code>. Inside the Engine, <code>Tickets.threadClosed</code> marks the <code>follows</code> entry closed with the merge's outcome and time; <code>followsDone</code> confirms the Ticket is done with the Threads it opened, and since its work finished and it took up nothing unanswered, the Ticket ends — <code>by: 'executor'</code>, <code>outcome: 'merged'</code>, dated at the merge itself. Its Subscriptions stay, so a later human comment on #412 or #413 can resume it under the same Mandate; its worker's background work is stopped after the ending transaction commits.</p>
+<p>The <code>ticket.ended</code> event becomes a <code>ticket_ended</code> notice to the main Session, and <code>pullEndNotices</code> (<code class="long">src/sources/github-pull.ts</code>) would send exactly one terminal notice to each chat Channel the Ticket holds — here it sends none, because the only Channel is GitHub, whose timeline already shows the merge. What remains is the record, all of it in the Store (<code class="long">src/app/store.ts</code>, one SQLite file): the Trigger with its Disposition (which Eval and Decision took it, which Tickets it reached), the accept Decision with its Mandate, and the Ticket with its Assignment, Reports, Inputs and followed Threads — every hop of this chapter readable afterwards through the same resources the Sessions read.</p>
+<h2 id="ch-8-s8">8.8 What the Walk Proves</h2>
+<p>The trace exhibited four properties, each by construction rather than by vigilance. Every hop is idempotent: Trigger ids, Eval ids, Ticket ids and message ids are derived deterministically from their inputs (<code>key</code> in <code class="long">src/core/ids.ts</code>), so re-reads answer <code>duplicate</code>, a repeated accept finds its Ticket, and a retried comment recognizes its own marker. Each fact has one writer: the Engine alone writes Triggers, Threads, Decisions, Tickets and Assignments; the Source owns its cursors; the Outbox owns receipts; Effects owns its queue. Work is stored before it is done: receipts, launches, deliveries and relays are rows inside the transaction that decided them, dispatched only after commit. And a person appears only where the domain says so — the mention that authorizes, the review that corrects, the merge that finishes, and a stop only from an allowed sender.</p>
+<p>A Feishu chat request would differ only at the edges: a different Source (<code class="long">src/sources/feishu.ts</code>, fed by live events rather than polls) and a different Channel for the replies, down the same domain path from Trigger to merged Ticket.</p>
+</section>
+<section class="chapter" id="ch-9">
+<p class="eyebrow">Chapter 9</p>
+<h1>Reading the Source</h1>
+<p>dsh-superagent is a hundred-odd TypeScript source files, fifteen prompt files and sixty test files—small enough to hold in mind after a few evenings. The project was written to be read: documents numbered, code layered, two tests keeping the documentation honest. This chapter is a guide to the first pass.</p>
+<h2 id="ch-9-s1">9.1 Where to Start</h2>
+<p>Begin with the documents, in order. <code class="long">docs/000-philosophy.md</code> states the standard every feature is judged by—take as little human attention as possible—and <code class="long">docs/001-domain.md</code> names the vocabulary the code, tools and panel share: Source, Trigger, Thread, Eval, Mandate, Ticket and the rest, each with the rules it keeps, plus a table of concepts deliberately rejected. From there each document adds one layer: authorization, execution, prompts, the panel, deployment, the architecture, and a cookbook for adding a Source. The README says each builds only on the ones before it; <code class="long">tests/docs.spec.ts</code> enforces that numbered documents link only to earlier ones.</p>
+<p><code>SETUP.md</code> is the fastest tour of the moving parts: a script an agent follows to negotiate a deployment with an operator. Its nine questions, one per message, walk the domain model's flow—where Triggers come from (which Sources, which repository, whose account the agent acts as), who may ask for work (the allowed lists), and what the Executor does with a Ticket (checkout, commit identity, auto-merge). It shows every decision a running system must name, and the defaults chosen where one value suits almost every team.</p>
+<p>Then open the code at three points. <code class="long">src/index.ts</code> is 28 lines: <code>apply</code> reads the machine configuration, constructs the <code>Runtime</code>, and awaits its <code>ready</code> promise. <code class="long">src/app/runtime.ts</code>—254 lines—is the whole system assembled in one constructor: it locks the state directory, opens the Store (the one SQLite database), and builds Setup, Effects, SourceRegistry, Sessions, Settings, the DshExecutor, the MasterAssessor, the Outbox, the Engine and Passes, each wired with the narrow interface it uses; the Executor and Assessor get getters, since they call back into the Engine. It contains no domain rules. Finally <code class="long">src/core/engine.ts</code> (270 lines) is the decision point: one class, five internal parts, every command wrapped in a single <code>repo.atomic</code> transaction, and the role-scoped <code>Pick</code> interfaces at the bottom telling you exactly who may call what.</p>
+<h2 id="ch-9-s2">9.2 Three Traces</h2>
+<p>With the map roughed in, walk three paths; each ends at a question the reading should answer.</p>
+<h3>An explicit request, from intake to accept</h3>
+<p>Start at <code class="long">src/sources/github.ts</code>, the GitHub Source: its configuration schema (repository, the agent's <code>gh</code> CLI wrapper, four observe switches), the <code>scope</code> function deciding which events are listened to, and the poll round over the agent account's notifications. Then <code class="long">src/sources/github-trigger.ts</code>, where payloads become domain objects: each comment, Issue body or CI transition is a Trigger—one immutable event—with a deterministic id, an actor, whether a person wrote it, and <code>addressed: 'mention'</code> when the text names the agent.</p>
+<p>The poll round hands the Trigger to its <code>SourceContext</code>, which reaches <code>Engine.receive</code> through <code>Passes</code> (<code class="long">src/app/passes.ts</code>), the scheduler that also runs a pass every two seconds. <code class="long">src/core/intake.ts</code> (63 lines) stores the Trigger once—a second delivery of the same id returns <code>duplicate</code>—records its Disposition (where the Trigger went), updates its Threads and their Correlations, fans the message out to subscribed Tickets as context, and queues it for Eval on its primary Thread unless a Ticket's worker already decides it. <code class="long">src/core/evals.ts</code> starts the Eval on a later pass: it batches the Thread's queued Triggers, asks the gate for admission strength and basis, and has the MasterAssessor steer a candidate card into the main Session (the orchestrator's own DSH Session). An accept—typically <code>orchestrator_route</code> in <code class="long">src/app/tools/main.ts</code> calling <code>Engine.decide</code>—lands in <code>Evals.accept</code>, which builds the Mandate (what the accept grants: strength, Policy version, basis, scope) and calls <code>Tickets.create</code>.</p>
+<p>That runs in the same transaction (<code class="long">src/core/tickets.ts:37</code>): the Ticket and its Channels are assembled, the <code>prepareTicket</code> hook adds a worktree name, directory and assignment text, the first Assignment is created, the Ticket subscribes to its Triggers' Threads, the acknowledgement is queued through Replies, and the Executor is asked to start. <code class="long">src/app/outbox.ts</code> records the acknowledgement's receipt and enqueues its <code>reply</code> effect in one transaction; after commit, the effect sends it through the Source. The question: why can the same comment arrive twice, or be decided twice, and still yield one Ticket and one reply? The answer is idempotence at three layers—the Trigger id at intake, the already-accepted check in <code>Evals.decide</code>, and the deterministic acknowledgement id in the Outbox's receipts.</p>
+<h3>Work and its reports</h3>
+<p>The second trace follows execution. <code class="long">src/app/effects.ts</code> is the durable side-effect queue: a command calls <code>enqueue</code> inside its transaction, and execution begins only after commit; six kinds exist (assessment, launch, delivery, relay, notice, reply), throwing <code>Later</code> defers without counting a failure, and failures retry with backoff. <code class="long">src/executor/dsh.ts</code> enqueues <code>launch</code> and <code>delivery</code> effects: one Executor Session (the worker) and one directory per Ticket (Session <code>worker-&lt;ticketId&gt;</code>), <code>WorkerSlots</code> capping concurrency, a prepare command readying the workspace. <code class="long">src/app/sessions.ts</code> creates and decorates both roles' Sessions—prompts, skills, the worker's restricted tool list, the main Session's no-wait guard—and delivers each message once per request id, recording which prompt revision each Session worked under.</p>
+<p>The facts flow back through <code class="long">src/core/assignments.ts</code>: <code>assignmentStarted</code>, <code>inputsDelivered</code>, <code>inputsRead</code>, <code>turnEnded</code>, and above all <code>report</code>, where a worker's speech becomes domain state—the Attention question is asked, kept or cleared, a replaced question's unsent reply is withdrawn, and a <code>blocked</code> or <code>failed</code> report holds automatic Inputs back until a human message arrives. <code class="long">src/core/stage.ts</code>, all 26 lines, collapses those facts into the one stage row the panel shows. The question: when a worker reports <code>ready</code>, who ends the Ticket? The answer—the Threads it follows do, unless it follows none—is the system's sharpest idea about who owns an outcome.</p>
+<h3>A Policy change, end to end</h3>
+<p>The third trace starts in <code class="long">src/app/settings.ts</code> <code>save</code>: an optimistic revision check, validation, origin guards (only the panel may change the execution environment), and a comparison of <code>policyVersion</code> before and after—a hash of the rules, the accept mode and the Sources' parts. When the version changed, the save computes <code>policyEffects</code> and, in one transaction with the settings write, calls <code>Engine.policyChanged</code>. <code>policyEffects</code> in <code class="long">src/policy.ts</code> walks the open Tickets: a matched rule disabled or changed, the requester no longer allowed (separating a sender's lost authorization from a mode change by revalidating under the old rules and the new lists), or proactive acceptance withdrawn when <code>auto</code> mode ended. <code>Engine.policyChanged</code> (<code class="long">src/core/engine.ts:255</code>) runs both halves in one transaction: <code>Tickets.policyChanged</code> records the notice, and <code>Evals.policyChanged</code> ends in-progress Evals <code>unavailable</code> with reason <code>policyChanged</code> and requeues their Triggers. The notice itself is an Input: <code>Tickets.policyChanged</code> (<code class="long">src/core/tickets.ts:200</code>) adds a <code>policy-changed</code> Input to each affected Ticket, and the delivery Effect hands it to the worker, rendered by <code>policyMessage</code> (<code class="long">src/executor/dsh.ts</code>): finish what stays within the rule as it now reads, or report <code>dropped</code>. The question: what does a Policy change do to work already accepted? Nothing is cancelled and no Mandate is revoked by the change itself; it is recorded and delivered, and only revalidation can bar continuation.</p>
+<h2 id="ch-9-s3">9.3 The Map</h2>
+<p>The directory tree mirrors the layering. <code class="long">src/core</code> holds the domain—no I/O, no imports outside itself—and the three files carrying the most understanding are <code>engine.ts</code> (the entry point and its five parts: Intake, Evals, Tickets, Assignments, Replies), <code>model.ts</code> (the domain types and shared predicates such as <code>waitsForPerson</code>), and <code>tickets.ts</code>, the lifecycle most rules converge on. <code class="long">src/app</code> is the host-side machinery; beyond <code>runtime.ts</code>, read <code>effects.ts</code> and <code>outbox.ts</code>, which define how state changes become actions. <code class="long">src/app/tools</code> translates tool arguments into Engine commands—<code>main.ts</code> for the main Session's fourteen tools, <code>executor.ts</code> for the worker's six. <code class="long">src/app/views</code> derives the panel's read models without writing; <code>overview.ts</code> and <code>tickets.ts</code> show what the panel considers worth a person's attention.</p>
+<p><code class="long">src/sources</code> contains the <code>SourceKind</code> protocol (<code>kind.ts</code>), the <code>SourceRegistry</code> that owns instances and implements the Engine's scope (<code>registry.ts</code>), and the two implementations, GitHub (<code>github.ts</code> and its neighbors) and Feishu. <code class="long">src/executor</code> holds the DshExecutor (<code>dsh.ts</code>) and the worker's background-work helpers (<code>background.ts</code>). <code class="long">src/infra</code> is the process side: <code>commands.ts</code> for the CLI transport, <code>environment.ts</code> for the agent's process environment, <code>health.ts</code> for its claimed health entries. <code class="long">src/client</code> is the React panel, importing only types from the host side: <code>app.tsx</code> for its shape, <code>api.ts</code> (typed by <code class="long">src/app/api.ts</code>) for every route. <code class="long">prompts/</code> holds the instructions models read (<code>orchestrator.md</code>, <code>worker.md</code>, <code>admission.md</code>), <code class="long">skills/</code> the two Source skills, and <code class="long">tests/</code> the suite. The module and test tables in <code class="long">docs/007-architecture.md</code> are the complete index; <code class="long">tests/docs.spec.ts</code> verifies they list every module and every test, so it cannot rot.</p>
+<h2 id="ch-9-s4">9.4 Conventions a Reader Must Know</h2>
+<p>The naming grammar comes first. A method that asks for something uses an imperative verb and may be refused (<code>stopTicket</code>, <code>bindThread</code>); a method recording what an adapter did uses the past tense and cannot (<code>assignmentStarted</code>, <code>threadClosed</code>); a query uses a noun (<code>candidate</code>). A past-tense name means there is no refusal path to read—<code class="long">docs/007</code>'s &quot;Requests and facts&quot; rule.</p>
+<p>Refusals and explanations are both enumerated. A refusal a person or an agent can cause is a <code>UserError</code> with a fixed code from <code>USER_ERRORS</code> in <code class="long">src/core/errors.ts</code>, each marked <code>missing</code> or <code>refused</code>, worded identically for the API (404 or 400) and the panel. Every Decision explains itself: its <code>reason</code> is a list of <code class="long">Reason { code, values, triggerId }</code> from <code class="long">src/core/reasons.ts</code>, where gates and Source scopes contribute their own codes (<code>not_a_member</code>) and <code>said</code> carries words a person or assessor wrote—so no record in the system is mute. Auxiliary state has its own map: <code class="long">src/kv.ts</code> spells every key-value record's key, type and owner exactly once.</p>
+<p>Two tests are enforced documentation. <code class="long">tests/class-docs.spec.ts</code> fails if any class in <code>src</code> lacks a JSDoc block immediately before it; <code class="long">tests/model-surface.spec.ts</code> checks everything models read—tools, prompts, skills, delivered inputs—against the tool schemas, the glossary and a size budget per role. Last, <code class="long">prompts/*.md</code> is written one sentence per line and joined into paragraphs by <code>promptFile</code> (<code class="long">src/app/skill-files.ts:29</code>), so edits diff sentence by sentence.</p>
+<h2 id="ch-9-s5">9.5 Tests as the Second Documentation</h2>
+<p>The suite encodes behavior in three widening rings. <code class="long">tests/core-engine.spec.ts</code> runs the Engine on <code>MemoryRepositories</code> (<code class="long">src/core/memory.ts</code>) with fake Assessor, Executor and Outbox ports; its <code>describe</code> blocks are named for domain rules—intake, subscription fan-out, follow-up owners, interrupted assignments, the pause—so the file doubles as a catalogue of invariants. <code class="long">tests/runtime.spec.ts</code> runs the whole application on the simulated DSH host in <code class="long">tests/fixtures/host.ts</code>: a fake session controller with real inbox mechanics (steered versus queued messages, claimed steps, cancels), fake CLIs, a job registry and a subagent runtime. The panel tests render each page against <code class="long">tests/fixtures/panel-server.ts</code>, a typed fake of every management route that records misuse. <code>pnpm check</code> runs the typecheck, the tests and the build (<code>package.json</code>).</p>
+<p>Three specs repay reading next. <code class="long">tests/policy.spec.ts</code> covers admission end to end—source scope, the gate, the admission table, Mandate revalidation, policy effects—the fastest way to understand who may start work. <code class="long">tests/followups.spec.ts</code> shows the path that bypasses Eval entirely: a person's follow-up on a subscribed Thread reaching the worker directly while the main Session is only told. <code class="long">tests/runtime-concurrency.spec.ts</code> exercises overlap—Triggers arriving during a pass, Tickets changing during deliveries and launches—where the one-writer design either holds or would show its seams.</p>
+</section>
+<section class="chapter" id="ch-10">
+<p class="eyebrow">Chapter 10</p>
+<h1>Closing Observations</h1>
+<p>The README calls dsh-superagent a research prototype, &quot;not an official DeepSeek product,&quot; adapted for publication rather than lifted from production. The documentation is unusually specific about what the system does not decide. The interesting closing question is which of those gaps are accidents of a prototype and which are load-bearing omissions—places where the designers chose recording over deciding.</p>
+<h2 id="ch-10-s1">What Is Deliberately Left Open</h2>
+<p>The most concrete gap is retention. <code class="long">docs/007-architecture.md</code>'s Persistence section says it plainly: nothing deletes old records yet. Triggers, their Dispositions and Decisions accumulate forever; so do ended Tickets and their Threads, the Outbox's receipts (one per outbound message), and in the key-value area every saved settings revision, every prompt version, the prompt revisions each Session worked under, and the Sources' per-Thread bookkeeping. The statement is a design position more than a to-do: the audit trail is the system's memory of why it acted, and pruning it is a policy question—who may forget, and when—rather than an engineering chore. A team running the prototype for a year carries every message it ever received.</p>
+<p>The trust question is sharper. A Trigger's actor and Thread membership come from the Source itself; its body and quoted text are written by whoever sent the message. The prototype records the basis of every Mandate—who sent it, through which gate cell, under which Policy version—but it has not yet drawn the line between fields it treats as evidence and fields it treats as claims. Until it does, a convincing message body can say anything, and only the gate's verdict on the sender stands behind the work it starts. Deployment isolation is a cousin of the same problem: the agent runs on its own DeepSeek Harness profile, and the open question is pinning the installation beneath it, so upgrading DeepSeek Harness elsewhere on the machine does not break the agent. And the system is single-repository by design: one github.com repository, no GitHub Enterprise Server, one agent account—spanning repositories is not a mechanism it offers, only a second deployment.</p>
+<h2 id="ch-10-s2">What Transfers</h2>
+<p>The transferable ideas are structural, and none of them depends on DeepSeek Harness or on coding work. The first is the command/effect split: a command changes state and enqueues its side effects in one transaction, and adapters perform them only after commit (<code class="long">src/app/effects.ts</code>). Crashes between deciding and doing become impossible, and retries become a property of the queue rather than a concern of every caller. The second is one writer per state: each kind of record has the single class allowed to write it, and everyone else reads or asks. The rule costs a little indirection and buys the ability to reason about any record by reading one file.</p>
+<p>The third is authorization as recorded, revalidatable data. A Mandate is not a session flag or a policy lookup at request time; it is a stored record of what was granted, to whom, under which Policy version, on what basis, and it can be revalidated against the current Policy whenever the system needs to know whether the grant still holds. The fourth is attention as the budget: <code class="long">docs/000-philosophy.md</code> judges every message, setting, panel element and paragraph of documentation by the attention it costs, and removes what does not repay it. Applied relentlessly, it is why the system's outputs are so few. The fifth is a small vocabulary defended by a rejected-concepts list—twelve entries in <code class="long">docs/001-domain.md</code>, each a temptation with its reason for refusal—so the domain model grows by argument or not at all. The sixth is prompts as versioned data: configurations are numbered snapshots, each Session is bound to the revision it worked under, and workers may read only the versions they used, which makes every model request attributable to the exact instructions that produced it.</p>
+<h2 id="ch-10-s3">The Philosophy as the Artifact</h2>
+<p>Strip away the code and the durable artifact is a set of refusals. The agent speaks only when a person must act or can use a result; notices are injected without waking the main Session, and workers hold no tool for asking or presenting to a person except one structured Attention question. It acts only when asked by someone on a list or when a written rule allows it, records what authorized the work, and submits that record to revalidation instead of trusting its past. It declines to grow: new concepts arrive by rejecting named temptations, not by accreting features. Each refusal costs something in capability, and together they buy predictability—a team can predict what the agent will never do, which is the precondition for tolerating what it does. That is the conservative core worth carrying into any autonomous system: autonomy survives in a team only while it is cheap to watch, and it stays cheap only while the system treats human attention as the one budget it cannot print.</p>
+</section>
+</main>
+
+<footer class="colophon">
+  <a class="top-link" href="#top">Back to top ↑</a>
+  An independent analysis compiled from a close reading of the <a href="https://github.com/deepseek-ai/dsh-superagent-prototype" rel="noopener">dsh-superagent prototype repository</a> (MIT-licensed). Terminology follows the project&rsquo;s own domain model; interpretations — and any errors — are this book&rsquo;s, not the prototype&rsquo;s. Text size preference is remembered on this device. · Assembled November 2026.
+</footer>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var bDefault = document.getElementById('size-default');
+  var bLarge = document.getElementById('size-large');
+  var KEY = 'dsh-superagent-arch-textsize';
+  function apply(size) {
+    var large = size === 'large';
+    root.setAttribute('data-textsize', large ? 'large' : 'default');
+    bDefault.setAttribute('aria-pressed', String(!large));
+    bLarge.setAttribute('aria-pressed', String(large));
+    try { localStorage.setItem(KEY, size); } catch (e) {}
+  }
+  bDefault.addEventListener('click', function () { apply('default'); });
+  bLarge.addEventListener('click', function () { apply('large'); });
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  if (saved === 'large' || saved === 'default') apply(saved);
+})();
+</script>
+</body>
+</html>
