@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-textsize="default" data-typeface="sans">
+<html lang="en" data-textsize="default" data-typeface="sans" data-lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,6 +18,8 @@
     --rust: #9a5b2e;
     --serif: "Charter", "Bitstream Charter", "Iowan Old Style", Georgia, "Times New Roman", serif;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --serif-zh: "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+    --sans-zh: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     --prose: 46rem;
     --wide: 68rem;
@@ -39,13 +41,29 @@
     -webkit-font-smoothing: antialiased;
   }
   html[data-typeface="serif"] body { font-family: var(--serif); }
-  html[data-typeface="serif"] .chapter h1,
-  html[data-typeface="serif"] .chapter h2,
-  html[data-typeface="serif"] .chapter h3 { font-family: var(--serif); }
+  html[data-lang="zh"] body { font-family: var(--sans-zh); line-height: 1.88; }
+  html[data-lang="zh"][data-typeface="serif"] body { font-family: var(--serif-zh); }
   .chapter h1, .chapter h2, .chapter h3 { font-family: var(--sans); letter-spacing: -0.012em; }
   html[data-typeface="serif"] .chapter h1,
   html[data-typeface="serif"] .chapter h2,
-  html[data-typeface="serif"] .chapter h3 { letter-spacing: -0.005em; }
+  html[data-typeface="serif"] .chapter h3 { font-family: var(--serif); letter-spacing: -0.005em; }
+  html[data-lang="zh"] .chapter h1,
+  html[data-lang="zh"] .chapter h2,
+  html[data-lang="zh"] .chapter h3 { font-family: var(--sans-zh); letter-spacing: 0; }
+  html[data-lang="zh"][data-typeface="serif"] .chapter h1,
+  html[data-lang="zh"][data-typeface="serif"] .chapter h2,
+  html[data-lang="zh"][data-typeface="serif"] .chapter h3 { font-family: var(--serif-zh); }
+
+  /* language visibility */
+  html[data-lang="en"] .lang-zh { display: none; }
+  html[data-lang="zh"] .lang-en { display: none; }
+  html[data-lang="zh"] { lang: zh-CN; }
+
+  /* zh reading niceties */
+  html[data-lang="zh"] .chapter p,
+  html[data-lang="zh"] .cover .lede p { text-align: justify; }
+  html[data-lang="zh"] code.long { word-break: break-all; }
+  html[data-lang="zh"] .cover h1 { letter-spacing: 0.01em; }
 
   /* ---------- top bar ---------- */
   .topbar {
@@ -313,6 +331,10 @@
     .cover { padding-top: 3.6rem; }
     .cover h1 { font-size: 2.05rem; }
     .chapter h1 { font-size: 1.55rem; }
+    .crumb { display: none; }
+    .topbar-inner { flex-wrap: wrap; row-gap: 0.4rem; }
+    .topbar .spacer { display: none; }
+    .topbar .sizer { flex: 1; justify-content: center; }
   }
   @media (max-width: 760px) {
     .sizer .sizer-label { display: none; }
@@ -336,8 +358,13 @@
 
 <header class="topbar" id="top">
   <div class="topbar-inner">
-    <a class="crumb" href="#cover"><strong>dsh-superagent</strong><span class="crumb-rest"> · An Architecture Analysis</span></a>
+    <a class="crumb" href="#cover"><strong>dsh-superagent</strong><span class="crumb-rest lang-en"> · An Architecture Analysis</span><span class="crumb-rest lang-zh"> · 架构解析</span></a>
     <span class="spacer"></span>
+    <div class="sizer" role="group" aria-label="Language / 语言">
+      <span class="sizer-label">Language</span>
+      <button type="button" id="lang-en" aria-pressed="true">EN</button>
+      <button type="button" id="lang-zh" aria-pressed="false">中文</button>
+    </div>
     <div class="sizer" role="group" aria-label="Typeface">
       <span class="sizer-label">Typeface</span>
       <button type="button" id="face-sans" aria-pressed="true">Sans</button>
@@ -353,7 +380,7 @@
 
 <main id="cover">
   
-  <section class="cover">
+  <section class="cover lang-en">
     <p class="kicker">An Architecture Analysis</p>
     <h1>The Architecture of dsh-superagent</h1>
     <p class="subtitle">How a proactive coding agent spends the least human attention — design goals, high and low levels, the reasons behind them, and one request&rsquo;s walk through the source.</p>
@@ -368,7 +395,22 @@
       <p>The analysis is grounded in the repository&rsquo;s own code and documents; the file paths cited throughout refer to the public prototype. Like the system&rsquo;s own numbered documents, the chapters are meant to be read in order — each one assumes only what came before.</p>
     </div>
   </section>
-    <nav class="toc" aria-label="Contents">
+  <section class="cover lang-zh">
+    <p class="kicker">架构分析</p>
+    <h1>dsh-superagent 架构解析</h1>
+    <p class="subtitle">一个主动式编码智能体如何最省人的注意力——设计目标、高层与低层设计、背后的取舍，以及一个请求在源码中的完整旅程。</p>
+    <div class="meta">
+      <span>分析对象：dsh-superagent（DeepSeek 研究原型）</span>
+      <span>10 章 · 6 图 · 约 5.1 万字</span>
+      <span>2026 年 11 月</span>
+    </div>
+    <div class="lede">
+      <p>每一个智能体系统都在争夺同一种稀缺资源：它所服务的人的注意力。能替整个团队行动的智能体，也能浪费整个团队的注意力——没人需要回答的问题、没人需要看的通知、没人需要评审的 pull request。DeepSeek 的研究原型 dsh-superagent 正是围绕这个观察构建的：它是一个服务于单个 GitHub 仓库的主动式编码智能体，聆听、判断、工作、表达，而它的每一个部分都以花掉多少注意力来评判。</p>
+      <p>本书由外向内阅读这个原型。先讲设计目标，以及系统赖以构建的那一小套领域词汇；再走进高层运行时与底层机制——一个同步、事务化的核心，外围是一条持久的效应队列——然后回答那个更有意思的问题：为什么是这个形状，而不是别的。接着完整追踪一次请求，从 GitHub 的一条点名到一次合并的 pull request；最后两章把读者装备起来，独自走进源码。</p>
+      <p>本分析立足于仓库自身的代码与文档，全书引用的文件路径均指公开原型。与这套系统自己的编号文档一样，各章按顺序阅读——每一章只假设你读过它前面的章节。</p>
+    </div>
+  </section>
+    <nav class="toc lang-en" aria-label="Contents">
     <h2>Contents</h2>
     <ol>
       <li><a href="#ch-1">A Coding Agent That Asks to Be Ignored</a>
@@ -393,7 +435,32 @@
         <ul class="sections"><li><a href="#ch-10-s1">What Is Deliberately Left Open</a></li><li><a href="#ch-10-s2">What Transfers</a></li><li><a href="#ch-10-s3">The Philosophy as the Artifact</a></li></ul></li>
     </ol>
   </nav>
-  <section class="chapter" id="ch-1">
+  <nav class="toc lang-zh" aria-label="目录">
+    <h2>目录</h2>
+    <ol>
+      <li><a href="#ch-1-zh">一个宁愿被忽视的编码智能体</a>
+        <ul class="sections"></ul></li>
+      <li><a href="#ch-2-zh">设计目标</a>
+        <ul class="sections"><li><a href="#ch-2-zh-s1">原则对行为的要求</a></li><li><a href="#ch-2-zh-s2">原则对设计的要求</a></li><li><a href="#ch-2-zh-s3">原则对机器的要求</a></li><li><a href="#ch-2-zh-s4">契约的操作者一侧</a></li></ul></li>
+      <li><a href="#ch-3-zh">领域模型：一套小而严的词汇表</a>
+        <ul class="sections"><li><a href="#ch-3-zh-s1">监听侧</a></li><li><a href="#ch-3-zh-s2">研判侧</a></li><li><a href="#ch-3-zh-s3">执行侧</a></li><li><a href="#ch-3-zh-s4">模型拒绝什么</a></li><li><a href="#ch-3-zh-s5">聚合与代码落点</a></li></ul></li>
+      <li><a href="#ch-4-zh">高层架构</a>
+        <ul class="sections"><li><a href="#ch-4-zh-s1">三层，一个方向</a></li><li><a href="#ch-4-zh-s2">Engine：唯一的决定点</a></li><li><a href="#ch-4-zh-s3">围着同步引擎的两个异步引擎</a></li><li><a href="#ch-4-zh-s4">配角阵容</a></li><li><a href="#ch-4-zh-s5">启动与停止</a></li></ul></li>
+      <li><a href="#ch-5-zh">走进机器内部（上）：纯核心</a>
+        <ul class="sections"><li><a href="#ch-5-zh-s1">5.1 一台引擎，五个部分</a></li><li><a href="#ch-5-zh-s2">5.2 准入：授权即计算</a></li><li><a href="#ch-5-zh-s3">5.3 研判与决定</a></li><li><a href="#ch-5-zh-s4">5.4 持久化：一个文件、生成列、每张表一个写者</a></li><li><a href="#ch-5-zh-s5">5.5 共享谓词</a></li></ul></li>
+      <li><a href="#ch-6-zh">走进机器内部（下）：边缘</a>
+        <ul class="sections"><li><a href="#ch-6-zh-s1">6.1 效果队列：存下来的工作</a></li><li><a href="#ch-6-zh-s2">6.2 Outbox：按序发言</a></li><li><a href="#ch-6-zh-s3">6.3 DshExecutor：每个工单一个 Session、一个目录</a></li><li><a href="#ch-6-zh-s4">6.4 Sessions、投递与 MasterAssessor</a></li><li><a href="#ch-6-zh-s5">6.5 来源：协议背后的插件</a></li><li><a href="#ch-6-zh-s6">6.6 面板与健康</a></li></ul></li>
+      <li><a href="#ch-7-zh">为什么这样设计</a>
+        <ul class="sections"><li><a href="#ch-7-zh-s1">7.1 异步世界里的同步核心</a></li><li><a href="#ch-7-zh-s2">7.2 命令在今天，效果在明天</a></li><li><a href="#ch-7-zh-s3">7.3 每种状态只有一个写入者</a></li><li><a href="#ch-7-zh-s4">7.4 授权是记录在案的数据</a></li><li><a href="#ch-7-zh-s5">7.5 状态属于工单，不属于 Session</a></li><li><a href="#ch-7-zh-s6">7.6 提示词是带版本的数据</a></li><li><a href="#ch-7-zh-s7">7.7 小词汇表，少设置项</a></li></ul></li>
+      <li><a href="#ch-8-zh">一个请求走遍全系统</a>
+        <ul class="sections"><li><a href="#ch-8-zh-s1">8.1 那张图</a></li><li><a href="#ch-8-zh-s2">8.2 从 GitHub 到一条触发</a></li><li><a href="#ch-8-zh-s3">8.3 准入与候选</a></li><li><a href="#ch-8-zh-s4">8.4 原子化的接单</a></li><li><a href="#ch-8-zh-s5">8.5 启动与工作</a></li><li><a href="#ch-8-zh-s6">8.6 报告、绑定与评审人</a></li><li><a href="#ch-8-zh-s7">8.7 合并与终结</a></li><li><a href="#ch-8-zh-s8">8.8 这一路证明了什么</a></li></ul></li>
+      <li><a href="#ch-9-zh">源码阅读指南</a>
+        <ul class="sections"><li><a href="#ch-9-zh-s1">9.1 从哪里开始</a></li><li><a href="#ch-9-zh-s2">9.2 三条线索</a></li><li><a href="#ch-9-zh-s3">9.3 地图</a></li><li><a href="#ch-9-zh-s4">9.4 读者必须知道的约定</a></li><li><a href="#ch-9-zh-s5">9.5 测试即第二份文档</a></li></ul></li>
+      <li><a href="#ch-10-zh">结语与观察</a>
+        <ul class="sections"><li><a href="#ch-10-zh-s1">刻意留白之处</a></li><li><a href="#ch-10-zh-s2">可迁移的东西</a></li><li><a href="#ch-10-zh-s3">作为成品的哲学</a></li></ul></li>
+    </ol>
+  </nav>
+  <section class="chapter lang-en" id="ch-1">
 <p class="eyebrow">Chapter 1</p>
 <h1>A Coding Agent That Asks to Be Ignored</h1>
 <p>dsh-superagent is a proactive coding agent that serves exactly one GitHub repository. It grew out of a DeepSeek team's day-to-day development work, with much of the engineering done by coding agents, and its README is blunt about its status: research code, adapted for publication, not production-ready software. It ships as a bundle for DeepSeek Harness — DSH, the host application that runs agent sessions, equips them with tools, and serves their web interface. Installed into a DSH profile, the bundle turns the agent into a quiet member of the repository's daily life: it reads issues, comments, pushes branches, and opens pull requests under a GitHub account the whole team can see and talk to.</p>
@@ -406,7 +473,7 @@
 <p>An honest caveat before going further. The README states that this code was adapted for publication, so it is not identical to the team's internal version, nor to the system described in their paper, <em>Exploring Super-agent Design: Towards a More Autonomous Agent System</em>; some designs discussed in the article are directions for future work and are not implemented in this prototype. This book therefore grounds every claim in the published repository — its documents and its TypeScript source — and where the code is rough, it says so.</p>
 <p>The rest of the book follows the repository's own reading order, because the repository numbers its documents so that each builds only on the ones before it. The next chapter states the design goals in full and traces each one to the engineering that makes it hold. A chapter on the domain model then introduces the working vocabulary — Source, Trigger, Thread, Eval, Mandate, Ticket and their neighbors — together with the rules that decide who may start work and how permission becomes recorded data. Two chapters descend to the low level: the pure core where every decision is made, and the edges — the effect queue, the outbox, the executor, the sessions and the Source plugins — where every decision is carried out. The chapter after them asks why this shape and not another. One request is then followed end to end, from a GitHub mention to a merged pull request, and the final chapters are a guide to reading the source alone, and the observations that close the analysis.</p>
 </section>
-<section class="chapter" id="ch-2">
+<section class="chapter lang-en" id="ch-2">
 <p class="eyebrow">Chapter 2</p>
 <h1>Design Goals</h1>
 <p>At the top of its philosophy document, dsh-superagent names the quantity it works to minimize: &quot;Take as little human attention as possible, and give as much value as possible&quot; (<code class="long">docs/000-philosophy.md</code>). The sentence is a unit of account, not a motto. A message, a notification, a question, a setting, a panel element and a paragraph of documentation each cost someone's attention, and every part of the project is judged by that cost: each must give more value than it takes, or it is removed. The rest of the chapter reads the goal through the agent's behavior, the design, the machinery, and finally the operator.</p>
@@ -430,7 +497,7 @@
 <p>Start narrow, with a short allowed list and proactive work only recorded, and widen both once what the agent would have done looks right. Tune for less noise: when the agent is noisy, make its prompts shorter and stricter, or pause it — not more messages that explain the noise. Do not use it to produce volume; mass pull requests and broadcast messages cost the team more than they give. And own what it says: read what it posts in your name, and correct it in the prompts when it is wrong.</p>
 <p>The principle thus binds agent, machinery and operator into one budget. Its measure is the philosophy document's closing line: the right help at the right time, and nothing at any other time.</p>
 </section>
-<section class="chapter" id="ch-3">
+<section class="chapter lang-en" id="ch-3">
 <p class="eyebrow">Chapter 3</p>
 <h1>The Domain Model: A Small Vocabulary with Strict Rules</h1>
 <p>Every event that reaches dsh-superagent travels one path, and the domain model is that path written as nouns. A Source watches a stream of events and turns one event into a Trigger. The Trigger lands on a Thread, where the path splits: a Subscription fans it out as context to the Tickets already subscribed to that Thread, while every other Trigger enters an Eval. The Eval ends in a Decision, and an accepting Decision creates a Ticket carrying a Mandate. An Assignment hands the Ticket to an Executor, and the results travel back to the Source through a Channel. The discipline is stated outright: code, tools, panel and documents use these terms and no others (<code class="long">docs/001-domain.md</code>).</p>
@@ -557,7 +624,7 @@
 <p>The model groups its concepts into three aggregates, each one boundary of consistency. A Source holds its read position, so replay is its problem alone. A Thread holds its Subscriptions, its running Eval — serial, merging Triggers that arrive meanwhile into the next batch — and its Decision history. A Ticket holds its Assignments, Channels and Inputs, and refers to Decisions by id.</p>
 <p>In code, the vocabulary has two homes. <code class="long">src/core/model.ts</code> defines the types — <code>Trigger</code>, <code>Thread</code>, <code>Evaluation</code>, <code>Decision</code>, <code>Mandate</code>, <code>Ticket</code>, <code>Assignment</code>, <code>TriggerDisposition</code> — and the predicates that keep those rules consistent: <code>followupOwners</code>, <code>settled</code>, <code>waitsForPerson</code>, <code>liveTicket</code>. <code class="long">src/core/stage.ts</code> classifies a Ticket's stage — waiting on a person, working, idle or ended — in <code>ticketStage</code>, reading the same Reports. The deterministic halves of judgement sit just outside the core: the Gate and Mandate revalidation in <code class="long">src/policy.ts</code>, the reason codes in <code class="long">src/core/reasons.ts</code>. And every record above has one writer, the Engine in <code class="long">src/core/engine.ts</code>, so the vocabulary is not just shared but centrally enforced.</p>
 </section>
-<section class="chapter" id="ch-4">
+<section class="chapter lang-en" id="ch-4">
 <p class="eyebrow">Chapter 4</p>
 <h1>The High-Level Architecture</h1>
 <p>dsh-superagent does not run as a service beside DeepSeek Harness (DSH); it runs as plugins inside a single DSH host process. The main entry, <code class="long">src/index.ts</code>, exports an <code>apply</code> function that constructs one <code>Runtime</code> and awaits its readiness. The same package builds two more plugins — <code class="long">src/sources/github.ts</code> and <code class="long">src/sources/feishu.ts</code>, bundled by <code>tsdown.config.ts</code> and exported in <code>package.json</code> as <code class="long">./github-watch</code> and <code class="long">./feishu-watch</code> — and the bundle's <code>cordis.patch.yml</code> inserts all three into the host, with Feishu disabled until a bot is configured, alongside the two agent presets the Sessions run under. A Source, the term for a connection to a platform such as GitHub or Feishu, is therefore not a watcher process of its own: each Source plugin injects the <code>orchestrator</code> service that the Runtime publishes on the Cordis context and registers its kind through it (<code class="long">src/sources/github.ts:111</code>).</p>
@@ -732,7 +799,7 @@
 <p>Startup is ordered so that failure degrades rather than crashes. <code>initialize()</code> in <code class="long">src/app/runtime.ts</code> registers the HTTP routes first, so an operator can reach the panel even when setup cannot complete. Setup then probes the repository and accounts; if it fails, the Runtime reports <code>setupPending</code> and stops there — Sources still record incoming Triggers, but nothing evaluates or sends. Once setup resolves, the Runtime installs the Session and Executor hooks, ensures the main Session exists, syncs each syncable Source's Policy part, resumes interrupted Assignments through <code>assignmentInterrupted</code>, and only then starts passes and effects. <code>ready</code> resolves when startup has finished, including the case where setup stopped it short.</p>
 <p>Shutdown runs the same list backward. <code>stop()</code> is idempotent; it sets the closing flag, stops the passes, and aborts the lifetime signal that cancels running reads and subprocesses. It cancels the turns of the main and every worker Session, keeping their inboxes, then waits for the last pass, the effect drain — pending rows stay in SQLite for the next start — and the agents to go idle, stopping the workers' background jobs and subagents. After disposing the hooks and flushing Session persistence, a <code>finally</code> block restores the process environment Setup had changed, closes the Store, and releases the directory lock, in that order, so no other process can open the database mid-write.</p>
 </section>
-<section class="chapter" id="ch-5">
+<section class="chapter lang-en" id="ch-5">
 <p class="eyebrow">Chapter 5</p>
 <h1>Inside the Machine, Part I: The Pure Core</h1>
 <p>Everything dsh-superagent knows about work — what may start it, how it proceeds, when it ends — lives in one directory. <code class="long">src/core</code> imports nothing outside itself apart from Node's hashing and does no I/O; its rules are pure functions over stored records, and the whole domain also runs on in-memory repositories in tests (<code class="long">src/core/memory.ts</code>). The tour runs from the inside out: the Engine and its five parts, authorization as computation, assessment, the store beneath, and the predicates that keep every part's answers consistent.</p>
@@ -923,7 +990,7 @@
 <p><code>ticketStage</code> (<code class="long">src/core/stage.ts</code>) is the stage table of <code class="long">docs/003-execution.md</code> as code, read top to bottom with the first matching row winning: a failed delivery, an open Attention or a <code>ready</code> report puts the Ticket in a person stage, a blocked or failed report only when <code>waitsForPerson</code> holds, then queued, idle and working. <code>canRetry</code> closes the loop, making exactly the person-stage stalls a person may remedy — a held Ticket or a failed delivery — retryable.</p>
 <p>The reason to centralize these is not elegance but sameness. Whether a Ticket waits for a person is asked by Input delivery, the stage classifier, the retry command and the panel; if each answered with its own reading of reports and Inputs, the held Inputs and the &quot;Blocked&quot; label would eventually disagree. As pure functions over stored records — <code>followupOwners</code> takes a records interface, so the same code runs against SQLite, in memory and in the panel — they give one answer everywhere, change in one place, and are pinned by their own tests (<code class="long">tests/stage.spec.ts</code>).</p>
 </section>
-<section class="chapter" id="ch-6">
+<section class="chapter lang-en" id="ch-6">
 <p class="eyebrow">Chapter 6</p>
 <h1>Inside the Machine, Part II: The Edges</h1>
 <p>Part I followed the Engine, the synchronous core that owns every decision. A core that only decides would be a brain in a jar. This part follows the machinery that connects it to the world: the queue that remembers promised work, the outbox that makes the agent speak in order, the executor that gives each Ticket — the system's unit of accepted work — a shell and a worker, the manager of its model conversations, and the Source plugins that listen to GitHub and Feishu. One rule repeats: decide inside a transaction, do the work afterwards, from storage.</p>
@@ -1060,7 +1127,7 @@
 <p>The endings mirror that honesty. A <code>ready</code> Report on a Ticket that follows no pull request completes it; a <code>dropped</code> Report ends it without a message unless a matched rule asks for one, keeping its Subscriptions so a later human comment resumes it. A Ticket that follows pull requests is done only when none it opened remain open — or, having opened none, when every pull request it follows has closed — and then ends with the outcome of the last relevant close, <code>merged</code> or <code>closed</code>, with one final notice to chat Channels from <code>pullEndNotices</code> (<code class="long">src/sources/github-pull.ts</code>). &quot;Awaiting review&quot; therefore means a <code>ready</code> Report with a pull request.</p>
 <p>Health follows the same single-writer rule as everything else. <code>HealthBoard</code> (<code class="long">src/infra/health.ts</code>) holds one entry per part — <code>runtime</code>, <code>evals</code>, <code>models</code>, one per effect kind, <code>worker</code>, each Source kind's entries, <code>sync:&lt;id&gt;</code> for Policy syncs — and each entry is claimed by exactly one writer; a second claim throws. Errors surface only after three consecutive failures, so a one-off network error stays quiet, and a failed Input delivery shows on its own Ticket instead. That is the panel's promise (<code class="long">docs/005-panel.md</code>): a healthy state takes no space, and what the supervisor does see is either work that needs them or a problem they can act on.</p>
 </section>
-<section class="chapter" id="ch-7">
+<section class="chapter lang-en" id="ch-7">
 <p class="eyebrow">Chapter 7</p>
 <h1>Why It Is Designed This Way</h1>
 <p>dsh-superagent turns event streams into teammate work. A Source — a GitHub repository or a Feishu chat — produces immutable events called Triggers, gathered into Threads, the conversations they belong to; an Eval decides whether a batch of Triggers may start work; an accept grants a Mandate (the work's recorded authorization) and opens a Ticket, which an Assignment hands to an Executor running in an Executor Session (worker). One Session, the main Session, does the judging and routing. The philosophy that governs the whole (<code class="long">docs/000-philosophy.md</code>) is an attention budget — take as little human attention as possible. Six structural decisions carry that budget, and each exists because a cheaper-looking alternative was refused on paper; the strongest artifacts here are the refusals.</p>
@@ -1093,7 +1160,7 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
 <p>The codebase polices its own vocabulary. Why the core recorded a Decision is a <code>Reason</code> code from the closed <code>REASONS</code> list (<code class="long">src/core/reasons.ts</code>); what a person or agent can be refused is a <code>UserError</code> from the fixed <code>USER_ERRORS</code> codes (<code class="long">src/core/errors.ts</code>), which the management API answers with a status and the panel words in its language. The glossary of <code class="long">docs/001-domain.md</code> is consumed by the panel itself — its question-mark button opens the same terms, in both languages, from <code>GLOSSARY</code> in <code class="long">src/client/locales.ts</code>. A new concept cannot slip in half-introduced: the words on the screen, the reasons in the records and the terms in the documents are one list.</p>
 <p>The strongest discipline, though, is the last table in <code class="long">docs/001-domain.md</code>: the rejected concepts. Principal or Membership; Eval scheduling its own delays; waiting Eval states; one live Ticket per Thread; Ticket state that follows the Session; cancellation on Policy change; locks on a failed worker's tools. Each row is a design that almost fit, with the reason it was refused. Most architectures can say what they do; this one can say what it refuses to become — and a design that knows where it ends can keep everything inside that line simple.</p>
 </section>
-<section class="chapter" id="ch-8">
+<section class="chapter lang-en" id="ch-8">
 <p class="eyebrow">Chapter 8</p>
 <h1>A Request Walks Through the System</h1>
 <h2 id="ch-8-s1">8.1 The Figure</h2>
@@ -1254,7 +1321,7 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
 <p>The trace exhibited four properties, each by construction rather than by vigilance. Every hop is idempotent: Trigger ids, Eval ids, Ticket ids and message ids are derived deterministically from their inputs (<code>key</code> in <code class="long">src/core/ids.ts</code>), so re-reads answer <code>duplicate</code>, a repeated accept finds its Ticket, and a retried comment recognizes its own marker. Each fact has one writer: the Engine alone writes Triggers, Threads, Decisions, Tickets and Assignments; the Source owns its cursors; the Outbox owns receipts; Effects owns its queue. Work is stored before it is done: receipts, launches, deliveries and relays are rows inside the transaction that decided them, dispatched only after commit. And a person appears only where the domain says so — the mention that authorizes, the review that corrects, the merge that finishes, and a stop only from an allowed sender.</p>
 <p>A Feishu chat request would differ only at the edges: a different Source (<code class="long">src/sources/feishu.ts</code>, fed by live events rather than polls) and a different Channel for the replies, down the same domain path from Trigger to merged Ticket.</p>
 </section>
-<section class="chapter" id="ch-9">
+<section class="chapter lang-en" id="ch-9">
 <p class="eyebrow">Chapter 9</p>
 <h1>Reading the Source</h1>
 <p>dsh-superagent is a hundred-odd TypeScript source files, fifteen prompt files and sixty test files—small enough to hold in mind after a few evenings. The project was written to be read: documents numbered, code layered, two tests keeping the documentation honest. This chapter is a guide to the first pass.</p>
@@ -1284,7 +1351,7 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
 <p>The suite encodes behavior in three widening rings. <code class="long">tests/core-engine.spec.ts</code> runs the Engine on <code>MemoryRepositories</code> (<code class="long">src/core/memory.ts</code>) with fake Assessor, Executor and Outbox ports; its <code>describe</code> blocks are named for domain rules—intake, subscription fan-out, follow-up owners, interrupted assignments, the pause—so the file doubles as a catalogue of invariants. <code class="long">tests/runtime.spec.ts</code> runs the whole application on the simulated DSH host in <code class="long">tests/fixtures/host.ts</code>: a fake session controller with real inbox mechanics (steered versus queued messages, claimed steps, cancels), fake CLIs, a job registry and a subagent runtime. The panel tests render each page against <code class="long">tests/fixtures/panel-server.ts</code>, a typed fake of every management route that records misuse. <code>pnpm check</code> runs the typecheck, the tests and the build (<code>package.json</code>).</p>
 <p>Three specs repay reading next. <code class="long">tests/policy.spec.ts</code> covers admission end to end—source scope, the gate, the admission table, Mandate revalidation, policy effects—the fastest way to understand who may start work. <code class="long">tests/followups.spec.ts</code> shows the path that bypasses Eval entirely: a person's follow-up on a subscribed Thread reaching the worker directly while the main Session is only told. <code class="long">tests/runtime-concurrency.spec.ts</code> exercises overlap—Triggers arriving during a pass, Tickets changing during deliveries and launches—where the one-writer design either holds or would show its seams.</p>
 </section>
-<section class="chapter" id="ch-10">
+<section class="chapter lang-en" id="ch-10">
 <p class="eyebrow">Chapter 10</p>
 <h1>Closing Observations</h1>
 <p>The README calls dsh-superagent a research prototype, &quot;not an official DeepSeek product,&quot; adapted for publication rather than lifted from production. The documentation is unusually specific about what the system does not decide. The interesting closing question is which of those gaps are accidents of a prototype and which are load-bearing omissions—places where the designers chose recording over deciding.</p>
@@ -1297,11 +1364,908 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
 <h2 id="ch-10-s3">The Philosophy as the Artifact</h2>
 <p>Strip away the code and the durable artifact is a set of refusals. The agent speaks only when a person must act or can use a result; notices are injected without waking the main Session, and workers hold no tool for asking or presenting to a person except one structured Attention question. It acts only when asked by someone on a list or when a written rule allows it, records what authorized the work, and submits that record to revalidation instead of trusting its past. It declines to grow: new concepts arrive by rejecting named temptations, not by accreting features. Each refusal costs something in capability, and together they buy predictability—a team can predict what the agent will never do, which is the precondition for tolerating what it does. That is the conservative core worth carrying into any autonomous system: autonomy survives in a team only while it is cheap to watch, and it stays cheap only while the system treats human attention as the one budget it cannot print.</p>
 </section>
+<section class="chapter lang-zh" id="ch-1-zh">
+<p class="eyebrow">第 1 章</p>
+<h1>一个宁愿被忽视的编码智能体</h1>
+<p>dsh-superagent 是一个主动式编码智能体，只服务一个 GitHub 仓库。它从 DeepSeek 一个团队的日常开发工作中长出来，大量工程本身就由编码智能体完成；它的 README 对自身定位毫不掩饰：研究代码，为公开发表而整理，不是可用于生产的软件。它以 DeepSeek Harness——简称 DSH——的 bundle 形式发布；DSH 是宿主应用，负责运行智能体的各个 Session、为它们配备工具、并承载它们的 Web 界面。装进一个 DSH profile 之后，这个 bundle 让智能体成为仓库日常里一个安静的成员：它读 issue、读评论、推分支，用一个全团队都看得见、也说得上话的 GitHub 账号开 pull request。</p>
+<p>它用这个成员身份所做的事，刻意收得很窄。智能体监听 GitHub——通常靠轮询自己账号的通知，也可打开可选开关，覆盖每一条新 issue、每个 pull request、每条评论和默认分支的每次 CI 运行——团队需要的话，还能通过一个 bot 监听 Feishu 聊天。当团队允许的人提及智能体并请它做事时，这个请求就变成一张工单（Ticket），即系统里授权工作的单位，通常落在默认一分钟一次的轮询间隔之内。智能体确认一次，说明自己将做什么。随后它在自己的智能体 Session 和自己的工作目录里干活，并在被请求的那段对话里作答，答案常常是一个 pull request。一个 Web 面板汇总一切，并把需要人处理的事摆在最前面。</p>
+<p>两类 Session 分担了劳动。单独一个主 Session，在代码和提示词里叫 <code>orchestrator</code>，接收每一个进入的事件，研判哪些值得做事，然后分派；每张工单配一个执行器 Session，叫 <code>worker</code>，在自己的目录里做真正的编码。这个拆分关系到本书的主题：同人说话的部分，不是改动文件的部分，因此可以给每一部分恰好其工作所需的权限，以及恰好所需的分寸。</p>
+<p>在运维上，这套系统是一件小东西，不是一个集群。它以单个 DSH 进程运行，由 tmux 会话里的一个服务脚本启动，终端脱离后仍能存活，面板绑定在 localhost（<code class="long">docs/006-deployment.md</code>）。所有持久状态——收到的每个事件、每张工单、每条排队中的副作用——都放在配置好的状态目录下的单个 SQLite 文件里；升级之前要备份的，就是这个文件。智能体的身份是一个有写权限的专用 GitHub 账号，登录着它自己的 GitHub CLI；宿主会把各个 worker 的 git 与 GitHub 调用引到这个账号的凭据上，避开操作者的凭据。</p>
+<p>为什么在智能体<em>不</em>做的事情上如此用心？因为一个能为整个团队行动的智能体，也能浪费整个团队的注意力。项目的立身观察写在它的哲学文档里：注意力才是这个系统真正消耗的资源——每条消息、每个通知、每个提问、每项设置、每个面板元素、每段文档，都在花某个人的注意力，而每一项都必须还回比成本更多的价值，否则就会被移除（<code class="long">docs/000-philosophy.md</code>）。代码让智能体来写是便宜的，让人来评审是昂贵的；一个不加限制地同时产出二者的智能体，并不创造产能。它摧毁产能。</p>
+<p>本章的标题压缩的正是这条规则。智能体只在获准的人开口要求时行动，或者在团队写下的规则允许时行动；没有人请求过的工作，从 observe（观察）模式开始——只记录智能体本会做什么，并不真的去做——自治的边界因此随证据放宽，而不是先行假定。它只在有人必须行动、或有人用得上结果时开口：一次确认；干活期间的沉默；结果就绪、需要决定、或无法完成时的一条消息。在这些时刻之外，无人理会正是它为之而设计的。</p>
+<p>面板是同一个想法的另一半。主管打开它，应当能很快离开：它按顺序回答三个问题——现在有没有事需要我；系统是否健康；这件工作的来龙去脉如何——而健康状态在屏幕上不占地方（<code class="long">docs/005-panel.md</code>）。一个仔细花注意力的智能体，和一个仔细花屏幕时间的面板，是同一个设计，不是两个。</p>
+<p>在继续之前，先交代一个诚实的告诫。README 声明这份代码为公开发表做过整理，因此它既不等于团队的内部版本，也不等于他们论文 <em>Exploring Super-agent Design: Towards a More Autonomous Agent System</em> 所描述的系统；文中讨论的某些设计属于未来工作的方向，并未在这个原型里实现。因此，本书的每一个论断都以公开的仓库为根据——它的文档和它的 TypeScript 源码——代码哪里粗糙，书里就照直说。</p>
+<p>本书余下的部分沿用仓库自身的阅读顺序，因为仓库给文档编了号，每一篇只建立在它之前的那些之上。下一章完整陈述设计目标，并把每一条追溯到让它站得住的工程。随后的领域模型一章引入工作词汇——来源（Source）、触发（Trigger）、线程（Thread）、评估（Eval）、授权（Mandate）、工单，以及它们的邻居——连同决定谁可以开工、许可如何变成记录在案的数据的那些规则。再往下，两章深入低层：做出每一个决定的纯核心，和执行每一个决定的边缘——效果队列、Outbox、执行器、各个 Session、来源插件。它们之后的一章追问：为什么是这个形状，而不是别的。随后跟着一个请求从头走到尾，从 GitHub 上的一次提及，到一个已合并的 pull request；最后几章，一章是独自阅读源码的指南，一章是收束整个分析的观察。</p>
+</section>
+<section class="chapter lang-zh" id="ch-2-zh">
+<p class="eyebrow">第 2 章</p>
+<h1>设计目标</h1>
+<p>在哲学文档的开头，dsh-superagent 点名了它要最小化的那个量：&quot;尽可能少地占用人的注意力，尽可能多地给出价值&quot;（<code class="long">docs/000-philosophy.md</code>）。这句话是一个记账单位，不是一句口号。一条消息、一个通知、一个提问、一项设置、一个面板元素、一段文档，各自都要花掉某个人的注意力，而项目的每个部分都按这一成本接受评判：每一项给出的价值必须多于它取走的，否则就移除。本章余下的部分，沿着智能体的行为、设计、机器，最后是操作者，来读解这个目标。</p>
+<h2 id="ch-2-zh-s1">原则对行为的要求</h2>
+<p>原则的行为一半，是一套由宿主强制执行、而非口头请求的习惯。智能体只在有人请求时行动，或在一条成文规则允许时行动。&quot;请求&quot;有严格含义：请求必须直接点到智能体，而且必须来自某个来源（Source）的允许列表上的人——来源是智能体监听的事件流，比如 GitHub 或 Feishu——这份列表就是来源在策略（Policy，带版本的接受工作规则）里的一部分。没有人请求过的工作，需要一条团队写下的规则；即便如此，它也从 observe 模式起步：智能体研判自己本会做什么，记录一条标注 &quot;would accept&quot;（本会接单）的 ignore，而不真的接下任何工作（<code class="long">docs/002-authorization.md</code>）。</p>
+<p>智能体只在有人必须行动、或有人用得上结果时才开口。它对请求确认一次，说明将要做什么；干活时保持安静；到结果就绪、需要人来决定、或无法完成时，再写一条。消息很短，而且发到提出请求的那个对话里。</p>
+<p>需要人时，智能体一次只提一个具体的问题。这个问题就是一个待人工决定（Attention）——挂在一辆工单（Ticket，系统里授权工作的单位）上、等人作答的悬而未决的问题——它作为结构化字段，随执行器 Session（运行单个工单的 <code>worker</code> Session）的报告（Report）传递，而不是写成一段自由文字。领域模型明确拒绝从报告的自由文本里推断&quot;正在等人&quot;（<code class="long">docs/001-domain.md</code>）；结构化的事实能到达面板和正确的对话，而埋进段落里的问题，就一直埋着。</p>
+<p>智能体在哪里停下，看影响，不看投入：本地的改动，推进到可评审的结果为止；需要设计决定的改动，停在一个明确的问题上。它也如实报告——草稿就标为未完成，失败就照失败报告，绝不为了免开一次口而绕过限制。</p>
+<h2 id="ch-2-zh-s2">原则对设计的要求</h2>
+<p>设计一侧的目标，关乎理解这套系统本身的成本。第一是概念要少：领域里只放领域自己的概念——来源、触发（Trigger）、线程（Thread）、工单，以及它们的邻居——再加 GitHub、Feishu 这样的具体实现。一项业务需求，要么成为既有概念的属性，要么成为提示词里的一行文字，绝不会成为一个新概念。最清楚的例子是人：人不是领域概念。一个触发，作为一次不可变事件，按来源给出的样子带着行为者的标识；允许列表是来源在策略里的那一部分；同一个人在两个来源上各开有账号，这个事实是智能体读到的提示词文字（<code class="long">docs/001-domain.md</code>）。</p>
+<p>第二是设置要少。当一个值适合几乎所有团队时，用默认值顶替设置；团队能用言语说清的行为，是提示词文字，不是设置。合并把这条分野摆得明明白白：宿主没有任何针对合并的决策逻辑；什么时候允许自动合并、行数上限设多少，由一段名为 Delivery requirements（交付要求）的提示词管辖（<code class="long">docs/003-execution.md</code>）。团队改几个字，行为就变了。</p>
+<p>第三是一个只把&quot;需要人&quot;的事摆出来的面板。打开它，按顺序回答：此刻有没有事需要这位读者；系统是否健康；某一件工作后来怎样了。健康状态不多占一块地方，数字只在能改变主管做法时才出现（<code class="long">docs/005-panel.md</code>）。第四是按顺序读得下去的文档：每篇编号文档只建立在它之前的那些之上，不把任何概念提前引入。</p>
+<h2 id="ch-2-zh-s3">原则对机器的要求</h2>
+<p>上述每个产品目标都隐含一条工程要求，在仓库里表现为一个具体机制。第一条是幂等的 intake，因为纪律从门口开始。轮询器会把同一个事件看到两次，一个重复的工作项，等于让团队为一次请求付两次钱。因此一个触发只存储一次：intake 检查触发的 id，再来一次就返回 <code>duplicate</code>（<code class="long">src/core/intake.ts</code>）；对同一个触发的两次接受也只创建一张工单——某个触发已经开启过工单时，后来的决定返回的是该工单既有的决定（Decision）（<code class="long">src/core/engine.ts</code>）。</p>
+<p>第二条是持久存储的工作，因为一个很少开口的智能体，丢不起它唯一的那条消息。决定之后系统要做的每一件事——把候选转达给主 Session，即研判请求的 <code>orchestrator</code> Session，代码把它的研判角色称为 MasterAssessor；启动一次派工（Assignment，把一张工单绑定到一个执行器实例）；向一张工单投递一个输入（Input）；或在一条渠道（Channel，线程的写侧）上发出回复——都先存储，后执行（<code class="long">docs/003-execution.md</code>）。机制是 Effects：一条以 SQLite 为底座的持久队列，在命令事务内持久化副作用，提交之后再分发，按类别保序，带指数退避（<code class="long">src/app/effects.ts</code>）；Outbox 则在尝试任何发送之前，先把外发消息作为回执持久化（<code class="long">src/app/outbox.ts</code>）。</p>
+<p>第三条是把授权做成记录在案的数据。一次 accept（接单）授出的是一份授权（Mandate）：一份不可变的记录，写下请求的强度（strength）、这项授权允许的工作范围、接受它时所依据的策略版本（Policy version），以及依据——评估（Eval）中确定性第一层的准入（Gate）如何放行了该触发，以及放行自谁（<code class="long">src/core/model.ts</code>）。一张已结束的工单在恢复之前，其授权会对照现行策略重新校验；发送者若已离开列表，或匹配的规则已不复存在，授权即告撤销，工作维持结束（<code class="long">src/policy.ts</code>、<code class="long">docs/002-authorization.md</code>）。授权是系统拿得出来给你看的数据，不是事后重构出来的回忆。</p>
+<p>第四条是可重启。所有状态都在一个 SQLite 文件里，即 <code class="long">&lt;stateDir&gt;/orchestrator.sqlite</code>，由 Store 打开（<code class="long">src/app/runtime.ts</code>）。重启之后，当时正在运行的派工以 &quot;host restarted&quot; 收场；接替它们的派工带着一条恢复提示起步，叮嘱 worker 先查看自己的目录、git 历史和 GitHub，再重复任何对外动作（<code class="long">docs/003-execution.md</code>）。等待中的 Effects 行留在 SQLite 里，直到下一次启动（<code class="long">src/app/effects.ts</code>）。</p>
+<p>第五条是完整可审计，因为对一条输入保持沉默，只有在每条输入都有看得见的下场时才可接受。每个触发都会收到一个去向（Disposition），即它去了哪里的记录：被来源的范围过滤掉，评估成一个决定，扇出（Fan-out）给订阅了它的各张工单，或由一个发现此事超出自己工单范围的执行器交回（<code class="long">src/core/model.ts</code>）。即便被过滤的触发也留有记录，连同来源给出的理由（<code class="long">src/core/intake.ts</code>）。一条消息的下落是一次查询，不是一场调查。</p>
+<h2 id="ch-2-zh-s4">契约的操作者一侧</h2>
+<p>哲学文档的结尾把话转向运行这个智能体的人：智能体以团队天天见得到的账号向人发消息，每条消息都在花同事的注意力，对此负责的是操作者（<code class="long">docs/000-philosophy.md</code>）。这是同一份契约，从操作者一侧看过去的样子。</p>
+<p>从窄处起步：允许列表短一点，主动的工作只做记录；等智能体&quot;本会做&quot;的事看起来确实对，再把两者一起放宽。朝更少的噪声调：智能体吵的时候，把它的提示词改短、改严，或者把它暂停——而不是用更多消息去解释噪声。不要用它堆产量；成批的 pull request 和群发的消息，从团队那里拿走的，比给回去的更多。还有，它说的话归你担：以你的名义发出来的东西要读，错了就在提示词里纠正。</p>
+<p>这条原则就这样把智能体、机器和操作者绑进同一份预算。衡量它的尺度，是哲学文档的最后一句：在正确的时刻给出正确的帮助，其余任何时刻，一概不给。</p>
+</section>
+<section class="chapter lang-zh" id="ch-3-zh">
+<p class="eyebrow">第 3 章</p>
+<h1>领域模型：一套小而严的词汇表</h1>
+<p>每一条到达 dsh-superagent 的事件都走同一条路，领域模型就是把这条路写成名词。来源（Source）盯住一条事件流，把其中一条事件变成触发（Trigger）。触发落在某个线程（Thread）上，路径在这里分岔：订阅（Subscription）把它当作上下文，扇出（fan-out）给已订阅该线程的各张工单（Ticket）；其余的触发则进入一次评估（Eval）。评估以一个决定（Decision）收尾，accept（接单）的决定会创建一张携带授权（Mandate）的工单。派工（Assignment）把工单交给执行器（Executor），结果再经由渠道（Channel）送回来源。这套约束是明说的：代码、工具、面板和文档只用这套词汇，不用别的（<code class="long">docs/001-domain.md</code>）。</p>
+<figure class="figure-wide"><svg viewBox="0 0 1100 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="领域管线：来源、触发、线程、评估、决定、工单、派工、执行器、渠道">
+  <style>
+    .box { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.6; rx:10; }
+    .box2 { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.4; rx:10; }
+    .term { fill:#faf8f3; stroke:#b7ad9c; stroke-width:1.3; stroke-dasharray:5 4; }
+    .t { font:600 15px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .e { stroke:#857c6e; stroke-width:1.6; fill:none; marker-end:url(#a); }
+    .ed { stroke:#857c6e; stroke-width:1.4; fill:none; stroke-dasharray:5 4; marker-end:url(#a); }
+    .el { font:500 12px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .cap { font:600 11px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#8b8272; text-anchor:middle; letter-spacing:2px; }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/>
+    </marker>
+  </defs>
+
+  <text x="125" y="52" class="cap">聆听</text>
+  <text x="730" y="52" class="cap">判断</text>
+  <text x="770" y="248" class="cap">工作</text>
+  <text x="240" y="248" class="cap">表达</text>
+
+  <!-- top row: listen + judge -->
+  <rect x="50" y="80" width="150" height="62" class="box"/>
+  <text x="125" y="102" class="t">来源</text>
+  <text x="125" y="123" class="ts">GitHub · Feishu</text>
+
+  <rect x="262" y="92" width="110" height="38" class="box2"/>
+  <text x="317" y="112" class="t">触发</text>
+
+  <rect x="430" y="80" width="140" height="62" class="box"/>
+  <text x="500" y="102" class="t">线程</text>
+  <text x="500" y="123" class="ts">按时间排序的事件</text>
+
+  <rect x="650" y="80" width="160" height="62" class="box"/>
+  <text x="730" y="102" class="t">评估</text>
+  <text x="730" y="123" class="ts">准入 + 研判</text>
+
+  <rect x="880" y="80" width="160" height="62" class="box"/>
+  <text x="960" y="102" class="t">决定</text>
+  <text x="960" y="123" class="ts">接单 · 停止 · 忽略 · 未完成</text>
+
+  <line x1="200" y1="111" x2="256" y2="111" class="e"/>
+  <line x1="372" y1="111" x2="424" y2="111" class="e"/>
+  <line x1="570" y1="111" x2="644" y2="111" class="e"/>
+  <line x1="810" y1="111" x2="874" y2="111" class="e"/>
+
+  <!-- policy feeds eval -->
+  <rect x="650" y="188" width="160" height="40" class="box2"/>
+  <text x="730" y="209" class="t" style="font-size:13px">策略</text>
+  <line x1="730" y1="188" x2="730" y2="146" class="ed"/>
+
+  <!-- decision: recorded terminal -->
+  <rect x="895" y="180" width="130" height="42" class="term"/>
+  <text x="960" y="201" class="ts">已记录——不启动工作</text>
+  <line x1="960" y1="142" x2="960" y2="174" class="ed"/>
+
+  <!-- fan-out from thread down to ticket -->
+  <path d="M500,142 L500,276" class="e"/>
+  <text x="482" y="212" class="el" transform="rotate(-90 482 212)">订阅扇出——仅作上下文</text>
+
+  <!-- accept from decision to ticket -->
+  <path d="M960,142 L960,236 L576,312" class="e"/>
+  <text x="800" y="242" class="el">接单——授予授权</text>
+
+  <!-- bottom row: work -->
+  <rect x="430" y="276" width="146" height="72" class="box"/>
+  <text x="503" y="300" class="t">工单</text>
+  <text x="503" y="322" class="ts">＋授权 · 输入 · 报告</text>
+
+  <rect x="636" y="288" width="130" height="48" class="box2"/>
+  <text x="701" y="314" class="t">派工</text>
+
+  <rect x="830" y="276" width="190" height="72" class="box"/>
+  <text x="925" y="298" class="t">执行器</text>
+  <text x="925" y="318" class="ts">每工单一个 worker Session</text>
+  <text x="925" y="334" class="ts">一个工作目录</text>
+
+  <line x1="576" y1="312" x2="632" y2="312" class="e"/>
+  <line x1="766" y1="312" x2="826" y2="312" class="e"/>
+
+  <!-- reports dashed back -->
+  <path d="M925,276 C925,248 503,248 503,276" class="ed"/>
+  <text x="714" y="242" class="el">报告：progress · waiting · ready · blocked · failed · dropped</text>
+
+  <!-- channel: ticket speaks -->
+  <rect x="150" y="276" width="140" height="72" class="box"/>
+  <text x="220" y="300" class="t">渠道</text>
+  <text x="220" y="322" class="ts">评论 · 回复 · PR</text>
+  <line x1="290" y1="312" x2="426" y2="312" class="e"/>
+  <text x="358" y="296" class="el">确认 · 回答 · 结果</text>
+
+  <!-- channel writes back to the conversation (source) -->
+  <path d="M176,276 C120,240 96,160 96,142" class="e" style="stroke:#4c7a45"/>
+  <text x="76" y="208" class="el" transform="rotate(-90 76 208)">写回所在对话</text>
+</svg><figcaption>从原始事件到得到回应的工作：领域流水线</figcaption></figure>
+<h2 id="ch-3-zh-s1">监听侧</h2>
+<p>外部世界变为领域数据的地方，立着五个概念。来源是一条事件流；来源种类（SourceKind）是一种可复用的实现，来源实例则是它的一份配置——要不要运行、监听什么。来源是这个模型的海关：它定义什么算一条事件，包括只有随时间推移才成立的条件——&quot;N 小时无人认领&quot;就是一个普通的来源，它等一等，再查一次——并且赶在智能体自己发出的消息和范围外的事件进入领域之前，就把它们丢弃。它还握着自己的读取位置和 bot 身份，因此重启绝不会把旧事件当作新工作重放。</p>
+<p>过了这道门的东西就成了触发：一条不可变的事件，携带来源自己的元数据，比如它的 actor。<code class="long">src/core/model.ts</code> 里的类型把它保持得就这么小：<code>text</code> 和 <code>meta</code> 是不受信任的外部数据，<code>human</code> 和 <code>addressed</code> 是来源声明的事实，不是核心自己得出的结论。触发属于一个或多个线程，它是幂等与审计的单位：同一个触发接两次，只会创建一张工单；<code class="long">src/core/engine.ts</code> 里的 <code>Engine.receive</code> 对此回答 <code>stored</code>、<code>duplicate</code> 或 <code>filtered</code>——重放的事件得到的是识别，而不是再一次裁决。</p>
+<p>有一处是刻意的：人不在这些概念之中。触发携带的是来源给出的 actor 标识；允许名单是策略（Policy）里属于某个来源的那一部分，用那个来源自己的身份写成；同一个人在多个来源上持有账号，这件事只是智能体需要时去读的提示词文本。模型从不在来源之间归并身份：每个来源只说自己那套名字。</p>
+<p>线程是按时序排列的触发，哪些触发算作一个线程由来源定义：一个 issue 的对话、一个聊天话题。一个线程同一时刻至多运行一次评估，期间到达的触发并入下一批。一个线程可以带着几张工单，它持有自己的订阅、正在运行的评估和决定历史，让每次评估都拿到一致的视图和自己的上下文。一个触发可以落在多个线程上；它横跨的这几个线程构成关联（Correlation），而关联只补上下文、从不路由：它让评估能顺着相关证据追下去，路由完全归订阅管。</p>
+<p>渠道是线程的写入侧：一个可写入的地址，由来源定义——对一个话题的回复、一条评审评论——一个线程可以有多个。工单持有的是一组渠道而不是一个，因为确认、回复、pull request 和评审的解决，都是经由渠道完成的写入（<code class="long">src/core/model.ts</code> 里的 <code>ChannelRef</code>）。</p>
+<h2 id="ch-3-zh-s2">研判侧</h2>
+<p>策略是带版本的规则书：研判（Assessment）规则，加上每个来源自己的那一部分——谁可以经由这个来源发起工作（以该来源的身份表述）、名单如何同步、哪些 bot 可以产出候选。规则、接受模式（accept mode）和来源部分合起来构成一个策略版本（Policy version）。与一张进行中的工单相关的变更——比如它当初据以接单的那条规则改了——会作为输入（Input）送到它的派工那里；这种变更不撤销授权，但会丢弃正在运行的评估，而不是听任它对着一本已经不作数的规则书跑完。</p>
+<p>评估是对一批触发的裁决，分两层。第一层是准入（Gate），确定性的：它拿发送者对照来源的策略检查，回答谁可以发起工作、以什么强度（strength）。第二层是研判，是模型的判断，由主 Session 通过 MasterAssessor 执行（<code class="long">src/app/assessment.ts</code>）。评估的输入恰好是这四样：触发批次、线程的快照、该线程上包括已结束在内的全部工单、当前策略；输出是一个决定；输入与输出之间，它不保存任何状态。每个来源的策略还带着一张准入表，表里的格子决定一条消息成为明确（explicit）请求、推断（inferred）候选，还是什么都不是（<code class="long">docs/002-authorization.md</code>）。</p>
+<p>决定是记录下来的结果：accept、stop、ignore 或 unavailable。决定用结构化的原因码解释自己——<code>timeout</code>、<code>policyChanged</code>、<code>stopNotExplicit</code>，定义在 <code class="long">src/core/reasons.ts</code>，其中 <code>said</code> 装着研判者或某个人写下的话。</p>
+<p>强度属于词汇表本身，不属于任何一个模块：评估带着它，决定记录它，授权把它冻结下来。明确请求来自名单之内、点名找智能体的人，来自某个人在已有工单的线程上的追问，或来自设为明确的准入格子。推断候选是系统在没有直接请求时可能动手去做的一切：名单之外的人的追问、设成推断的格子、来源 bot 名单上某个 bot 的消息——上了名单的 bot 能产出推断候选，永远产不出明确请求。其余的一概不获准入。</p>
+<p>接受模式是策略版本的一部分，是策略对&quot;推断强度能走多远&quot;的回答。在 <code>off</code> 下，任何推断都成不了候选。在默认的 <code>observe</code> 下，推断候选照常研判，但阳性研判记作一个 ignore，并标注&quot;本会接单&quot;，什么也不启动。在 <code>auto</code> 下，阳性研判即接单。明确请求在任何模式下都有效，所以预设的路径是先在 <code>observe</code> 下运行，等记录下来的决定看着可靠了，再切到 <code>auto</code>。</p>
+<h2 id="ch-3-zh-s3">执行侧</h2>
+<p>一个 accept 的决定授出一份授权：它依据的策略版本、范围、强度、命中的规则、发送者在该来源上的身份，以及来源收到该触发的方式（<code class="long">src/core/model.ts</code> 里的 <code>MandateBasis</code>）。授权是一纸委任状，不是一份租约。它不可变——想要更宽的范围，就开一张新工单——工单结束也结束不了它。恰好三种操作会改动授权：accept 创建它，人的 stop 撤回它，复验失败废止它。一张已结束的工单在恢复之前，它的授权要对照当前策略复验，一处收严的准入格子或一位除名的发送者，就在这里悄悄追上旧工作。</p>
+<p>工单是获准工作的单位，只有评估能创建它。它引用自己的授权，持有自己的渠道和输入。它的生命归它自己：从 open 走到 ended，它的某个线程上来了人的消息，就再回到 open——除非人已经 stop 过它——它定义自己的状态，而不跟随执行器的会话，因为一张工单可以转手、恢复，或者由几个执行器一起运行。</p>
+<p>执行器本身连同它的 Sessions 和目录，都在领域之外。它通过派工接入，派工就是一张工单与一个执行器实例的绑定。一段时间里一张工单会有多个派工，每个派工各自经历 pending、running、ended，独立于工单；在执行器一侧，只有派工的最终报告（Report）才能结束工单。谁在执行属于领域之内；执行以什么方式存在，不属于。</p>
+<p>订阅是工单与线程之间的多对多关系，由线程持有。一条匹配的触发会扇出给所有订阅在案、仍在进行的工单，不检查是谁发的——这正是要点：后来的讨论不需要再有人点名智能体，也能到达执行器。以这种方式到达工单的人的消息不经过评估，怎么处理由那张工单的执行器决定。执行器也可以只为获取上下文而跟随一个线程，这样的消息同样到达它的工单，但不附带任何权力，也不会让工单恢复。已结束的工单保留它的订阅——哪怕对应的是已关闭或已合并的 pull request——于是人的消息无需评估或决定，就能在同一份授权下恢复同一件工作；人 stop 过的工单则什么也收不到。</p>
+<p>工单之内，剩下的概念负责记录这场对话。报告是派工向它的工单汇报的状态——progress、waiting、ready、blocked、failed 或 dropped；<code class="long">src/core/model.ts</code> 里的谓词 <code>waitsForPerson</code> 读的就是它们：最近一次派工报告了 blocked 或 failed、且此后没有人的消息到来，工单就在等人。待人工决定（Attention）是一个等着人来回答的问题，它携带引发它的那条触发，好让回答回到原本的对话。输入是送达工单的任何上下文：一条扇出的触发、一次策略变更、一次恢复，或者一段纯文本。去向（Disposition）记录一条触发去了哪里——filtered、evaluated 或 fanned out。它不授予任何东西，但它决定&quot;谁来决定人的追问&quot;——恢复与交回的规则正是开在这个事实上。</p>
+<h2 id="ch-3-zh-s4">模型拒绝什么</h2>
+<p><code class="long">docs/001-domain.md</code> 最有教益的一页，也许是它最后那张表：考虑过又放弃的概念。把拒绝记录在案，本身就是一件设计产物：一套词汇表要保得住小，就得让每一次想把它重新撑大的压力都得到书面回应；每一条拒绝都固化了一条规则，否则这条规则只会活在维护者的记忆里——下一位想&quot;加个简单的等待状态&quot;的贡献者，会撞见白纸黑字的理由：等待为什么归来源管。</p>
+<div class="tablewrap"><table><thead><tr><th>拒绝的概念</th><th>当初拒绝的理由</th></tr></thead><tbody><tr><td>把 Principal 或 Membership 做成实体，或跨来源映射身份</td><td>人是触发的元数据；允许名单是策略里属于来源的那部分；跨来源映射只是提示词文本</td></tr><tr><td>评估自行调度延迟的触发</td><td>需要等待的条件就是一个普通的来源，因此评估从不反过来依赖来源</td></tr><tr><td>每个线程至多一张进行中的工单</td><td>一个线程可以承载几件独立的工作；研判凭借工单列表避免重复</td></tr><tr><td>一种&quot;追加到工单&quot;的决定</td><td>追加就是订阅的扇出，不需要评估</td></tr><tr><td>对订阅做准入检查</td><td>订阅覆盖的是整个线程；授权已把许可与上下文分开</td></tr><tr><td>跟随 DSH Session 的工单状态</td><td>工单可以转手、恢复，或由几个执行器运行，因此它定义自己的状态</td></tr></tbody></table></div>
+<h2 id="ch-3-zh-s5">聚合与代码落点</h2>
+<p>模型把它的概念归成三个聚合，每个聚合是一条一致性边界。来源持有自己的读取位置，因此重放只是它一个人的问题。线程持有它的订阅、正在运行的评估——串行，把期间到达的触发并入下一批——以及它的决定历史。工单持有它的派工、渠道和输入，并通过 id 引用决定。</p>
+<p>在代码里，这套词汇表有两个家。<code class="long">src/core/model.ts</code> 定义这些类型——<code>Trigger</code>、<code>Thread</code>、<code>Evaluation</code>、<code>Decision</code>、<code>Mandate</code>、<code>Ticket</code>、<code>Assignment</code>、<code>TriggerDisposition</code>——以及维持这些规则一致的谓词：<code>followupOwners</code>、<code>settled</code>、<code>waitsForPerson</code>、<code>liveTicket</code>。<code class="long">src/core/stage.ts</code> 用 <code>ticketStage</code> 给工单的阶段分类——在等人、working、idle 或 ended——读的是同一批报告。判断中确定性的那些部分就放在核心之外不远处：<code class="long">src/policy.ts</code> 里的准入与授权复验，<code class="long">src/core/reasons.ts</code> 里的原因码。而上述每一种记录都只有一个写入者，即 <code class="long">src/core/engine.ts</code> 里的 Engine，于是这套词汇表不只是共享的，更是集中强制的。</p>
+</section>
+<section class="chapter lang-zh" id="ch-4-zh">
+<p class="eyebrow">第 4 章</p>
+<h1>高层架构</h1>
+<p>dsh-superagent 并不是跑在 DeepSeek Harness（DSH）旁边的一个服务，而是作为插件运行在单个 DSH 宿主进程之内。主入口 <code class="long">src/index.ts</code> 导出一个 <code>apply</code> 函数，构造出一个 <code>Runtime</code> 并等待它就绪。同一个包还构建出另外两个插件——<code class="long">src/sources/github.ts</code> 和 <code class="long">src/sources/feishu.ts</code>，由 <code>tsdown.config.ts</code> 打包，在 <code>package.json</code> 里以 <code class="long">./github-watch</code> 和 <code class="long">./feishu-watch</code> 导出——而包内的 <code>cordis.patch.yml</code> 把这三个插件全部插入宿主，其中 Feishu 在机器人配置好之前保持禁用，与之一同插入的还有 Sessions 运行时所用的两个智能体预设。来源（Source）这个术语，指的是连到 GitHub 或 Feishu 这类平台的一条连接，因此它并不是一个独立的监听进程：每个来源插件注入 Runtime 发布在 Cordis 上下文上的 <code>orchestrator</code> 服务，并通过它注册自己的 kind（<code class="long">src/sources/github.ts:111</code>）。</p>
+<p>一个进程独占一个状态目录和一个 SQLite 文件。Runtime 的构造函数创建 <code>machine.stateDir</code>，用 <code>proper-lockfile</code> 的 <code>lockSync</code> 锁住该目录（<code class="long">src/app/runtime.ts</code>，锁超过三十秒即视为过期），然后才在 <code class="long">&lt;stateDir&gt;/orchestrator.sqlite</code> 上打开 Store。锁加在目录而不是数据库文件上，因为打开数据库时可能迁移表结构，而第二个进程若写同一份状态，就会与这次迁移竞争。构造一旦失败，Runtime 会关闭 Store 并释放锁，进程内的重启因此能把两者重新拿回来。所有需要持久保存的东西都在这把锁后面：触发（Trigger）、工单（Ticket）、排队的效果行、outbox 回执、设置和提示词版本。</p>
+<figure class="figure-wide"><svg viewBox="0 0 1100 880" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="运行时分层：DeepSeek Harness 宿主进程内含来源插件与 dsh-superagent 主插件（面板、应用层、纯核心、Store），下方是执行器与 DSH Session；GitHub 与 Feishu 在外，经 CLI 访问">
+  <style>
+    .host { fill:none; stroke:#b7ad9c; stroke-width:1.5; stroke-dasharray:7 5; rx:14; }
+    .plug { fill:none; stroke:#9a5b2e; stroke-width:1.4; stroke-dasharray:6 4; rx:12; }
+    .layer { fill:#fdfcf9; stroke:#c9c0af; stroke-width:1.4; rx:12; }
+    .box { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.6; rx:9; }
+    .async { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.5; rx:9; }
+    .ext { fill:#edf3ea; stroke:#4c7a45; stroke-width:1.6; rx:9; }
+    .neutral { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.4; rx:9; }
+    .chip { fill:#ffffff; stroke:#2e6f77; stroke-width:1.2; rx:7; }
+    .t { font:600 14.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 11px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .tc { font:500 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2e6f77; text-anchor:middle; dominant-baseline:middle; }
+    .cap { font:600 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; }
+    .e { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#la); }
+    .ev { stroke:#9a5b2e; stroke-width:1.5; fill:none; marker-end:url(#la2); }
+    .eg { stroke:#4c7a45; stroke-width:1.5; fill:none; marker-end:url(#la3); }
+    .el { font:500 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; paint-order:stroke; stroke:#fdfcf9; stroke-width:4px; }
+  </style>
+  <defs>
+    <marker id="la" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+    <marker id="la2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9a5b2e"/></marker>
+    <marker id="la3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4c7a45"/></marker>
+  </defs>
+
+  <!-- host -->
+  <rect x="230" y="64" width="850" height="780" class="host"/>
+  <text x="250" y="90" class="cap">DEEPSEEK HARNESS 宿主进程</text>
+
+  <!-- externals -->
+  <rect x="24" y="140" width="172" height="58" class="ext"/>
+  <text x="110" y="161" class="t">GitHub</text>
+  <text x="110" y="181" class="ts">经 gh CLI 访问</text>
+  <rect x="24" y="232" width="172" height="58" class="ext"/>
+  <text x="110" y="253" class="t">Feishu</text>
+  <text x="110" y="273" class="ts">经 lark CLI 访问</text>
+
+  <!-- source plugins -->
+  <rect x="250" y="112" width="200" height="206" class="plug"/>
+  <text x="266" y="132" class="cap">来源插件</text>
+  <rect x="264" y="142" width="172" height="70" class="neutral"/>
+  <text x="350" y="166" class="t">github-watch</text>
+  <text x="350" y="188" class="ts">通知 · PR · CI</text>
+  <rect x="264" y="228" width="172" height="70" class="neutral"/>
+  <text x="350" y="252" class="t">feishu-watch</text>
+  <text x="350" y="274" class="ts">事件 · 话题 · 历史</text>
+
+  <!-- main plugin -->
+  <rect x="480" y="104" width="580" height="612" class="layer"/>
+  <text x="498" y="126" class="cap">DSH-SUPERAGENT 主插件（src/index.ts）</text>
+
+  <!-- panel + http -->
+  <rect x="500" y="138" width="232" height="50" class="neutral"/>
+  <text x="616" y="157" class="t">面板</text>
+  <text x="616" y="175" class="ts">只显示需要人的事</text>
+  <rect x="764" y="138" width="276" height="50" class="neutral"/>
+  <text x="902" y="157" class="t">HTTP 路由</text>
+  <text x="902" y="175" class="ts">/orchestrator/api —— 视图读取 Store</text>
+  <line x1="732" y1="163" x2="760" y2="163" class="e"/>
+
+  <!-- app layer -->
+  <rect x="500" y="206" width="540" height="240" class="layer"/>
+  <text x="516" y="226" class="cap">应用层（src/app）</text>
+  <rect x="520" y="240" width="180" height="60" class="box"/>
+  <text x="610" y="261" class="t">Runtime</text>
+  <text x="610" y="281" class="ts">组合根</text>
+
+  <rect x="724" y="234" width="68" height="40" class="neutral"/>
+  <text x="758" y="254" class="t" style="font-size:12.5px">Passes</text>
+  <rect x="800" y="234" width="68" height="40" class="async"/>
+  <text x="834" y="254" class="t" style="font-size:12.5px">Effects</text>
+  <rect x="876" y="234" width="68" height="40" class="neutral"/>
+  <text x="910" y="254" class="t" style="font-size:12.5px">Outbox</text>
+  <rect x="952" y="234" width="78" height="40" class="neutral"/>
+  <text x="991" y="254" class="t" style="font-size:12.5px">Prompts</text>
+
+  <rect x="724" y="284" width="108" height="44" class="neutral"/>
+  <text x="778" y="306" class="t" style="font-size:11.5px">MasterAssessor</text>
+  <rect x="852" y="284" width="74" height="44" class="neutral"/>
+  <text x="889" y="306" class="t" style="font-size:12.5px">Settings</text>
+  <rect x="934" y="284" width="96" height="44" class="neutral"/>
+  <text x="982" y="306" class="t" style="font-size:12.5px">Sessions</text>
+
+  <!-- core layer -->
+  <rect x="500" y="470" width="540" height="168" class="layer"/>
+  <text x="516" y="490" class="cap">纯核心（src/core）——同步 · 无 I/O</text>
+  <rect x="530" y="502" width="300" height="92" class="box"/>
+  <text x="680" y="524" class="t">Engine</text>
+  <rect x="542" y="544" width="48" height="26" class="chip"/><text x="566" y="558" class="tc">Intake</text>
+  <rect x="596" y="544" width="44" height="26" class="chip"/><text x="618" y="558" class="tc">Evals</text>
+  <rect x="646" y="544" width="54" height="26" class="chip"/><text x="673" y="558" class="tc">Tickets</text>
+  <rect x="706" y="544" width="72" height="26" class="chip"/><text x="742" y="558" class="tc">Assignments</text>
+  <rect x="784" y="544" width="56" height="26" class="chip"/><text x="812" y="558" class="tc">Replies</text>
+  <text x="680" y="604" class="ts" style="font-size:10px">端口：Repositories · Policy · SourceScope · Assessor · Executor</text>
+  <text x="680" y="620" class="ts" style="font-size:10px">Outbox——每个方法都是同步的</text>
+
+  <!-- store + sqlite -->
+  <rect x="520" y="658" width="200" height="50" class="neutral"/>
+  <text x="620" y="677" class="t">Store</text>
+  <text x="620" y="695" class="ts">src/app/store.ts</text>
+  <rect x="750" y="658" width="200" height="50" class="neutral"/>
+  <text x="850" y="677" class="t">orchestrator.sqlite</text>
+  <text x="850" y="695" class="ts">一个文件 · 一把目录锁</text>
+  <line x1="720" y1="683" x2="746" y2="683" class="e"/>
+
+  <!-- executor + sessions row -->
+  <rect x="480" y="742" width="366" height="64" class="async"/>
+  <text x="663" y="764" class="t">DshExecutor</text>
+  <text x="663" y="786" class="ts">每工单一个 worker Session + 一个工作目录</text>
+  <rect x="870" y="742" width="190" height="64" class="neutral"/>
+  <text x="965" y="764" class="t">DSH Sessions</text>
+  <text x="965" y="786" class="ts">主路由 + 各 worker</text>
+
+  <!-- arrows -->
+  <line x1="196" y1="162" x2="260" y2="168" class="eg"/>
+  <line x1="262" y1="188" x2="198" y2="182" class="eg"/>
+  <line x1="196" y1="254" x2="260" y2="260" class="eg"/>
+  <line x1="262" y1="280" x2="198" y2="274" class="eg"/>
+
+  <path d="M350,318 L350,556 L528,556" class="e"/>
+  <text x="332" y="440" class="el" transform="rotate(-90 332 440)">触发——经由狭窄的 SourceContext</text>
+
+  <path d="M724,254 L712,254 L712,498" class="e"/>
+  <text x="650" y="384" class="el">evaluateDue——每一轮 pass</text>
+
+  <path d="M680,594 L660,654" class="e"/>
+  <text x="742" y="632" class="el">仓库读写</text>
+
+  <path d="M910,234 L910,197 L452,197" class="ev"/>
+  <text x="680" y="197" class="el">reply 效应 → 渠道发送</text>
+
+  <path d="M842,274 L842,458 L1066,458 L1066,820 L663,820 L663,812" class="ev"/>
+  <text x="1052" y="610" class="el" transform="rotate(-90 1052 610)">launch · delivery 效应</text>
+
+  <path d="M480,788 L460,788 L460,584 L528,584" class="e"/>
+  <text x="444" y="690" class="el" transform="rotate(-90 444 690)">assignmentStarted · report</text>
+
+  <path d="M982,328 L982,738" class="e"/>
+  <text x="1000" y="540" class="el" transform="rotate(-90 1000 540)">管理两个角色的 Session</text>
+</svg><figcaption>运行时栈：DeepSeek Harness 宿主中的插件、纯核心，以及边缘上的适配器</figcaption></figure>
+<h2 id="ch-4-zh-s1">三层，一个方向</h2>
+<p>分层是一条关于导入（import）的规则，这个代码仓库也确实守着它。正中央是纯核心 <code class="long">src/core</code>：Engine、<code class="long">src/core/model.ts</code> 里的领域类型，以及 Engine 消费的那些端口。它是同步的，不做任何 I/O，除了 Node 的哈希（<code class="long">src/core/ids.ts</code> 中的 <code>node:crypto</code>，用来派生 id）之外，不导入自身之外的任何东西。这条规则写在 <code class="long">docs/007-architecture.md</code> 的「Dependency rules」一节；这个目录的导入恰好就止于这些。收益是：每一条领域规则——批处理、恢复、待人工决定（attention）的生命周期——都能对着 <code class="long">src/core/memory.ts</code> 的内存仓库完整演练，不需要数据库、时钟和网络。</p>
+<p>围在核心外面的是应用层 <code class="long">src/app</code>。Runtime（<code class="long">src/app/runtime.ts</code>）是组合根，是唯一一个知道所有部件如何连接的类；它自身不含任何领域规则。与它并存的有 Store（SQLite 持久化）、Effects 队列、Outbox、Sessions、设置（Settings）、提示词（Prompts，带版本的配置），以及承载面板路由的 <code class="long">src/app/http.ts</code>。这一层掌管持久性与时间，并实现核心声明的端口：Store 实现 <code>Repositories</code>，Outbox 实现核心的 <code>Outbox</code> 接口，于是核心永远不会知道自己的类型背后站着哪个数据库、哪个聊天平台。</p>
+<p>在边缘上，负责翻译的是适配器。<code class="long">src/sources</code> 在 <code>SourceKind</code> 协议（<code class="long">src/sources/kind.ts</code>）背后实现 GitHub 和 Feishu，不从 <code class="long">src/app</code> 导入任何东西；它的插件只通过注入的 <code>SourceHost</code> 接口接触应用层，而某个 kind 自身的代码看到的只有更窄的 <code>SourceContext</code>。<code class="long">src/executor</code> 里是 DshExecutor，它把已接单的工作变成智能体 Session。<code class="long">src/client</code> 是管理面板，一个跑在浏览器里的打包产物，只从宿主侧导入类型，外加一份固定的普通值清单（错误码、过滤列表之类），因此可以单独打包而不把服务器拖进来。依赖一律指向内层：边缘可以认识核心的类型，核心则谁也不认识。</p>
+<h2 id="ch-4-zh-s2">Engine：唯一的决定点</h2>
+<p>每一个要紧的状态变更都要经过同一个类。Engine（<code class="long">src/core/engine.ts</code>）是触发（入站事件）、线程（Thread，即会话）、决定（Decision，即记录在案的结果）、工单（已接单工作的单元）和派工（Assignment，即工单的一次运行）的唯一写入者；来源、执行器（Executor）和面板想改这些，都是请它来改，而不是自己动手。它以端口的形式从 <code class="long">src/core/ports.ts</code> 接收各个协作者：存放持久状态的 <code>Repositories</code>，获取当前策略（Policy，一套带版本的授权规则）的 getter，判断某个来源是否监听某个触发的 <code>SourceScope</code>，负责研判（Assessment）的 <code>Assessor</code>，运行已接单工作的 <code>Executor</code>，以及负责渠道（Channel）写入的 <code>Outbox</code>（渠道指明一条回复发往哪个会话）。</p>
+<p>Engine 的所有方法都是同步的，每条命令都通过 <code>repo.atomic(...)</code> 把自己的工作包进一个事务；<code>evaluateDue</code> 为它改动的每个评估（Eval）或工单单独开一个事务，因此一次失败丢弃的工作很少。非法请求抛出 <code>UserError</code>。调用方拿到的不是 Engine 本体，而是各自角色的 <code>Pick</code>：<code>EngineForSources</code> 暴露 <code>receive</code>、<code>bindThread</code> 和 <code>threadClosed</code>；<code>EngineForMainSession</code> 是 <code>decide</code> 和 <code>attach</code>；<code>EngineForPeople</code> 是停止与重试命令；<code>EngineForSettings</code> 只有 <code>policyChanged</code>；<code>EngineForExecutor</code> 是 <code>assignmentStarted</code>、<code>report</code> 这类过去时的事实。命名本身就编码了这层契约——命令是祈使式的（<code>stopTicket</code>），适配器上报的事实是过去式的——而且来源持有的类型上根本没有这样的方法，它想停一张工单也停不了。</p>
+<h2 id="ch-4-zh-s3">围着同步引擎的两个异步引擎</h2>
+<p>Engine 的同步只是一半设计；另一半发生在它的事务之外。两个调度器把这个同步核心变成一个真正运转的系统。</p>
+<p>Passes（<code class="long">src/app/passes.ts</code>）是心跳。它由 Runtime 启动，每两秒跑一个 pass——<code>setInterval(..., 2000)</code>——而每当有来源存入一个触发，或某个工具、一次设置保存或某条 HTTP 路由提出请求，也会立即再跑一个。一个 pass 就是 <code>effects.kick()</code> 接上 <code>Engine.evaluateDue()</code>：先派发所有已到期的排队工作，再让 Engine 启动那些时机已到的评估（对排队触发的评估，每一个都以一个决定收尾）。同一时刻只有一个 pass 在跑；pass 运行途中到来的请求会合并为一次后续执行，而在初始化尚未完成或系统正在关闭时，pass 什么都不做、直接返回。</p>
+<p>Effects（<code class="long">src/app/effects.ts</code>）是那条让副作用在崩溃后依然幸存的持久队列。命令在自己的事务内调用 <code class="long">enqueue(kind, key, payload)</code>，因此这行记录与状态变更一同写入，而处理器只在提交之后运行。每个 kind 加 key 只有一行——对仍在等待的 key 重新入队会替换它的 payload，但保留它在队列中的位置——失败按指数退避重试，抛出 <code>Later</code> 则把工作推迟且不计为一次失败，比如没有空闲的执行器槽位的时候。kind 一共六种，每种归一个适配器所有：<code>assessment</code>（MasterAssessor）、<code>launch</code> 和 <code>delivery</code>（DshExecutor）、<code>relay</code> 和 <code>notice</code>（Sessions）、<code>reply</code>（Outbox）。</p>
+<p>命令与效果的这条分界是整个架构的承重结构。命令在一个事务内改变状态并把工作入队；适配器只在提交之后执行这些工作。因此系统可以在决定与送达之间崩溃而不产生不一致——重启时那些效果行仍在 SQLite 里，已经决定的事仍然会发生。Engine 保持同步，是因为它调用的一切都不等待外部世界；世界都排进了队列。</p>
+<h2 id="ch-4-zh-s4">配角阵容</h2>
+<p>Store（<code class="long">src/app/store.ts</code>）独占那一个 SQLite 数据库，以 WAL 和 <code>synchronous=FULL</code> 打开，并按用途归组自己的对外接口：包在 <code>atomic</code> 里的领域仓库、绝不写库的只读查询、带版本的设置、outbox 回执，以及带类型的键值记录。生成列配合部分索引定义出各个工作集——打开状态的工单、活跃的线程——于是一个 pass 只扫描仍在活动的行，而且从头到尾只有 Store 会打开这个文件。</p>
+<p>Outbox（<code class="long">src/app/outbox.ts</code>）实现核心的 <code>Outbox</code> 端口。<code>send</code> 在一个事务里记下回执并把一个 <code>reply</code> 效果放入队列，该效果的处理器再经由所属来源把消息推出去。顺序按会话维护：同一工单、同一会话里较晚的消息，排在较早的待发消息后面；来源关闭期间一切都等待；会话消失或不再有人监听时，回执落定为 <code>dropped</code>（丢弃）。</p>
+<p>Sessions（<code class="long">src/app/sessions.ts</code>）管理两种角色的 DSH 智能体会话：主 Session，那个负责路由并做决定的协调者；以及每张工单一个的执行器 Session（worker），命名为 <code>worker-&lt;ticketId&gt;</code>（<code class="long">src/executor/dsh.ts</code>）。它为每一个 Session 配上提示词、技能和工具，按 request id 对每条消息只投递一次，并把每个模型请求绑定到当时生效的提示词版本——这份绑定作为记录持久保存，因此一个 worker 事后重读时，读到的正是自己当时工作所依据的那份提示词，不会有任何更新的内容。</p>
+<p>MasterAssessor（<code class="long">src/app/assessment.ts</code>）让主 Session 能够研判推断（inferred）候选：没有人明确请求过的工作。<code>request</code> 排入一个 <code>assessment</code> 效果，把一张候选卡引到主 Session 的当前轮次；<code>orchestrator_eval</code>、<code>orchestrator_eval_read</code> 和 <code>orchestrator_eval_decide</code> 这几个工具给这个 Session 有界的线程上下文，以及一条通回 <code>Engine.decide</code> 的决定路径。评估的截止计时只在卡片送达（<code>candidateDelivered</code>）之后才开始，因此一个忙碌的 Session 不会白白消耗评估时间。</p>
+<p>DshExecutor（<code class="long">src/executor/dsh.ts</code>）给每张工单一个 Session 和一个工作目录。<code>start</code> 与 <code>deliver</code> 分别把 <code>launch</code> 和 <code>delivery</code> 效果入队；<code>stop</code> 通过 <code>Store.afterCommit</code> 取消某个 worker 的轮次，因此一条回滚的命令绝不会停掉 worker；<code>prepare</code> 则把工单的短名、目录和派工文本交给 Engine 的 <code>prepareTicket</code> 钩子。</p>
+<p>面板（<code class="long">src/client</code>，架在 <code class="long">src/app/http.ts</code> 那些仅限回环、同源的 <code class="long">/orchestrator/api</code> 路由之上）只把需要人来处理的东西展示给人：等人处理的工单、问题、处于 unavailable 的评估，以及各执行器的负载。有些操作只存在于面板——驳回一条 unavailable 的决定、重跑初始化——因为任何智能体都不应该有能力执行它们。</p>
+<h2 id="ch-4-zh-s5">启动与停止</h2>
+<p>启动的次序安排得让失败表现为降级，而不是崩溃。<code class="long">src/app/runtime.ts</code> 的 <code>initialize()</code> 先注册 HTTP 路由，这样即便初始化无法完成，运维人员也打得开面板。初始化随后探测仓库与账号；若失败，Runtime 报告 <code>setupPending</code> 并到此为止——各来源仍会记录到来的触发，但不会有任何评估或发送发生。初始化一旦有了结果，Runtime 就装上 Session 与执行器的钩子，确保主 Session 存在，同步每个可同步来源的策略部分，通过 <code>assignmentInterrupted</code> 恢复被打断的派工，然后才启动 pass 与效果。启动全部结束时 <code>ready</code> 才 resolve，初始化让它中途止步的情况也包括在内。</p>
+<p>关闭则把同一份清单倒着执行一遍。<code>stop()</code> 是幂等的；它设置关闭标志，停止 pass，并中止用于取消运行中读取与子进程的那个生命周期信号。它取消主 Session 和每一个执行器 Session 的轮次，同时保留各自的收件箱，然后等待最后一个 pass、效果的排空——未完成的行留在 SQLite 里等下一次启动——以及各智能体转入空闲，并停掉各执行器的后台任务与子智能体。在注销钩子、刷写 Session 持久化之后，一个 <code>finally</code> 块按顺序恢复初始化曾改动过的进程环境、关闭 Store、释放目录锁，这样就不会有别的进程在写入中途打开数据库。</p>
+</section>
+<section class="chapter lang-zh" id="ch-5-zh">
+<p class="eyebrow">第 5 章</p>
+<h1>走进机器内部（上）：纯核心</h1>
+<p>dsh-superagent 关于工作的全部知识——什么可以启动工作、工作如何推进、何时结束——都在同一个目录里。<code class="long">src/core</code> 除 Node 的哈希之外不引用任何外部模块，自身也不做任何 I/O；它的规则是对已存储记录的纯函数，整个领域在测试中也能跑在内存仓库上（<code class="long">src/core/memory.ts</code>）。本章的路线由内向外：Engine 与它的五个部分、作为计算的授权、研判（Assessment）、底下的 Store，以及让各个部分的答案保持一致的谓词。</p>
+<h2 id="ch-5-zh-s1">5.1 一台引擎，五个部分</h2>
+<p>Engine（<code class="long">src/core/engine.ts</code>）是整个领域的单一入口，也是触发（Trigger）、线程（Thread）、决定（Decision）、工单（Ticket）和派工（Assignment）的唯一写入者。触发是一条不可变的事件，由来源（Source）送达，Source 是对接 GitHub 或 Feishu 的适配器；线程是这条触发所属的会话；工单是一个被接受的工作单元。每个方法都是同步的，并把命令包进一个 <code>repo.atomic</code> 事务：仓库在事务内变更，端口在事务内把外部工作排入队列，适配器在提交之后再执行这些工作。调用方从不持有整个 Engine；每个角色拿到的是一个 <code>Pick</code>，只包含它可以调用的方法（<code>EngineForSources</code>、<code>EngineForMainSession</code>、<code>EngineForPeople</code>、<code>EngineForSettings</code>、<code>EngineForExecutor</code>）。</p>
+<figure class="figure-wide"><svg viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="引擎与其五个部分：Intake、Evals、Tickets、Assignments、Replies，依赖单向流动，两侧是各自的调用方">
+  <style>
+    .eng { fill:#fdfcf9; stroke:#2e6f77; stroke-width:1.8; rx:14; }
+    .box { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.5; rx:10; }
+    .rep { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.4; rx:10; }
+    .in { font:600 12px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:end; dominant-baseline:middle; }
+    .out { font:600 12px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:start; dominant-baseline:middle; }
+    .t { font:600 15px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .tc { font:500 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2e6f77; text-anchor:middle; dominant-baseline:middle; }
+    .cap { font:600 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; text-anchor:middle; }
+    .e { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#ea); }
+    .ed { stroke:#857c6e; stroke-width:1.4; fill:none; stroke-dasharray:5 4; marker-end:url(#ea); }
+  </style>
+  <defs>
+    <marker id="ea" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+  </defs>
+
+  <rect x="170" y="56" width="700" height="330" class="eng"/>
+  <text x="520" y="80" class="cap">ENGINE——单一入口 · 五个部分 · 每条命令一个事务</text>
+
+  <rect x="200" y="100" width="150" height="66" class="box"/>
+  <text x="275" y="122" class="t">Intake</text>
+  <text x="275" y="142" class="ts">只存一次 · 扇出给</text>
+  <text x="275" y="156" class="ts">订阅的工单</text>
+
+  <rect x="410" y="100" width="170" height="66" class="box"/>
+  <text x="495" y="122" class="t">Evals</text>
+  <text x="495" y="142" class="ts">批处理 · 截止 · 过期</text>
+  <text x="495" y="156" class="ts">最终形成一个决定</text>
+
+  <rect x="300" y="236" width="200" height="76" class="box"/>
+  <text x="400" y="258" class="t">Tickets</text>
+  <text x="400" y="278" class="ts">生命周期 · 授权</text>
+  <text x="400" y="292" class="ts">订阅 · 输入</text>
+
+  <rect x="590" y="146" width="190" height="76" class="box"/>
+  <text x="685" y="168" class="t">Assignments</text>
+  <text x="685" y="188" class="ts">执行器报告的事实：</text>
+  <text x="685" y="202" class="ts">started · delivered · ended</text>
+
+  <rect x="590" y="296" width="190" height="66" class="rep"/>
+  <text x="685" y="318" class="t">Replies</text>
+  <text x="685" y="338" class="ts">确认 · 回答 · 结果</text>
+  <text x="685" y="352" class="ts">待人工决定——各按其规</text>
+
+  <path d="M275,166 L275,200 L365,236" class="e"/>
+  <path d="M495,166 L445,236" class="e"/>
+  <path d="M590,184 L496,232" class="e"/>
+  <path d="M685,222 L685,294" class="e"/>
+  <path d="M500,296 L588,326" class="e"/>
+
+  <text x="160" y="118" class="in">来源的触发</text>
+  <path d="M162,124 L198,124" class="ed"/>
+  <text x="160" y="146" class="in">receive()</text>
+
+  <text x="495" y="88" class="in" style="text-anchor:middle">每轮 pass：evaluateDue()</text>
+  <path d="M495,92 L495,98" class="ed"/>
+
+  <text x="880" y="164" class="out">执行器的事实</text>
+  <path d="M878,170 L782,170" class="ed"/>
+  <text x="880" y="186" class="out">report · inputsRead</text>
+  <text x="880" y="202" class="out">turnEnded</text>
+
+  <text x="880" y="316" class="out">Outbox</text>
+  <path d="M878,322 L782,322" class="ed"/>
+
+  <text x="520" y="412" class="ts">依赖单向流动——Intake 与 Evals 读 Tickets；Tickets 与 Assignments 经由 Replies 写出；没有任何部分反向依赖</text>
+  <text x="520" y="434" class="ts">调用方只见到自己角色的一角：EngineForSources · EngineForMainSession · EngineForPeople · EngineForSettings · EngineForExecutor</text>
+</svg><figcaption>Engine 的五个部分，以及它们之间单向的依赖流向</figcaption></figure>
+<p>Engine 把职责委托给五个部分，每个部分都继承 <code>EnginePart</code>（<code class="long">src/core/part.ts</code>）——一个提供共享读取与辅助方法的基类。Replies 不依赖任何部分，Tickets 依赖 Replies，Assignments 依赖 Tickets 和 Replies，Intake 和 Evals 依赖 Tickets——方向只有一个；跨部分的命令，比如 <code>attach</code>，由 Engine 在自己的事务里编排先后。命名语法是统一的：命令用祈使式命名（<code>stopTicket</code>、<code>bindThread</code>、<code>retryTicket</code>），可能被拒绝；适配器报告的事实用过去式命名（<code>assignmentStarted</code>、<code>inputsDelivered</code>、<code>deliveryFailed</code>、<code>threadClosed</code>），只记录、不拒绝；查询 <code>candidate</code> 用名词。</p>
+<p>Intake（<code class="long">src/core/intake.ts</code>）掌管触发的到达。接收的规则是只存一次：已知 id 回答 <code>duplicate</code>；没有任何来源监听的触发同样会存下来，并带上去向（Disposition）——记录一条触发去了哪里——标记为 <code>filtered</code>；其余情况回答 <code>stored</code>。已存储的触发会扇出（fan-out）到订阅了其线程的每张工单，这次投递绕过 5.2 节的准入（Gate），因为它不授予任何东西：消息以输入（Input）的形式到达，Input 是送达 worker（执行器 Session）的一条消息或事实。只有人发来的消息，且落在一条并非仅为上下文而跟随的线程上，才能恢复已结束的工单——被叫停的工单永不恢复。一条人的消息到达了某张工单，就留在那张工单那里：只有当 <code>followupOwners</code> 找不到由其 worker 决定这条消息的工单时，<code>receive</code> 才把触发排进一次评估（Eval）——Eval 评估的是一个线程上排队的触发。</p>
+<p>Evals（<code class="long">src/core/evals.ts</code>）掌管 Eval 的生命周期，以及每次 Eval 收尾时留下的决定——记录在案的结果。分批以线程为单位：所有排队的触发构成一批，Eval 运行期间到达的触发等下一批。一批的强度（strength）、行为者和准入依据，取自其中最强的一条可受理触发。截止时间从候选送达起算：候选卡片到达主 Session——负责协调的那个智能体——时，<code>candidateDelivered</code> 开始计时，未送达的候选永不过期。过期的 Eval 把触发重新排队，连续至多 <code>REQUEUES</code>（两次）；第三次过期记录一条值为 <code>unavailable</code> 的决定，原因为 <code>timeout</code>。</p>
+<p>Tickets（<code class="long">src/core/tickets.ts</code>）掌管工单的生命周期。从 accept（接单）出发的创建是原子的：一个事务里，<code>Tickets.create</code> 写入工单、它的授权（Mandate）——接单所产生的授权——第一份派工（一次 worker 运行）、批中每条触发的每个线程各一份订阅（Subscription，即工单对线程的跟随），以及接单携带的确认消息；要么全部提交，要么全部不提交。这个部分还掌管跟随线程的工单的结束规则：一旦工单开启的线程都不再开放，或者在它一个也没开启时所有被跟随的线程都已关闭，<code>followsDone</code> 即成立，工单以最近一次关闭的结果——<code>merged</code> 或 <code>closed</code>——收尾。输入按 id 只添加一次；自动化输入——CI 结果、机器人消息、备注——在工单 <code>waitsForPerson</code> 期间被扣住。</p>
+<p>Assignments（<code class="long">src/core/assignments.ts</code>）掌管执行器（Executor）及其 worker 报告的内容：过去式的事实——一次派工已开始、输入已送达或投递失败、输入已读入某个步骤、一轮已结束、被宿主重启打断。worker 的报告（Report）有六个状态，从 <code>progress</code> 到 <code>dropped</code>。<code>blocked</code> 或 <code>failed</code> 的报告会扣住自动化输入，直到有人写入；<code>dropped</code> 报告终结工单；<code>ready</code> 报告把工单按 <code>completed</code> 收尾，跟随线程的工单则按 <code>followsDone</code> 的结果收尾。报告可以携带一个提给人的问题——待人工决定（Attention）——可以被提出、保留或清除；问题被替换时，它尚未发出的回复会从 Outbox——外发消息队列——中撤回。</p>
+<p>Replies（<code class="long">src/core/replies.ts</code>）掌管 Engine 发往渠道（Channel）的消息——渠道是线程上的只写地址——每种用途各有自己的放行规则。确认消息要求工单处于打开状态，消息经由线程到达过它，且工单并非仅为上下文而跟随那条线程，作者是人；答复消息要求 worker 的报告确实回答了那个人的问题；结果消息只对处于 ready、completed、merged 或 dropped 的工单放行；待人工决定消息必须对上工单当前打开的问题。每条消息至多入队一次，挂在确定性的 id 之下，例如 <code>key('ack', trigger.id)</code>。</p>
+<h2 id="ch-5-zh-s2">5.2 准入：授权即计算</h2>
+<p>授权不是请求一次性通过的检查站，而是系统随时可以重跑的一套计算。<code>settingsPolicy</code>（<code class="long">src/policy.ts</code>）每次使用都构建一个全新的无状态策略（Policy）——谁可以启动什么的那份配置；什么都不缓存，所以一次保存下一次调用即生效。它的表面很小：<code>version</code>、<code>paused</code>、<code>evalTimeoutMs</code>、<code>gate</code> 函数、用于既有授权的 <code>revalidate</code>，以及用于主动接单的 <code>admitsInferred</code>。</p>
+<p>准入就是 <code class="long">gate(trigger, thread, tickets)</code>：它的回答是一次准入——明确（explicit）或推断（inferred）——外加一个依据，<code>via: 'addressed'</code> 表示列入名单的发送者称呼了智能体，<code>'followup'</code> 表示消息落在一张有参与工单的线程上，<code>'admission'</code> 表示命中准入表的某个单元格，<code>'bot'</code> 表示一个列入名单的机器人。被允许的发送者只要称呼了智能体，就总是明确准入。设为 <code>explicit</code> 的准入单元格先于跟进强度检查，因此线程上的工单绝不会削弱一条明确的请求。参与线程上的跟进，对被允许的发送者是明确的，对其他任何人是推断的——除非接受模式（accept mode）为 <code>off</code>。机器走另一条路：只有列入名单的机器人能通过，至多作为推断候选；没有发送者的 CI 事件使用未列出且未称呼（unlistedUnaddressed）的单元格；其余机器人一律以 <code>not_human</code> 拒绝。</p>
+<p>准入表（<code class="long">src/admission.ts</code>）按来源划分，行就是各个接收范围——Feishu 的群聊与私聊，GitHub 的新建 Issue、pull request（PR）、评论和默认分支 CI。按发送者是否列入名单、是否称呼了智能体，一行至多三个单元格：<code>listedUnaddressed</code> 可取 inferred 或 ignore（忽略），<code>unlistedAddressed</code> 可取 explicit、inferred 或 ignore，<code>unlistedUnaddressed</code> 可取 inferred 或 ignore——未被称呼的消息永远不可能明确。默认值依次是 inferred、ignore 和 ignore；未称呼的单元格只存在于来源能收到该范围内全部消息的地方。</p>
+<p>被准入的候选最终能成为什么，取决于接受模式。在 <code>off</code> 下，任何推断都不会成为候选。在默认的 <code>observe</code> 下，推断候选会进入研判，但阳性研判记为一条 ignore 并标注 “would accept”，并不接单。在 <code>auto</code> 下，阳性研判即接单。明确的请求在任何模式下都有效。</p>
+<p>以上一切收拢进策略版本（Policy version）：<code>policyVersion</code> 在修订标签 <code>mandate-v3</code> 之下，对规则、接受模式以及每个来源的策略组成——允许列表、准入表、机器人列表——做哈希。每份授权、每条决定都记录自己依据的版本；带着旧版本到来的决定记为 <code>unavailable</code>，其所在批次重新排队。版本变更不会波及每张工单：<code>policyEffects</code>（<code class="long">src/policy.ts</code>）计算它牵动哪些存活工单——匹配的规则被改动或禁用、请求者不再被允许、主动工作不再被接受——只有这些工单会收到一条 policy-changed 输入。</p>
+<p>已结束的工单保留其授权，人的消息落在它的某条线程上时，无需新的决定即可恢复，但前提是 <code>revalidate(mandate)</code> 在当前策略下通过：来源必须仍在监听原来的线程；明确跟进的授权直接通过；推断的授权需要 <code>auto</code> 模式且匹配的规则仍然启用；来自准入表单元格的授权必须仍能得到至少原来的强度；机器人的授权要求机器人仍在名单中。未通过的工单保持结束，把等待中的消息释放给评估。只有三种操作会改动授权：accept 创建它，人的 stop 撤回它，复验失败吊销它。</p>
+<h2 id="ch-5-zh-s3">5.3 研判与决定</h2>
+<p>推断候选经由 MasterAssessor（<code class="long">src/app/assessment.ts</code>）——Engine 的 Assessor 端口——变成一条决定。Eval 启动时，评估器把一个持久的 <code>assessment</code> effect 排入队列；它的处理器把候选卡片引到主 Session 的当前一轮里，然后调用 <code>candidateDelivered</code>，Eval 的截止时间正是从这一刻开始计算。明确的候选从不走到这里：评估器拒绝它们并指向 <code>orchestrator_route</code>，因为明确的请求走的是路由，不是研判。</p>
+<p>主 Session 用三件工具工作。<code>orchestrator_eval</code> 返回的是上下文而不是指令：触发的文本（至多 4,000 字符）、同批的其余触发、至多八张相关工单、构建这次 Eval 所依据的策略版本，以及一个有界的线程窗口——线程最前面的五条消息，加上触发前后各五条，每条截断到 400 字符，离触发最近的两条放宽到 1,200。<code>orchestrator_eval_read</code> 可以展开其中任何一项——完整消息、更多线程分页、文件、图片——但游标必须从返回的引用里照抄。<code>orchestrator_eval_decide</code> 提交判定，也就是研判。</p>
+<p><code>assessmentOutcome</code>（<code class="long">src/policy.ts</code>）把这份判定转换成 Engine 的结果，而且它相当严格。它要求对每条启用的规则——无论匹配与否——恰好各给一份规则评估，此外任何情况都会抛出异常。接单必须带着已定案的方向——要么请求了实现，要么指定了目标或依托既有标准，没有悬而未决的设计决定（<code>directionAllowed</code>）——否则降级为一条 ignore，原因为 <code>directionUnsettled</code>；它必须至少匹配一条启用的规则，否则记 <code>noRuleMatched</code>；还必须引用 <code>intent_evidence</code>，即确立意图的那些原话。在 <code>auto</code> 模式之外，推断的接单变成一条 ignore，标记为 <code>would_accept</code>，原因为 <code>observed</code>。Engine 对这些一概不轻信：<code>Evals.decide</code> 会用 <code>admitsInferred</code> 复查每一条推断的接单，不合条件就以 <code>notExplicit</code> 拒绝。</p>
+<p>有一条捷径放过无关紧要的情形。卡片明显不触及任何启用规则的推断候选——普通闲聊、无关讨论——可以直接凭卡片忽略，决定在所给理由之外记录代码 <code>ignoredFromCard</code>，以区别于一次完整的研判。</p>
+<h2 id="ch-5-zh-s4">5.4 持久化：一个文件、生成列、每张表一个写者</h2>
+<p>核心之下是一个 SQLite 文件 <code class="long">&lt;stateDir&gt;/orchestrator.sqlite</code>；它只由 Store（<code class="long">src/app/store.ts</code>）打开，而且要等组合根 Runtime 锁定状态目录之后，因此不会有第二个进程写入同一份状态。它以 WAL 模式加 <code>synchronous=FULL</code> 运行，九张表按“谁可以写”切分状态。</p>
+<figure class="figure-wide"><svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="持久化：一个 SQLite 文件，trigger、disposition、trigger_thread、thread、ticket、decision 由 Engine 写；effect 由 Effects 写；outbox 由 Outbox 写；kv 由命名该键的部件写；下方注明生成列与目录锁">
+  <style>
+    .file { fill:#f6f2ea; stroke:#c9c0af; stroke-width:1.6; }
+    .tbl { fill:#ffffff; stroke:#c9c0af; stroke-width:1.4; rx:10; }
+    .eng { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.4; }
+    .eff { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.4; }
+    .kvb { fill:#edf3ea; stroke:#4c7a45; stroke-width:1.4; }
+    .t { font:600 14px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .ts { font:400 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .w { font:600 10px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; text-anchor:middle; dominant-baseline:middle; letter-spacing:.5px; }
+    .note { fill:#fdfcf9; stroke:#b7ad9c; stroke-width:1.2; stroke-dasharray:5 4; rx:10; }
+    .cap { font:600 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; text-anchor:middle; }
+  </style>
+
+  <rect x="380" y="26" width="240" height="52" class="file" rx="10"/>
+  <text x="500" y="48" class="t">orchestrator.sqlite</text>
+  <text x="500" y="66" class="ts">状态目录中的一个文件——只有 Store 打开它</text>
+
+  <text x="500" y="104" class="cap">数据表 · 每张表只有一个写入者</text>
+
+  <!-- row 1 -->
+  <rect x="40" y="120" width="215" height="72" class="tbl"/>
+  <text x="147" y="142" class="t">trigger</text>
+  <text x="147" y="160" class="ts">一条不可变事件，只存一次</text>
+  <rect x="167" y="168" width="72" height="18" class="eng" rx="9"/><text x="203" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="278" y="120" width="215" height="72" class="tbl"/>
+  <text x="385" y="142" class="t">disposition</text>
+  <text x="385" y="160" class="ts">每个触发的去向</text>
+  <rect x="405" y="168" width="72" height="18" class="eng" rx="9"/><text x="441" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="516" y="120" width="215" height="72" class="tbl"/>
+  <text x="623" y="142" class="t">trigger_thread</text>
+  <text x="623" y="160" class="ts">线程的触发，按时间排序</text>
+  <rect x="643" y="168" width="72" height="18" class="eng" rx="9"/><text x="679" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="754" y="120" width="215" height="72" class="tbl"/>
+  <text x="861" y="142" class="t">thread</text>
+  <text x="861" y="160" class="ts">订阅 · 进行中的评估 · meta</text>
+  <rect x="881" y="168" width="72" height="18" class="eng" rx="9"/><text x="917" y="178" class="w" fill="#2e6f77">ENGINE</text>
+
+  <!-- row 2 -->
+  <rect x="40" y="212" width="215" height="72" class="tbl"/>
+  <text x="147" y="234" class="t">ticket</text>
+  <text x="147" y="252" class="ts">Mandate · Assignments · Inputs · follows</text>
+  <rect x="167" y="260" width="72" height="18" class="eng" rx="9"/><text x="203" y="270" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="278" y="212" width="215" height="72" class="tbl"/>
+  <text x="385" y="234" class="t">decision</text>
+  <text x="385" y="252" class="ts">评估的记录，按线程</text>
+  <rect x="405" y="260" width="72" height="18" class="eng" rx="9"/><text x="441" y="270" class="w" fill="#2e6f77">ENGINE</text>
+
+  <rect x="516" y="212" width="215" height="72" class="tbl"/>
+  <text x="623" y="234" class="t">effect</text>
+  <text x="623" y="252" class="ts">持久工作队列，每个 kind+key 一行</text>
+  <rect x="630" y="260" width="66" height="18" class="eff" rx="9"/><text x="663" y="270" class="w" fill="#9a5b2e">EFFECTS</text>
+
+  <rect x="754" y="212" width="215" height="72" class="tbl"/>
+  <text x="861" y="234" class="t">outbox</text>
+  <text x="861" y="252" class="ts">回执：pending · sent · dropped</text>
+  <rect x="862" y="260" width="78" height="18" class="eff" rx="9"/><text x="901" y="270" class="w" fill="#9a5b2e">OUTBOX</text>
+
+  <!-- kv wide -->
+  <rect x="40" y="304" width="929" height="88" class="tbl"/>
+  <text x="504" y="328" class="t">kv</text>
+  <text x="504" y="348" class="ts">其余所有记录——schema 版本 · 设置与提示词版本 · 主 Session id · 来源的读取游标与 PR 指纹 · 显示名</text>
+  <rect x="415" y="362" width="180" height="18" class="kvb" rx="9"/><text x="505" y="372" class="w" fill="#4c7a45">命名该键的部件</text>
+  <text x="504" y="386" class="ts" style="font-size:10px">src/kv.ts 里的注册表给每个键唯一的属主和类型</text>
+
+  <!-- notes -->
+  <rect x="40" y="418" width="450" height="82" class="note"/>
+  <text x="265" y="443" class="t" style="font-size:13px">生成列，带索引</text>
+  <text x="265" y="463" class="ts">thread.active · thread.subscribed · ticket.open · ticket.active</text>
+  <text x="265" y="480" class="ts">由行内 JSON 计算，每轮 pass 只读活跃工作</text>
+
+  <rect x="510" y="418" width="459" height="82" class="note"/>
+  <text x="739" y="443" class="t" style="font-size:13px">一个目录，一把锁</text>
+  <text x="739" y="463" class="ts">Runtime 打开 Store 前先锁住状态目录，</text>
+  <text x="739" y="480" class="ts">第二个进程永远无法迁移或写入同一份状态</text>
+
+  <text x="500" y="540" class="ts">时间以 Date#toISOString 文本存储，可直接按文本比较 · afterCommit 只在事务提交后运行 · 旧记录暂无清理</text>
+  <text x="500" y="560" class="ts">SCHEMA_VERSION 只增不减：更新的库拒绝启动，更旧的库在启动时迁移一次（src/app/migration.ts）</text>
+</svg><figcaption>SQLite 的各张表，以及唯一被允许写它的组件</figcaption></figure>
+<div class="tablewrap"><table><thead><tr><th>表</th><th>写入者</th></tr></thead><tbody><tr><td><code>trigger</code>、<code>disposition</code></td><td>Engine</td></tr><tr><td><code>thread</code></td><td>Engine；来源只写各自的 <code>meta</code></td></tr><tr><td><code>ticket</code>、<code>decision</code></td><td>Engine</td></tr><tr><td><code>trigger_thread</code></td><td>Store，作为随它保存的每个触发一并更新的索引</td></tr><tr><td><code>effect</code></td><td>Effects</td></tr><tr><td><code>outbox</code></td><td>Outbox</td></tr><tr><td><code>kv</code></td><td>在 <code>KV</code> 中为该键命名的组件</td></tr></tbody></table></div>
+<p>每份状态只有一个写入者，这张表编码的就是这条规则；其余角色只能读，或者去问。<code>trigger_thread</code> 不是领域数据，而是 Store 随每个触发一并维护的索引，这样线程的时间线可以按时间再按 id 排序读出，不必扫遍每个触发。</p>
+<p>各行本体是 JSON，工作列由它生成：<code class="long">value -&gt; '$.ended' IS NULL</code> 期间 <code>ticket.open</code> 成立；输入尚未送达，或最新一份派工还在 pending 或 running 时，<code>ticket.active</code> 成立；触发在排队或 Eval 正在运行时，<code>thread.active</code> 成立；只要有任何工单订阅，<code>thread.subscribed</code>——面向来源——成立。每个这样的列都在自己的集合上带一个部分索引，于是一趟 Pass——每两秒扫一次、执行到期的 effect 并运行 <code>Engine.evaluateDue</code> 的那趟扫描——只读活跃的工作。早于某个列的数据库会在打开时补上这一列，由 SQLite 从已存的 JSON 填充。</p>
+<p>时间是文本，这是刻意的。每个触发的时间戳在进入时由 <code>isoTime</code>（<code class="long">src/core/model.ts</code>）规范化成 <code>Date#toISOString</code> 产生的那一种形态，于是已存储的时间在内存里和 SQL 里都能按字典序比较——<code>deadline &lt;= now</code> 就是一次字符串比较。</p>
+<p>事务借助 savepoint 嵌套，<code>afterCommit</code> 是提交与后果之间的接缝：事务内排入的回调只在最外层提交之后运行，回滚会丢弃本层的回调，抛异常的回调会被上报而不连累已提交的事务。它服务的是那些无需熬过崩溃的内存内跟进；持久的副作用则归 Effects 队列。</p>
+<p><code>kv</code> 表装着其余一切，<code>KV</code>（<code class="long">src/kv.ts</code>）是它的登记处：每个键值记录只声明一次，写明类型和唯一拥有它的组件——schema 版本归 Store，设置的修订记录归 Settings，主 Session 的 id 归 Runtime，读取游标归各来源。每个键只书写一次，归属一目了然。</p>
+<p>schema 的演进刻意保守。<code>SCHEMA_VERSION</code> 是 11，且只增不减（<code class="long">src/app/migration.ts</code>）：版本更新的数据库拒绝启动，比 <code>OLDEST_SCHEMA</code>（10）更老的直接拒之门外，schema 10 的数据库在打开时于一个事务里改写成 schema 11 的形状；一旦失败，文件原封不动。</p>
+<h2 id="ch-5-zh-s5">5.5 共享谓词</h2>
+<p>跨部分的规则不放在各个部分里，而是放在模型旁边，成为每个部分都会调用的小谓词。<code>waitsForPerson</code>（<code class="long">src/core/model.ts</code>）回答：工单最近一份派工是否报告了 <code>blocked</code> 或 <code>failed</code>，且此后没有人的消息到达。它成立期间，<code>Tickets.addInput</code> 扣住自动化输入，<code>ticketStage</code> 把工单归为等人（person）阶段，<code>canRetry</code>（<code class="long">src/core/stage.ts</code>）让它可重试；随后的报告两者皆非、一条人的消息或一次重试，都会解除这个状态。</p>
+<p><code>followupOwners</code> 回答由谁决定一条人的跟进：那些消息落在其本体线程上、仍能决定且尚未交回的工单——活着的，加上并非被人叫停、还有消息等着将其恢复的已结束工单。只要存在这样的归属者，消息就不进评估，主 Session 对它最多只能叫停工作——这一拒绝由 <code>Evals.decide</code> 借 <code>leftToWorkers</code> 落实。<code>settled</code> 回答一条决定是否了结了请求——stop、unavailable、被拒绝的叫停和路由都不算——正是它让工单得以结束，而不把早有决定的消息再送回评估。</p>
+<p><code>ticketStage</code>（<code class="long">src/core/stage.ts</code>）就是 <code class="long">docs/003-execution.md</code> 里那张阶段表的代码版，自上而下读取，首个命中的行生效：投递失败、打开的待人工决定或 <code>ready</code> 报告把工单放入 person 阶段，blocked 或 failed 的报告只有在 <code>waitsForPerson</code> 成立时才算，随后是 queued、idle 和 working。<code>canRetry</code> 闭合了这个环，让恰好那些人能补救的 person 阶段停滞——被扣住的工单或失败的投递——变得可重试。</p>
+<p>把它们集中起来的理由不是优雅，而是同一。工单是否在等人，这个问题输入投递、阶段分类器、重试命令和面板都要问；如果各按自己对报告和输入的解读作答，被扣住的输入和 “Blocked” 标签迟早对不上。作为对已存储记录的纯函数——<code>followupOwners</code> 接收的是一个记录接口，同一段代码跑在 SQLite 上、内存里和面板中——它们处处给出同一个答案，只在一处修改，并被各自的测试（<code class="long">tests/stage.spec.ts</code>）钉住。</p>
+</section>
+<section class="chapter lang-zh" id="ch-6-zh">
+<p class="eyebrow">第 6 章</p>
+<h1>走进机器内部（下）：边缘</h1>
+<p>上篇跟着 Engine 走了一遍，那个握有每一次决定的同步核心。可是一颗只会做决定的核心，不过是瓶中之脑。这一篇跟着把它接入世界的机器走：记住承诺过的工作的队列，让智能体按次序开口的 Outbox，给每个工单（Ticket，系统里被接受工作的单位）配上一个外壳和一个执行器 Session（worker）的执行器，管理模型对话的那一层，还有监听 GitHub 和 Feishu 的来源（Source）插件。有一条规则一再重复：决定在事务内做出，工作放到事务之后，从存储出发去执行。</p>
+<h2 id="ch-6-zh-s1">6.1 效果队列：存下来的工作</h2>
+<p>决定之后 dsh-superagent 要做的每一件事——转达 worker 的一条报告（Report）、发起一次派工（Assignment，即工单工作的一次运行）、投递一条输入（Input，发往该 worker 的一条消息）、送出一条回复——都是先存储、后执行。承担这座持久桥梁的是 <code>Effects</code>（<code class="long">src/app/effects.ts</code>）。命令在自己的事务内调用 <code class="long">enqueue(kind, key, payload)</code>；这一行随决定一起落进 SQLite，直到提交之后才开始执行。两个时刻之间崩溃，什么都不会丢。</p>
+<p>队列对每个 kind/key 组合只保留一行。对等待中的 key 重新入队，会替换其载荷、清零失败计数并让它立即到期，而这一行仍保留最初拿到的序号——合并永远不会打乱队列次序。一个世代计数器标记每次替换，正在运行的尝试因此删不掉更新的载荷。处理器按 kind 注册一次，各带并发上限和退避边界；到期的行从最旧的开始分发，失败以指数退避重试，封顶为该 kind 的上限。</p>
+<p>并非每次拒绝都算失败。抛出 <code>Later</code> 异常——没有空闲的 worker 槽位、处理被暂停——会在初始延迟后重新调度该行，而且不计入失败。真正的失败会计数，一旦某个 kind 的一项连续失败三次（<code class="long">src/app/effects.ts</code> 中的 <code>FAILURES_BEFORE_ERROR</code>），该 kind 的健康条目就变为 <code>error</code>，呈现在面板上。</p>
+<p>六种 kind 覆盖了边缘。<code>assessment</code> 效果把一次评估（Eval）——即对主动请求的研判（assessment）——的候选卡片送进主 Session 的回合；收到之后，MasterAssessor 告诉 Engine，由 Engine 启动这次评估的期限计时。<code>launch</code> 效果启动一个待发的派工——准备命令、执行器 Session、派工消息。<code>delivery</code> 效果把工单等待中的各条输入按次序交给它正在运行的派工；它的失败是安静的，因为这些失败早已显示在各自的工单上。<code>relay</code> 效果把 worker 的报告或提问、或某个人的追问送进主 Session 的回合，<code>notice</code> 效果则只注入、不唤醒它；两者都严格排序，一个失败会拦住同 kind 的后来者。<code>reply</code> 效果运送 Outbox 的消息。一轮 Pass——<code class="long">src/app/passes.ts</code> 每两秒一次的清扫——也会取走到期的行。</p>
+<h2 id="ch-6-zh-s2">6.2 Outbox：按序发言</h2>
+<p>当 Engine 决定在某个渠道（Channel）开口——也就是回复要送达的那个地址：对已接受请求的确认、对问题的回答、对已完成工作的结果——<code>Outbox</code>（<code class="long">src/app/outbox.ts</code>）负责把这条消息变成现实。<code>send</code> 在一个事务里记录一张回执并入队一个 <code>reply</code> 效果；回执以忽略重复的方式插入并永久保留，因此一个消息 id 绝不会入队两次，即使跨越重启。</p>
+<p>排序按工单、按会话分别进行。发送之前，处理器会问 <code>receipts.behind</code>（<code class="long">src/app/store.ts</code>）：同一工单发往同一会话的更早消息是否仍在等待、失败是否少于三次；若是，后来者就等。这道阈值是一个安全阀：一旦早先的消息已失败三次、已作为问题浮出水面，它的后继就会发出，而不是堆在它后面。其他工单的消息从不等待。</p>
+<p>等待与丢弃是分开的两回事。只要消息所属的来源关闭或未安装，它就等待。只有在会话永远收不到这条消息时才会丢弃：GitHub 上已删除的 Issue 或已锁定的会话，来源回答 <code>gone</code>；Feishu 消息遭撤回（<code>channelGone</code>）；来源不再监听那个会话（<code>channelIgnored</code>）。丢弃的回执留在记录里，带着何时、为何、属于哪个工单，而一张丢弃的确认回执显示为已丢弃，不是已发送。重试从 5 秒起逐次翻倍，退避到 300 秒。次序之所以存在，是因为会话按时间展开、由人来读：确认必须先于回答，回答先于结果，否则读者会认定智能体根本没听见他们。</p>
+<h2 id="ch-6-zh-s3">6.3 DshExecutor：每个工单一个 Session、一个目录</h2>
+<p>每个工单得到一个 worker Session，命名为 <code>worker-&lt;ticket id&gt;</code>（<code class="long">src/executor/dsh.ts</code> 中的 <code>workerSessionId</code>），外加一个目录。<code>prepare(ticket, outcome)</code> 钩子在接单时把执行事实填齐：一个由一到四个词组成的 kebab-case 短名加 12 个字符的 id 后缀，配置的执行根目录（默认 <code class="long">&lt;stateDir&gt;/work</code>）之下的目录，以及派工文本。</p>
+<p>第一次派工之前，如果目录还不存在，配置的 prepare 命令会在执行根目录下经 <code>sh -c</code> 运行一次，限时十分钟；典型命令是一次 <code>git worktree</code> 检出。失败的 prepare 有意不重试——目录已存在就算已准备好，重试只会追认那条失败命令留下的东西。工单随即标记为 failed，等一个人或一次重试来重新准备。</p>
+<p><code>WorkerSlots</code> 管理并发。工作经由前面说的 <code>launch</code> 和 <code>delivery</code> 效果到达执行器。工单从一次 launch 的起点（准备工作也算在内）占住一个槽位，或从唤醒其空闲 worker 的那次 delivery 起占住，并贯穿整个回合。生效的是配置的 <code>maxWorkers</code>，外加一个只有人的消息才能占用的额外槽位；唤醒优先于 launch，因此新工作永远拦不住一个人继续已有的工单。各次 launch 并发运行，一次缓慢的 prepare 只拖延它自己的工单。</p>
+<p>一时性的失败有三次机会：<code>transient</code> 判定认识 HTTP 408、429 和 5xx，也认识连接拒绝、连接重置和连接超时。一次瞬态的 launch 失败会随效果退避再次运行；一个失败的回合会在 15、30、60 秒后收到「从中断处继续」的消息。任何其他失败都会让工单失败。</p>
+<p>一个回合结束时，shell 任务或子智能体可能仍在运行。工单保留槽位、保持 working；<code>untilQuiet</code>（<code class="long">src/executor/background.ts</code>）盯着两者，完成的任务或子智能体会带着结果唤醒 worker。每个回合之后，后台工作至多三十分钟：到点后 shell 任务杀掉——worker 会在下一个回合得知是哪些——子智能体则继续，因为停下它们只会再次唤醒 worker，而工单报告为 waiting，附上 worker 的最后留言。派工结束时，任务杀掉、子智能体释放，它们唤起的回合丢弃。交给人的时候，槽位立刻释放：子智能体停止，但留下来供人查看的任务——比如一台运行中的服务器——会继续跑到派工结束，不受时限约束，结束时也照常回收。</p>
+<p>重启也遵循同样的纪律。启动时 <code>resume()</code> 从最旧的开始遍历未结的工单：正在运行的派工报告为 <code>assignmentInterrupted</code>，它会开启一个新的派工，附一条恢复提示——在重复任何对外动作之前，先检查目录、git 历史和 GitHub——待发的 launch 重新入队，除非其工单在等人。prepare 命令和 worker 的提示词从 <code class="long">src/app/execution-environment.ts</code> 接收同一套执行变量：来自执行器的 <code>DSH_SUPERAGENT_DIR</code>、<code>NAME</code>、<code>TICKET</code> 和 <code>BLOCKED_COMMANDS</code>，来自 GitHub 的仓库与 pull request 变量，来自 Feishu 的会话与机器人变量；其中不含任何凭据。</p>
+<h2 id="ch-6-zh-s4">6.4 Sessions、投递与 MasterAssessor</h2>
+<p><code>Sessions</code>（<code class="long">src/app/sessions.ts</code>）管理两种角色的会话：负责路由和研判的主 Session，以及各个 worker。<code>ensure</code> 按角色所属的模型创建 Session——模型在创建时由 <code class="long">src/app/role-models.ts</code> 一次性指定，不碰宿主的全局默认——并按其预设创建。两个预设 <code>dsh-superagent-router</code> 和 <code>dsh-superagent-worker</code> 定义在 <code>cordis.patch.yml</code>：都会在前台 shell 命令运行 5 秒后把它转为后台任务，并把任务等待的上限设为 5 秒；router 只保留路由工具，worker 只保留干活工具。</p>
+<p>提示词有版本，每次模型请求都把 Session 绑定到当前修订；Session 历次工作所用的修订会持久保存，<code>promptVersion</code> 加上 <code>mayRead</code> 把 worker 限制在它实际运行时的提示词文本之内。内容经两种效果流入：<code>relay</code> 送进主 Session 的回合，<code>notice</code> 只注入、不唤醒它。<code>noWait</code> 守卫不让这个 Session 干等——凡是命令位置上运行 <code>sleep</code> 的 shell 命令、超过 30 秒的 <code>timeoutMs</code>、超过 5 秒的任务等待，一概拒绝——并解释说，它等的东西自己会来。</p>
+<p>投递由 <code>AgentDelivery</code>（<code class="long">src/app/delivery.ts</code>）去重：每个请求 id 只进一次，无论 Session 是现存的还是恢复出来的；已投递的 id 从会话事件、持久化历史和待处理收件箱三处跟踪。每条消息都带插件自己的来源标记，系统的话永远冒充不了一个人的话。</p>
+<p><code>MasterAssessor</code>（<code class="long">src/app/assessment.ts</code>）是主 Session 望向一次评估的窗口。它的 <code>context</code>、<code>read</code> 和 <code>decide</code> 支撑起三个 <code>orchestrator_eval</code> 工具。<code>context</code> 返回候选内容——触发（Trigger）的文本（最多 4,000 字符）、同批的同伴、相关的未结工单、策略版本（Policy version）——外加一个有界的线程（Thread）窗口，经来源自己的读取器读出：最前面五条消息，加上触发前后各五条，截到 400 字符，紧邻触发的两条放宽到 1,200，其余一律是 50 字符的存根（<code class="long">src/sources/admission-context.ts</code>）。<code>read</code> 展开存根、翻页线程，并从每个评估专属的缓存里读仓库文件和图片。<code>decide</code> 把研判转成给 Engine 的形式，Engine 会对照当前策略再核一遍；评估结束时，<code>release</code> 丢弃缓存的状态，此后的读取一律拒绝。</p>
+<h2 id="ch-6-zh-s5">6.5 来源：协议背后的插件</h2>
+<p>来源是一个把一项外部服务接入领域的插件：它把事件变成触发——即 Engine 存储的那些归一化记录——回答范围问题、发送回复，并为研判读取线程上下文。契约是 <code>SourceKind</code>（<code class="long">src/sources/kind.ts</code>）：身份、配置 schema 与表单字段、派生事实、各自拥有的健康条目；其余都是可选——一条 <code>scope</code> 监听规则、一个带 <code>allowed</code>、<code>send</code> 和 <code>link</code> 的 <code>channel</code>、一个 <code>threadContext</code> 读取器、搜索用的 <code>find</code>、一个策略部分、执行变量。</p>
+<p><code>SourceRegistry</code>（<code class="long">src/sources/registry.ts</code>）掌管已安装的种类和已存储的实例，并实现 Engine 的 <code>SourceScope</code>，经由该种类回答范围问题。注册会认领该种类的健康条目——重名与保留的 <code>sync:</code> 名字一概拒绝——存储的配置不再通过校验的来源则禁用。插件拿到一个 <code>SourceHost</code>（<code class="long">src/sources/host.ts</code>）；种类代码能看到的只有 <code class="long">src/app/source-context.ts</code> 搭建的窄口 <code>SourceContext</code>：<code>receive</code> 一个触发、读取并修补自己的线程与状态、只能经 <code>bindThread</code> 和 <code>threadClosed</code> 改动工单、经 Outbox <code>notify</code>、并且只在自己声明的条目上 <code>report</code>。</p>
+<p>GitHub 来源（<code class="long">src/sources/github.ts</code>）跑一轮轮询：先通知，再是受观察仓库里新 Issue、新评论和默认分支 CI 的信息流，然后是未结工单的 pull request 及其 CI，最后是订阅的线程。每个 Issue、pull request 和线程独立读取；一次失败的读取把错误留在自己的线程上，并计入来源的错误——默认三轮失败后上报——而已删除的 Issue（HTTP 410）立刻丢弃，失败满一天的读取则放弃。<code>github-trigger.ts</code> 把评论、评审、Issue 正文和 CI 状态迁移归一化成触发。<code>github-pull.ts</code> 把 pull request 绑到工单上——<code>claimPull</code> 接受来源 pull request，或智能体自建、且分支最后一段路径等于工单短名的那一个；<code>observePull</code> 对账关闭事件；<code>pullEndNotices</code> 写入终局的会话通知。<code>github-channel.ts</code> 发布评论和评审回复，内嵌幂等标记，目标评审评论消失时退回 pull request 的会话；<code>github-read.ts</code> 提供 CI 快照和仓库读取。</p>
+<p>Feishu 来源（<code class="long">src/sources/feishu.ts</code>）立在 <code>feishu-loops.ts</code> 的三个循环上：一个从机器人 <code>lark-cli</code> 派生的实时事件消费者，带退避地重启并上报每次失败；一个每分钟对配置会话和已知私聊扫一遍的历史 Pass，顺带找回实时流漏掉的话题回复；还有对订阅话题的轮询。<code>feishu-trigger.ts</code> 里的一条翻译规则同样服务实时事件、历史页和话题页，因此每条读取路径都为一条消息推导出同一个确定性的触发 id。<code>feishu-channel.ts</code> 以消息 id 为幂等键回复到目标所在的话题，遭撤回的目标是 <code>gone</code>；<code>feishu-read.ts</code> 读取触发的消息、根、父级、线程和周边会话；<code>feishu-image.ts</code> 按 <code>img_</code> 键从携带图片的那条消息下载图片。</p>
+<p>两者都立在 <code class="long">src/sources/poll.ts</code> 上。<code>POLL_HORIZON_MS</code>，十四天，限定一个没有在跑工单的已订阅线程还会轮询多久；<code>cursorAt</code> 把每次轮询的起点回拨五秒，免得错过迟到的事件，重叠部分由触发 id 去重吸收；<code>pollThreads</code> 把失败作为 <code>pollError</code> 留在线程上，下次成功即清除，于是一次坏读取既不毒害其余线程，也不会无声消失。</p>
+<h2 id="ch-6-zh-s6">6.6 面板与健康</h2>
+<figure class="figure-wide"><svg viewBox="0 0 1000 810" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="工单生命周期：阶段阶梯自上而下首行匹配即生效；接单与人的留言如何进入阶梯；工单结束的四种方式；以及已结束工单如何被人的留言唤醒">
+  <style>
+    .person { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.5; rx:10; }
+    .auto { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.5; rx:10; }
+    .end { fill:#faf8f3; stroke:#8b8272; stroke-width:1.4; rx:12; }
+    .t { font:600 14px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2b2620; dominant-baseline:middle; }
+    .ts { font:400 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; dominant-baseline:middle; }
+    .cap { font:600 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#8b8272; letter-spacing:1.8px; text-anchor:middle; }
+    .n { font:600 11px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#fff; text-anchor:middle; dominant-baseline:middle; }
+    .e { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#ta); }
+    .ed { stroke:#9a5b2e; stroke-width:1.5; fill:none; stroke-dasharray:6 4; marker-end:url(#ta2); }
+    .el { font:500 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+  </style>
+  <defs>
+    <marker id="ta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+    <marker id="ta2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9a5b2e"/></marker>
+  </defs>
+
+  <text x="300" y="42" class="cap">开放工单的阶段——自上而下，首行匹配即生效</text>
+
+  <!-- ladder -->
+  <g>
+    <circle cx="76" cy="84" r="11" fill="#9a5b2e"/><text x="76" y="85" class="n">1</text>
+    <rect x="96" y="62" width="410" height="44" class="person"/>
+    <text x="112" y="78" class="t">person / delivery</text>
+    <text x="112" y="96" class="ts">一条输入未能送达执行器 Session</text>
+
+    <circle cx="76" cy="140" r="11" fill="#9a5b2e"/><text x="76" y="141" class="n">2</text>
+    <rect x="96" y="118" width="410" height="44" class="person"/>
+    <text x="112" y="134" class="t">person / answer</text>
+    <text x="112" y="152" class="ts">一个待人工决定——等待人的回答</text>
+
+    <circle cx="76" cy="196" r="11" fill="#9a5b2e"/><text x="76" y="197" class="n">3</text>
+    <rect x="96" y="174" width="410" height="44" class="person"/>
+    <text x="112" y="190" class="t">person / review</text>
+    <text x="112" y="208" class="ts">最新报告为 ready</text>
+
+    <circle cx="76" cy="252" r="11" fill="#9a5b2e"/><text x="76" y="253" class="n">4</text>
+    <rect x="96" y="230" width="410" height="44" class="person"/>
+    <text x="112" y="246" class="t">person / blocked · failed</text>
+    <text x="112" y="264" class="ts">受阻或失败，且此后无人留言</text>
+
+    <circle cx="76" cy="308" r="11" fill="#2e6f77"/><text x="76" y="309" class="n">5</text>
+    <rect x="96" y="286" width="410" height="44" class="auto"/>
+    <text x="112" y="302" class="t">working / queued</text>
+    <text x="112" y="320" class="ts">尚无派工，或派工正在等待空位</text>
+
+    <circle cx="76" cy="364" r="11" fill="#2e6f77"/><text x="76" y="365" class="n">6</text>
+    <rect x="96" y="342" width="410" height="44" class="auto"/>
+    <text x="112" y="358" class="t">idle</text>
+    <text x="112" y="376" class="ts">等待订阅线程上的新触发</text>
+
+    <circle cx="76" cy="420" r="11" fill="#2e6f77"/><text x="76" y="421" class="n">7</text>
+    <rect x="96" y="398" width="410" height="44" class="auto"/>
+    <text x="112" y="414" class="t">working</text>
+    <text x="112" y="432" class="ts">其余一切——执行器忙碌中</text>
+  </g>
+
+  <text x="300" y="466" class="ts" style="font-size:10px; text-anchor:middle">ticketStage（src/core/stage.ts）在一处回答整个阶梯</text>
+
+  <!-- events entering from the right, short stubs -->
+  <line x1="556" y1="252" x2="510" y2="252" class="e"/>
+  <text x="612" y="240" class="el">人的留言</text>
+  <text x="612" y="256" class="ts" style="font-size:10px; text-anchor:middle">解除受阻或失败的挂起</text>
+
+  <line x1="556" y1="308" x2="510" y2="308" class="e"/>
+  <text x="612" y="296" class="el">接单</text>
+  <text x="612" y="312" class="ts" style="font-size:10px; text-anchor:middle">工单打开，从 5 进入</text>
+
+  <!-- end states -->
+  <text x="795" y="508" class="cap">工单如何结束</text>
+  <rect x="640" y="528" width="310" height="52" class="end"/>
+  <text x="660" y="548" class="t">完成</text>
+  <text x="660" y="566" class="ts">无 PR 可等的 ready 报告</text>
+
+  <rect x="640" y="592" width="310" height="52" class="end"/>
+  <text x="660" y="612" class="t">放弃</text>
+  <text x="660" y="630" class="ts">执行器发现没有需要人处理的事</text>
+
+  <rect x="640" y="656" width="310" height="52" class="end"/>
+  <text x="660" y="676" class="t">合并 · 关闭</text>
+  <text x="660" y="694" class="ts">它开启的每个 PR 都已关闭——followsDone</text>
+
+  <rect x="640" y="720" width="310" height="52" class="end"/>
+  <text x="660" y="740" class="t">停止</text>
+  <text x="660" y="758" class="ts">人撤回了授权——永不再恢复</text>
+
+  <!-- fan of ends from the ladder's bottom-right -->
+  <path d="M510,452 L636,554" class="e"/>
+  <path d="M510,452 L636,618" class="e"/>
+  <path d="M510,452 L636,682" class="e"/>
+  <path d="M510,452 L636,746" class="e"/>
+  <text x="600" y="436" class="ts" style="font-size:10px; text-anchor:middle">最终报告 · threadClosed · 人的停止</text>
+
+  <!-- resume path, below every pill and up the left margin -->
+  <path d="M795,708 L795,790 L60,790 L60,84 L92,84" class="ed"/>
+  <text x="427" y="779" class="el" style="fill:#9a5b2e">人在其线程上的留言会唤醒已结束的工单——同一授权，无需新评估</text>
+</svg><figcaption>工单的各个阶段：每个未结阶段在等什么，工单如何结束</figcaption></figure>
+<p>面板的骨架是工单的阶段（stage）模型，由 <code>ticketStage</code>（<code class="long">src/core/stage.ts</code>）实现：每个未结工单都有一个阶段，由它在等什么决定。表格从上往下读，第一行命中即生效。</p>
+<div class="tablewrap"><table><thead><tr><th>阶段</th><th>工单在等什么</th><th>面板标签</th></tr></thead><tbody><tr><td>person / delivery</td><td>向执行器 Session 投递一条输入失败，正按退避重试</td><td>输入未送达</td></tr><tr><td>person / answer</td><td>它有一条待人工决定（Attention）——一个问人的问题</td><td>等待答复</td></tr><tr><td>person / review</td><td>它最新的报告是 <code>ready</code></td><td>等待评审</td></tr><tr><td>person / blocked, failed</td><td>它最新的报告是 <code>blocked</code> 或 <code>failed</code>，此后没有人的消息到达</td><td>阻塞 · 失败</td></tr><tr><td>working / queued</td><td>没有派工，或有一次派工在等 worker 槽位</td><td>排队中</td></tr><tr><td>idle</td><td>它最新的报告是 <code>waiting</code>，或其派工已结束</td><td>等待触发</td></tr><tr><td>working</td><td>其余一切</td><td>工作中</td></tr></tbody></table></div>
+<p><code>person</code> 阶段意味着工单缺了人就走不下去，而人的一条消息会把 blocked 或 failed 的工单放回它的执行器。这张阶梯表按构造既穷尽又互斥，因此面板上的每一行陈述的都是一个可核验的定义，不是某个内部状态码。</p>
+<p>收场的种种方式也映照着这份诚实。一条 <code>ready</code> 报告让不跟随 pull request 的工单完结；一条 <code>dropped</code> 报告让它不带消息地结束——除非有匹配的规则要求发一条——并保留其订阅（Subscription），日后一条人的评论即可让它恢复。跟随 pull request 的工单，只有当它开启的 pull request 都已不再打开时才算完成——如果一个都没开启，则等到它跟随的每个 pull request 都关闭——然后以最后一次相关关闭的结局收尾，<code>merged</code> 或 <code>closed</code>，并由 <code>pullEndNotices</code>（<code class="long">src/sources/github-pull.ts</code>）向聊天渠道发出最后一条通知。所以「等待评审」的意思是：一条 <code>ready</code> 报告，外加一个 pull request。</p>
+<p>健康也遵循与其他一切相同的单写者规则。<code>HealthBoard</code>（<code class="long">src/infra/health.ts</code>）为每个部分持有一个条目——<code>runtime</code>、<code>evals</code>、<code>models</code>、每种效果一个、<code>worker</code>、每个来源种类的条目、策略同步用的 <code>sync:&lt;id&gt;</code>——每个条目恰好由一个写者认领；第二个认领会抛错。错误只在连续三次失败后才浮出水面，因此一次偶发的网络错误保持安静，一次失败的输入投递则显示在它自己的工单上。这就是面板的承诺（<code class="long">docs/005-panel.md</code>）：健康的状态不占地方，而值守的人真正看到的，要么是需要他们的工作，要么是他们能着手处理的问题。</p>
+</section>
+<section class="chapter lang-zh" id="ch-7-zh">
+<p class="eyebrow">第 7 章</p>
+<h1>为什么这样设计</h1>
+<p>dsh-superagent 把事件流变成队友的工作。来源（Source）——一个 GitHub 仓库或一个 Feishu 会话——产生不可变的事件，称为触发（Trigger）；触发归拢进线程（Thread），也就是它们所属的那场对话；评估（Eval）决定一批触发能否开工；一次 accept（接单）授出一份授权（Mandate，这项工作被记录在案的许可），并开出一张工单（Ticket），派工（Assignment）再把工单交给运行在执行器 Session（worker）里的执行器（Executor）。其中一个 Session 与众不同：主 Session 负责研判与路由。统领全局的理念（<code class="long">docs/000-philosophy.md</code>）是一份注意力预算——尽可能少地占用人的注意力。六个结构性决定承载着这份预算，每一个之所以存在，都是因为某个看起来更省事的替代方案早在纸面上就被拒绝了；这里最有力量的产物，正是这些拒绝。</p>
+<h2 id="ch-7-zh-s1">7.1 异步世界里的同步核心</h2>
+<p>Engine（<code class="long">src/core/engine.ts</code>）是触发、线程、决定（Decision）、工单和派工唯一的写入者，它的每一个方法都是同步的。每条命令都把全部工作包进对 <code>Repositories.atomic</code> 的一次调用：<code>receive</code>、<code>decide</code>、<code>attach</code>、<code>stopTicket</code> 和 <code>report</code> 全是同一个形状。即便是清扫式的方法 <code>evaluateDue</code>——它会访问许多线程和工单——也会为每一个被它改动的评估或工单单独开启一个事务（<code class="long">src/core/engine.ts:75</code>）。核心也不做任何 I/O。<code class="long">src/core</code> 不引用自身之外的任何东西，唯一的例外是 Node 的哈希（<code class="long">src/core/ids.ts</code> 里的 <code>node:crypto</code>）；它接触外部世界只能经由 <code class="long">src/core/ports.ts</code> 的端口，而端口的每个方法都是同步的，“so <code>atomic</code> can wrap a unit of work.”（这样 <code>atomic</code> 才能包住一个工作单元）。</p>
+<p>这里拒绝的替代方案，是人们熟悉的异步编排核心：创建工单，<code>await</code> 启动结果，记录把线程未来消息扇出到工单的订阅（Subscription），再 <code>await</code> 回执。每一个 <code>await</code> 都是一扇崩溃窗口，而每一扇崩溃窗口都是一个可观察到的独立状态——一张没有派工的工单，一条指向从未启动的工作的订阅。领域测试把想要的不变量直接写成了测试名（<code class="long">tests/core-engine.spec.ts:136</code>）：“records an accept with its ticket, subscriptions and acknowledgement together, or none of them”（把一次接单连同它的工单、订阅与回执一并记录，否则一条也不记）。当 <code>prepareTicket</code> 钩子在接单中途抛出时，决定、工单、订阅和排队中的回执一并消失；没有任何交错，因为根本无从交错。</p>
+<p>这份收益向外层层放大。因为核心不做 I/O，整个领域跑在 <code>MemoryRepositories</code>（<code class="long">src/core/memory.ts</code>）上，它的 <code>atomic</code> 先给各张映射表拍下快照，抛出时再原样恢复。<code class="long">tests/core-engine.spec.ts</code> 的一千六百行——接入、评估分批、扇出（fan-out）、恢复、暂停、策略（Policy）变更、中断的派工、失败的投递——完全不 mock 网络；端口是小小的内存替身，时钟经由 Engine 的可选 <code>now</code> 注入。确定性是结构性的：id 由各自的输入推导而来（<code class="long">src/core/ids.ts</code> 的 <code>key</code>），测试用手拨着时间前进。异步的世界——轮询的来源、思考中的 Session、重试中的投递——则被推到了边缘；在那里，崩溃的代价是一次重试，而不是一个谎言。</p>
+<h2 id="ch-7-zh-s2">7.2 命令在今天，效果在明天</h2>
+<p>Engine 提交的每一次状态变更都有一道影子：它所许可的副作用。启动一个 worker，把输入（Input，工单的上下文）投递给正在运行的派工，把 worker 的报告（Report）转交给主 Session，在渠道（Channel，线程的写入侧）上发出一条回复——这些都不发生在命令内部。命令在自己的事务内调用 <code class="long">Effects.enqueue(kind, key, payload)</code>（<code class="long">src/app/effects.ts:61</code>），事务提交之后，处理器才开始运行。这是把事务性发件箱（transactional outbox）模式推广到所有副作用：意图是一条 SQLite 行，与它所追随的状态同样持久。因此，“已决定”与“已执行”之间的崩溃无从观察，因为意图的记录与决定写在同一个事务里；重启时这些行会重放，工作不会丢失。</p>
+<p>有两处细化很关键。按 kind 和 key 合并——一条 <code>INSERT ... ON CONFLICT</code>——会替换仍在等待的那一行的 payload，重置其失败计数，并让它立即到期，而不丢失队列位置：五个输入同时到达，只产生一次投递。而 <code>Later</code>（<code class="long">src/app/effects.ts:5</code>）是把背压挑明了：抛出它的效果——处理已暂停、worker 槽位已满——会被重新调度，且不计为失败。</p>
+<p>Outbox（<code class="long">src/app/outbox.ts</code>）是最纯粹的实例。<code>send</code> 在单个事务里记录一条消息的回执，并把它的 <code>reply</code> 效果排入队列；一个消息 id 只要记录过一次，就绝不会被再次入队，回执也永久保留，于是已发出的回执就始终算作已发出。投递按工单和会话保持有序：只要同一工单、同一会话里更早的一条消息还未决，<code>receipts.behind</code>（<code class="long">src/app/store.ts:259</code>）就会扣住后一条，直到那条更早的失败满三次、转而作为一个问题浮出水面为止。正因如此，回执绝不会抢到紧随其后的答复前面：在结果之前先读到“做完了”的人，会就此不再信任这个智能体。</p>
+<h2 id="ch-7-zh-s3">7.3 每种状态只有一个写入者</h2>
+<p><code class="long">docs/007-architecture.md</code> 的依赖规则陈述了一条朴素的不变量：每一类状态恰好有一个写入者。Engine 拥有触发、线程、决定、工单和派工；Settings 拥有设置及其历史；Prompts 拥有提示词版本；Effects 拥有效果行；Outbox 拥有回执；每条健康记录属于在 HealthBoard 上认领它的那个部件，而 HealthBoard 拒绝第二次认领；一个来源拥有自己的读取位置和线程元数据。来源甚至不能直接编辑工单——它只能调用 <code>bindThread</code> 和 <code>threadClosed</code>，而这两条都是 Engine 的命令。</p>
+<p>这里拒绝的替代方案是锁和约定。互斥量能把访问串行化，却分派不了责任；一条“来源不该写工单”式的约定会无声地腐烂，直到某个 bug 证明它从来就不承重。在这里，这条不变量读一读类型签名就能核验，因为 Engine 从不把自己整体交出去。每个调用方拿到的是自己那个角色的 <code>Pick</code>：</p>
+<pre><code class="language-ts">export type EngineForSources = Pick&lt;Engine, 'receive' | 'bindThread' | 'threadClosed'&gt;
+export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 'reevaluate' | 'unsubscribe' | 'dismiss'&gt;</code></pre>
+<p>完整的集合——<code>EngineForSources</code>、<code>EngineForMainSession</code>、<code>EngineForPeople</code>、<code>EngineForSettings</code>、<code>EngineForExecutor</code>（<code class="long">src/core/engine.ts:261</code>）——让误用无从表达：来源的代码里没有任何能停掉工单的方法，执行器的接口几乎全是过去时的事实陈述（<code>assignmentStarted</code>、<code>inputsDelivered</code>、<code>turnEnded</code>），而非命令式口吻。每种状态一个写入者，再加上每个 Store 一个进程（Runtime 锁住状态目录），领域里一把锁都不用放，就换来了并发纪律。</p>
+<h2 id="ch-7-zh-s4">7.4 授权是记录在案的数据</h2>
+<p>一次 accept 本可以只意味着“此事曾获准一次”。它实际上产出一份授权（<code class="long">src/core/model.ts:126</code>）：一条不可变的记录，写下策略版本——策略就是那套带版本的接单规则——强度（strength）、范围、发送者在该来源上的身份，还有一个 <code>basis</code>，写明准入（Gate）如何放行了这条触发：可能由名单上的发送者 <code>addressed</code>（指名），可能是在已有工单的线程上 <code>followup</code>（跟进），可能是 <code>admission</code>（准入表）表格里的一个格子，也可能是来源机器人名单上的 <code>bot</code>；凡由规则裁决的情形，都附上命中的规则。这里拒绝的替代方案，是在每个动作处查验的访问控制列表：那会让现行规则去管辖按旧规则接纳的工作，还会把权限逻辑散落到各个调用点，任其在那里漂移。</p>
+<p>这个设计让工作活得比接纳它的规则更久。策略变更时，<code>policyEffects</code>（<code class="long">src/policy.ts:144</code>）精确算出这次变更波及哪些尚未关闭的工单——命中的规则变了或停用了、请求者可能不再能开工、主动接纳终止——<code>Engine.policyChanged</code> 再把这件事作为一条输入，只投给那些工单。这里什么都不取消；<code class="long">docs/001-domain.md</code> 的否决概念表拒绝了 “cancelling running Tickets on a Policy change”（在策略变更时取消运行中的工单），因为变更引发的取消只会留下做了一半的工作。重新校验只发生在恢复时：一张已结束的工单若被某个人的消息唤醒，仍须对照今天的策略通过 <code>revalidate</code>（<code class="long">src/core/tickets.ts:113</code>、<code class="long">src/core/tickets.ts:257</code>），过不了就维持结束，消息转去评估。在这些时刻之间，授权就是真相。</p>
+<p>同一份文档还拒绝了一个更深层的诱惑：把“人”本身做成领域概念。触发携带其行动者的标识符，来源给出什么就携带什么；允许名单是策略中属于某个来源的那部分，用的正是该来源自己的身份；至于同一个人类在 GitHub 和 Feishu 上各有哪些账号，那只是提示词文本，智能体需要时自己去读——<code class="long">src/policy.ts</code> 在文件头部的注释里就是这么写的。跨来源映射身份，等于另建一套自带同步故障的影子身份系统，却换不来授权没有记录的任何东西。</p>
+<h2 id="ch-7-zh-s5">7.5 状态属于工单，不属于 Session</h2>
+<p>想知道一张工单在干什么，最直接的办法是去问运行它的那个智能体 Session。代码库拒绝了这条路：“Ticket state that follows the DSH Session”（跟随 DSH Session 的工单状态）就列在否决清单上，因为工单可以在结束之后恢复、可以重试、可以在宿主机崩溃后重启，还会随时间先后由好几个派工承载。执行器 Session 只是某一次派工的容器，处在领域之外，只能经由派工触达。于是，工单的阶段由 <code>ticketStage</code>（<code class="long">src/core/stage.ts:9</code>）根据工单自己记录在案的事实算出：已结束（ended）；有一次投递失败了；存在未决的待人工决定（Attention，一个等待人来回答的问题）；有一份 <code>ready</code>（就绪）报告等待评审；受阻（blocked）或失败（failed）的工作在等某个人；排队（queued）；空闲（idle）；工作中（working）。</p>
+<p>其中最微妙的是 <code>waitsForPerson</code>（<code class="long">src/core/model.ts:349</code>）：一张工单，当其最近一次派工报告了 <code>blocked</code>（受阻）或 <code>failed</code>（失败），且此后没有任何人类消息到达，就是在等某个人。这个状态由存储的报告和输入计算而来，从不从报告的文字里推断——否决清单拒绝从自由文本推断 “waiting on a person”（在等某个人）。因为计算只读取持久化的行，重启之后依然成立——<code class="long">docs/003-execution.md</code> 的原话是 “It is worked out from the stored Reports and Inputs, so a restart keeps it”（它由存储的报告和输入算出，所以重启之后依然成立）；而重试——结束停滞的派工、在同一份授权下开启新的一次——靠写入新事实解除这一状态，而不是去探测某个进程。Session 可以撒谎，也可以死掉；工单的状态，是领域记录下来的东西。</p>
+<h2 id="ch-7-zh-s6">7.6 提示词是带版本的数据</h2>
+<p>智能体的指令大多放在 <code class="long">prompts/*.md</code> 里，一行一句地写，好让每次编辑都留下可读的 diff；<code>promptFile</code>（<code class="long">src/app/skill-files.ts:29</code>）在加载时用空格把每一段的各行拼接起来。<code>Prompts</code>（<code class="long">src/app/prompts.ts</code>）把配置存成带编号的 <code>Versions</code>，配置里有关于沟通、范围与交付的团队区块，也支持对内置段落的改写；每次改写都记下所基于文本的哈希，于是升级时能精确报告一个团队的措辞之下到底变了什么。</p>
+<p>这里拒绝的另一条路，是把行为做成设置项，或把行为做成代码。理念把界线划得直截了当（<code class="long">docs/000-philosophy.md</code>）：“Behaviour that a team describes in words is prompt text, not a setting”（团队能用语言描述的行为是提示词，不是设置项）。智能体话多时，解药是更短、更严的措辞——保存一下，下一次请求即生效——而不是一次部署。归因是第二重收益：每个模型请求都把它所属的 Session 绑定到当前的提示词修订版，并持久地记录下来（<code class="long">src/app/sessions.ts:329</code> 的 <code>promptFor</code>，存在 <code>KV.sessions.prompts</code> 之下），于是任何动作都能追溯到产生它的那些文字。<code class="long">tests/model-surface.spec.ts</code> 让这些表面保持诚实：它对照工具 schema 和词汇表检查提示词、工具描述与已投递的消息，让旧术语退役，封禁已知有误导性的措辞，并给每个角色强制执行一份字符预算。提示词文本改变的是告诉智能体什么，从不改变系统允许什么；准入和工具留在代码里。</p>
+<h2 id="ch-7-zh-s7">7.7 小词汇表，少设置项</h2>
+<p>理念中的设计规则读起来像一连串减法：概念要少，业务需求来时，就变成既有概念的一个属性、或提示词里的一段话，而不是一个新实体；设置要少，只要一个取值几乎适合所有团队，默认值就顶掉选项；面板把在等人的事项列在最前面，因为健康的状态不占地方。总览（overview）正是这么做的——处于 <code>person</code>（等人）阶段的工单排在最前，用的正是同一个 <code>ticketStage</code> 计算（<code class="long">src/app/views/overview.ts</code>）。</p>
+<p>代码库还自己看守自己的词汇表。核心为何记录一条决定，<code>Reason</code> 代码取自封闭的 <code>REASONS</code> 清单（<code class="long">src/core/reasons.ts</code>）；一个人或一个智能体会因为什么遭到拒绝，<code>UserError</code> 取自固定的 <code>USER_ERRORS</code> 代码（<code class="long">src/core/errors.ts</code>），管理 API 以状态码作答，面板则用自己的语言给出对应的措辞。<code class="long">docs/001-domain.md</code> 的词汇表由面板自己消费——它的问号按钮打开的就是同一套术语，两种语言并陈，出自 <code class="long">src/client/locales.ts</code> 的 <code>GLOSSARY</code>。一个新概念不可能半生不熟地溜进来：屏幕上的词、记录里的原因、文档里的术语，是同一份清单。</p>
+<p>不过最过硬的纪律，是 <code class="long">docs/001-domain.md</code> 的最后一张表：否决概念表。Principal 或 Membership；Eval 自行调度延迟；等待中的 Eval 状态；每个线程一张活跃工单；跟随 Session 的工单状态；策略变更即取消；给失败 worker 的工具上锁。每一行都是一个差点就放进去的设计，旁边写着拒绝它的理由。大多数架构说得清自己做什么；这一个还说得清自己拒绝成为什么——而一个知道自己在哪儿止步的设计，能把那条线以内的所有东西保持简单。</p>
+</section>
+<section class="chapter lang-zh" id="ch-8-zh">
+<p class="eyebrow">第 8 章</p>
+<h1>一个请求走遍全系统</h1>
+<h2 id="ch-8-zh-s1">8.1 那张图</h2>
+<figure class="figure-wide"><svg viewBox="0 0 1160 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="示例请求的时序：一条 GitHub 点名成为触发、评估、带授权的工单、确认回执，worker 开 PR，评审人后续、CI、合并，工单以合并结束">
+  <style>
+    .hd { fill:#e7f1f2; stroke:#2e6f77; stroke-width:1.5; rx:10; }
+    .hdx { fill:#edf3ea; stroke:#4c7a45; stroke-width:1.5; rx:10; }
+    .hde { fill:#f7ede2; stroke:#9a5b2e; stroke-width:1.5; rx:10; }
+    .t { font:600 13px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#2b2620; text-anchor:middle; dominant-baseline:middle; }
+    .life { stroke:#cfc7b8; stroke-width:1.2; stroke-dasharray:4 5; }
+    .m { stroke:#857c6e; stroke-width:1.5; fill:none; marker-end:url(#da); }
+    .mg { stroke:#4c7a45; stroke-width:1.5; fill:none; marker-end:url(#dg); }
+    .mo { stroke:#9a5b2e; stroke-width:1.5; fill:none; marker-end:url(#do_); }
+    .lbl { font:500 11.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#4a443c; text-anchor:middle; dominant-baseline:middle; }
+    .note { fill:#fdfcf9; stroke:#c9c0af; stroke-width:1.2; rx:8; }
+    .nt { font:400 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#6f675c; text-anchor:middle; dominant-baseline:middle; }
+    .n { font:600 10.5px -apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif; fill:#fff; text-anchor:middle; dominant-baseline:middle; }
+    .nc { fill:#2e6f77; }
+    .nco { fill:#9a5b2e; }
+    .ncg { fill:#4c7a45; }
+  </style>
+  <defs>
+    <marker id="da" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#857c6e"/></marker>
+    <marker id="dg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4c7a45"/></marker>
+    <marker id="do_" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9a5b2e"/></marker>
+  </defs>
+
+  <!-- lifeline headers -->
+  <rect x="20" y="24" width="140" height="42" class="hdx"/><text x="90" y="46" class="t">GitHub</text>
+  <rect x="185" y="24" width="140" height="42" class="hd"/><text x="255" y="46" class="t">来源</text>
+  <rect x="355" y="24" width="140" height="42" class="hd"/><text x="425" y="46" class="t">Engine</text>
+  <rect x="525" y="24" width="140" height="42" class="hde"/><text x="595" y="46" class="t">Effects</text>
+  <rect x="695" y="24" width="150" height="42" class="hd"/><text x="770" y="46" class="t">主 Session</text>
+  <rect x="905" y="24" width="140" height="42" class="hde"/><text x="975" y="46" class="t">Worker</text>
+
+  <line x1="90" y1="66" x2="90" y2="872" class="life"/>
+  <line x1="255" y1="66" x2="255" y2="872" class="life"/>
+  <line x1="425" y1="66" x2="425" y2="872" class="life"/>
+  <line x1="595" y1="66" x2="595" y2="872" class="life"/>
+  <line x1="770" y1="66" x2="770" y2="872" class="life"/>
+  <line x1="975" y1="66" x2="975" y2="872" class="life"/>
+
+  <!-- 1 -->
+  <line x1="90" y1="104" x2="249" y2="104" class="mg"/>
+  <circle cx="105" cy="104" r="10" class="ncg"/><text x="105" y="105" class="n">1</text>
+  <text x="172" y="93" class="lbl">评论：“@agent 调度器测试约五分之一概率抖动——请修复”</text>
+
+  <!-- 2 -->
+  <line x1="255" y1="142" x2="419" y2="142" class="m"/>
+  <circle cx="270" cy="142" r="10" class="nc"/><text x="270" y="143" class="n">2</text>
+  <text x="340" y="131" class="lbl">receive(触发)——只存一次，排队评估</text>
+
+  <!-- 3 note at engine -->
+  <rect x="330" y="170" width="270" height="40" class="note"/>
+  <text x="465" y="184" class="nt">3 · 每轮 pass 调用 evaluateDue——准入读策略：</text>
+  <text x="465" y="200" class="nt">名单内的发件人且被点名 → 明确强度</text>
+
+  <!-- 4 -->
+  <line x1="595" y1="238" x2="764" y2="238" class="mo"/>
+  <circle cx="610" cy="238" r="10" class="nco"/><text x="610" y="239" class="n">4</text>
+  <text x="683" y="227" class="lbl">assessment 效应：候选卡片</text>
+
+  <!-- 5 -->
+  <line x1="770" y1="276" x2="431" y2="276" class="m"/>
+  <circle cx="755" cy="276" r="10" class="nc"/><text x="755" y="277" class="n">5</text>
+  <text x="600" y="265" class="lbl">orchestrator_route：接单</text>
+
+  <!-- 5 note -->
+  <rect x="322" y="298" width="286" height="56" class="note"/>
+  <text x="465" y="316" class="nt">一个事务：决定 + 工单 + 授权</text>
+  <text x="465" y="332" class="nt">＋首个派工 + 订阅 + 确认回执</text>
+  <text x="465" y="348" class="nt">——要么全部提交，要么全不发生</text>
+
+  <!-- 6 -->
+  <line x1="595" y1="384" x2="259" y2="384" class="mo"/>
+  <circle cx="580" cy="384" r="10" class="nco"/><text x="580" y="385" class="n">6</text>
+  <text x="420" y="373" class="lbl">reply 效应 → 来源发出确认回执</text>
+  <line x1="255" y1="410" x2="94" y2="410" class="mg"/>
+
+  <!-- 7 -->
+  <line x1="595" y1="452" x2="969" y2="452" class="mo"/>
+  <circle cx="610" cy="452" r="10" class="nco"/><text x="610" y="453" class="n">7</text>
+  <text x="783" y="441" class="lbl">launch 效应：prepare（git worktree）· worker Session · 任务消息</text>
+
+  <!-- 8 note at worker -->
+  <rect x="872" y="478" width="206" height="56" class="note"/>
+  <text x="975" y="496" class="nt">8 · worker 复现竞态、修改调度器，</text>
+  <text x="975" y="512" class="nt">经 gh CLI 推分支</text>
+  <text x="975" y="528" class="nt">并开出 PR</text>
+
+  <!-- 9 -->
+  <line x1="975" y1="562" x2="431" y2="562" class="mo"/>
+  <circle cx="960" cy="562" r="10" class="nco"/><text x="960" y="563" class="n">9</text>
+  <text x="700" y="551" class="lbl">orchestrator_report：ready——工单绑定 PR 线程</text>
+
+  <!-- 10 -->
+  <line x1="90" y1="606" x2="249" y2="606" class="mg"/>
+  <circle cx="105" cy="606" r="10" class="ncg"/><text x="105" y="607" class="n">10</text>
+  <text x="170" y="595" class="lbl">评审人请求修改</text>
+
+  <!-- 11 -->
+  <line x1="255" y1="644" x2="419" y2="644" class="m"/>
+  <circle cx="270" cy="644" r="10" class="nc"/><text x="270" y="645" class="n">11</text>
+  <text x="345" y="633" class="lbl">触发扇出——后续输入，不进评估</text>
+
+  <!-- 12 -->
+  <line x1="595" y1="682" x2="969" y2="682" class="mo"/>
+  <circle cx="610" cy="682" r="10" class="nco"/><text x="610" y="683" class="n">12</text>
+  <text x="783" y="671" class="lbl">delivery 效应：输入送达运行中的 worker</text>
+
+  <!-- 13 -->
+  <line x1="90" y1="726" x2="249" y2="726" class="mg"/>
+  <circle cx="105" cy="726" r="10" class="ncg"/><text x="105" y="727" class="n">13</text>
+  <text x="168" y="715" class="lbl">PR 上 CI 通过；修复已推送（回复经 Outbox 送出）</text>
+
+  <!-- 14 -->
+  <line x1="90" y1="770" x2="249" y2="770" class="mg"/>
+  <circle cx="105" cy="770" r="10" class="ncg"/><text x="105" y="771" class="n">14</text>
+  <text x="168" y="759" class="lbl">维护者合并了 PR</text>
+
+  <!-- 15 -->
+  <line x1="255" y1="808" x2="419" y2="808" class="m"/>
+  <circle cx="270" cy="808" r="10" class="nc"/><text x="270" y="809" class="n">15</text>
+  <text x="342" y="797" class="lbl">threadClosed → followsDone——工单以合并结束</text>
+
+  <!-- 16 -->
+  <line x1="595" y1="846" x2="259" y2="846" class="mo"/>
+  <circle cx="580" cy="846" r="10" class="nco"/><text x="580" y="847" class="n">16</text>
+  <text x="420" y="835" class="lbl">最终通知；完整轨迹在 Store 中可审计</text>
+</svg><figcaption>一个请求的一生：从 GitHub 上的一次 @ 提及，到一个已合并的 pull request 和一张已关闭的工单（Ticket）</figcaption></figure>
+<p>场景是一个小团队的仓库，由 dsh-superagent 看护——这个宿主进程负责把消息变成经过授权的工作。它的 GitHub 来源（Source），也就是替智能体账号观察单个仓库的那个适配器，处于启用状态；团队的策略（Policy），即规定谁可以发起工作的配置，把一位队友列入了允许发起的账号，我们姑且叫她玛拉（Mara）。接受模式（accept mode）是 <code>observe</code>，因此主动型工作只会进入研判（Assessment），绝不会自行启动；当前启用着一条主动规则，但它在这里派不上用场，因为玛拉写下的是一条明确的请求。她提交了 issue #412，标题是“不稳定测试：调度器偶尔丢掉一个任务”，并评论道：“@agent 调度器测试在 CI 上大约每五次运行就会失败一次——请找出竞态并修复它。”</p>
+<p>接下来的一切，是一条由具名模块串成的链。来源把她的评论转写成一条触发（Trigger），即领域对一条传入消息的记录；Engine 是事务性核心，也是触发、线程（Thread）、决定（Decision）、工单和派工（Assignment）唯一的写入方，它让这条触发过准入（Gate）、进评估（Eval），再按主 Session 的路由把它变成一张工单（一个获得授权的工作单元），并附上一份授权（Mandate），记录它凭什么获得授权；随后的工作由一个执行器 Session（worker）完成；智能体说的话，则由 GitHub 渠道（Channel）送回去。本章就沿着这条链，一跳一跳地走。</p>
+<h2 id="ch-8-zh-s2">8.2 从 GitHub 到一条触发</h2>
+<p>GitHub 来源没有 webhook，靠轮询。<code class="long">src/sources/github.ts</code> 里的一个 <code>watch</code> 循环每隔 <code>pollSeconds</code> 运行一次 <code>pollRound</code>（默认 60 秒；若 GitHub 的 <code>x-poll-interval</code> 响应头有要求，则更长）。每一轮按顺序读取：智能体账号的通知；团队开启的各条仓库级信息流；处于开启状态的工单的 pull request 及其 CI；最后是每一条已订阅的线程。一切读取都经过 <code class="long">src/infra/commands.ts</code> 里的 <code>Commands</code>——一个子进程封装，其 <code>api</code> 方法以子进程方式调用部署环境的 <code>gh</code> CLI（<code class="long">gh api repos/&lt;owner&gt;/&lt;name&gt;/...</code>），只允许访问配置的仓库，返回值再过 schema 校验。</p>
+<p>玛拉的提及带来一条通知，于是 <code>pollNotifications</code> 把 issue #412 排上读取。<code>readNotified</code> 取回这个 issue，仅当它是在游标之后、由智能体以外的某个人新开时，才为其正文发出一条触发；随后 <code>intakeComments</code> 读取同一游标之后的会话评论。issue 自身的正文在更早一轮就已到达，既无提及，<code>observeIssues</code> 又关着，于是准入以 <code>no_mention</code> 把它挡下，并记录为一条 ignore（忽略）的决定——这就是为什么请求是那条评论，而不是 issue 本身。</p>
+<p>每条评论都经由 <code class="long">src/sources/github-trigger.ts</code> 里的 <code>commentTrigger</code> 成为一条触发。触发携带一个确定性 id，由评论的 URL、id 和更新时间构造而来；携带行为者（<code>human: true</code>，因为玛拉是人，不是智能体本身）；携带所属线程（<code>github:412</code>，即这条触发归属的那场会话）；携带一条用于回复的渠道（<code>githubChannel</code>）；此外，由于 <code>mentions</code> 在正文里找到了 <code>@agent</code>，还携带 <code>addressed: 'mention'</code>——由来源声明的事实：发送者是对智能体说的。</p>
+<p>去重正是由那些确定性 id 加上游标保证的。<code>readNotified</code> 把该线程的游标推进到 <code>cursorAt(round.started)</code>——<code class="long">src/sources/poll.ts</code> 会把时间戳回拨 5 秒，好让迟到的远端事件重新读到——重读因此无害：<code class="long">src/core/intake.ts</code> 里的 <code>Intake.receive</code> 开一个 Engine 事务，发现触发 id 已存过，回答 <code>duplicate</code>。第一次读取时，触发存了下来，线程 <code>github:412</code> 记录时间和关联（Correlation），扇出（Fan-out）循环没有找到订阅这条线程的工单，因此没有触达任何东西。由于没有任何工单的 worker 裁决这条消息，而它的发送者又对智能体点名，<code>queueForEval</code> 把触发 id 放上线程的待处理队列。来源经 <code>SourceContext.receive</code>（<code class="long">src/sources/host.ts</code>）抵达 Engine，这条通路再经 <code>Passes.receive</code>（<code class="long">src/app/passes.ts</code>），于是存下的触发还会请求立即执行一次 pass。</p>
+<h2 id="ch-8-zh-s3">8.3 准入与候选</h2>
+<p>pass 是 Runtime 的心跳：<code>Passes</code>（<code class="long">src/app/passes.ts</code>）每 2 秒跑一趟，任何命令提出要求时再补一趟，先把到期的 Effects（持久化的副作用队列）踢动，然后调用 <code>Engine.evaluateDue</code>（<code class="long">src/core/engine.ts</code>）。这个方法发现线程 <code>github:412</code> 带着一条待处理触发，且没有正在进行的评估——评估是线程层面的研判，以一条决定收尾——<code>Evals.start</code>（<code class="long">src/core/evals.ts</code>）于是在一个事务里开启评估。</p>
+<p>先是准入。<code class="long">src/policy.ts</code> 里的 <code>settingsPolicy</code> 构建一份全新的无状态策略，其 <code class="long">gate(trigger, thread, tickets)</code> 负责给消息分类：玛拉在允许名单上，这条触发又是指名发给智能体的，于是答案是可准入，强度（strength）记为 <code>strength: 'explicit'</code>（明确），依据记为 <code>via: 'addressed'</code>，指名了那次提及与发送者。倘若她没有提及智能体，就要由准入表和接受模式在推断（inferred）候选与拒绝之间做抉择。评估记录落在线程上（<code>thread.evaluating</code>），带着准入的强度、行为者、依据和策略版本（Policy version）；待处理队列整个倒进这条记录；<code>assessor.request</code> 把它的候选交给 <code>MasterAssessor</code>（<code class="long">src/app/assessment.ts</code>），由后者排入一个 <code>assessment</code> effect。</p>
+<p>这个 effect 的处理器构建候选卡片（<code class="long">src/app/links.ts</code> 里的 <code>candidateCard</code>）——消息按 worker 们将要读到的样子渲染，附上来源链接与所回复内容的预览、线程、批次、相关及被引用的工单、强度与模式——随即以 <code class="long">sessions.prompt(..., 'steer')</code> 把它注入主 Session 的回合，再调用 <code>Engine.candidateDelivered</code>，让评估的截止时间从 Session 实际收到卡片那一刻起算。<code>MasterAssessor.context</code> 经 <code>orchestrator_eval</code> 供给的有界线程窗口与策略版本，是给推断候选用的；一张明确的卡片给出的是路由指令，<code class="long">prompts/dispatch.md</code> 告诉主 Session 具体怎么做。</p>
+<p>主 Session——Runtime 持有的、面向 orchestrator 的常驻 Session——读完卡片，带着一个 accept（接单）条目调用 <code>orchestrator_route</code>：一个标题、一个 <code>worktree_name</code>，外加一段点明改动的回执。<code class="long">src/app/tools/main.ts</code> 里的 <code>route()</code> 把它转成 <code class="long">Engine.decide(triggerId, { kind: 'accept', ... })</code>，每个条目各是一条独立的 Engine 命令。</p>
+<h2 id="ch-8-zh-s4">8.4 原子化的接单</h2>
+<p><code>Engine.decide</code> 把 <code>Evals.decide</code> 包进同一个仓库事务，accept 意味着的一切都发生在其中。<code>Evals.accept</code> 构建授权——强度 <code>explicit</code>、准入的依据、策略版本、行为者，以及主 Session 写下的范围——从评估 id 确定性地推导出工单 id，并记录这条 accept 决定。随后 <code>Tickets.create</code>（<code class="long">src/core/tickets.ts</code>）写入工单：它的来源触发、取自玛拉评论的渠道、一条状态为 <code>pending</code> 的首个派工（派工是工单 worker 的一次运行），以及在评估各条触发的每条线程上添加的订阅（Subscription）——从此 issue #412 属于这张工单。<code>prepareTicket</code> 钩子让 <code>DshExecutor.prepare</code>（<code class="long">src/executor/dsh.ts</code>）填入执行事实：worktree 名、工作区目录、派工文本。最后，若这次 accept 带着回执，<code class="long">Replies.acknowledgeAccepted</code>（<code class="long">src/core/replies.ts</code>）经 Outbox 把它排进队列，<code>executor.start</code> 则把启动排进队列。决定、工单、授权、派工、订阅、回执收据、启动行：一个事务，一个崩溃域。</p>
+<p>这条回执不会丢失，也不会乱序，因为它先是事实，之后才是消息。<code>Outbox.send</code>（<code class="long">src/app/outbox.ts</code>）在同一个事务里以确定性 id <code>key('ack', trigger.id)</code> 持久化一张收据，并排入一个 <code>reply</code> effect；提交之后 effect 才运行，并按退避一直重试，间隔从 5 秒增长到 5 分钟，直到成功为止。顺序有两重保证：<code>reply</code> 这一类 effect 按队列顺序一次只跑一个；<code>receipts.behind</code> 把同一工单发往同一会话的较晚消息，扣在较早的未完成消息之后。等 <code>sendGithub</code>（<code class="long">src/sources/github-channel.ts</code>）终于发出评论时，它会嵌入一个装有消息 id 的 HTML 标记，并先扫描自己是否已留下标记，因此响应丢失后的重试不会发出任何新东西。玛拉在 #412 上看到一条回复，说明智能体将要做什么。</p>
+<h2 id="ch-8-zh-s5">8.5 启动与工作</h2>
+<p>提交之后，<code>launch</code> effect 运行（<code class="long">src/executor/dsh.ts</code> 里的 <code>launchQueued</code>），先于任何等待中的工作预留一个 <code>WorkerSlots</code> 名额，这样两次启动不可能同时拿走最后一个名额。<code>launch</code> 发现没有工作区目录，于是 <code>prepareDirectory</code> 运行团队配置的 <code>executor.prepare</code> 命令——通常是 <code>git worktree</code>——带上工单的执行变量（<code>DSH_SUPERAGENT_DIR</code>、<code>DSH_SUPERAGENT_NAME</code>、<code>DSH_SUPERAGENT_TICKET</code>，以及 GitHub 账号和仓库），上限 10 分钟；prepare 一旦失败就让工单失败，而不是在一个建了一半的目录上反复重试。</p>
+<p>随后 <code>Sessions.ensure</code>（<code class="long">src/app/sessions.ts</code>）在该目录中创建 worker Session <code>worker-&lt;ticket&gt;</code>，套用 <code>dsh-superagent-worker</code> 预设，为它注入执行器的模型，再以组合好的提示词作装饰——来自 <code class="long">prompts/worker.md</code> 及其各小节的角色说明，外加授权自身的限制，而对一条明确的请求，这些限制不添加任何东西——并注册它的六个工作工具。第一条消息以 id <code class="long">assignment:&lt;ticket&gt;:&lt;assignment&gt;</code> 入队：一张 JSON 卡片，载有工单 id、标题、最多 1,500 字符的派工文本，以及内联呈现的来源触发；Session 一经接下，<code>Engine.assignmentStarted</code> 便把派工标记为运行中。</p>
+<p>技术工作归 worker。它阅读仓库的说明与内置的 GitHub 技能，复现竞态，修改调度器，并且只以智能体账号通过 <code>gh</code> 触达 GitHub，提交时使用该账号及其 <code class="long">DSH_SUPERAGENT_GITHUB_COMMIT_EMAIL</code>。长时间的测试运行难不倒消息循环：预设会在 5 秒后把前台命令转为后台作业，这类工作运行期间工单始终占着自己的 worker 名额，直到 30 分钟的 <code>BACKGROUND_LIMIT_MS</code>；超过之后便杀掉 shell 作业并上报，而 subagent 继续运行。</p>
+<h2 id="ch-8-zh-s6">8.6 报告、绑定与评审人</h2>
+<p>worker 以 <code>orchestrator_report</code>（<code class="long">src/app/tools/executor.ts</code>）收尾，报上状态 <code>ready</code>（就绪）和 pull request 的编号。这个工具读取 PR，然后在同一个事务里完成认领与记录。<code>claimPull</code>（<code class="long">src/sources/github-pull.ts</code>）核对 PR 确由智能体账号开出、其分支路径的最后一段正是工单的短名，然后完成绑定——<code>ctx.tickets.bindThread</code> 带 <code>own: true</code>，在线程 <code>github:413</code> 上添加一条订阅，并添加一条 <code>follows</code> 记录——这样一来，终结这张工单的将是 PR 的生命周期，而不是一份单纯的报告。<code>Engine.report</code>（<code class="long">src/core/assignments.ts</code>）把报告（Report）记在运行中的派工上；由于工单此刻跟随一个开着的 PR，<code>ready</code> 并不终结它，它的阶段（stage）变为 <code class="long">person/review</code>。</p>
+<p>同一个事务还把 <code>reportRelay</code>（<code class="long">src/app/notices.ts</code>）排成一个 <code>relay</code> effect，由它把一条 <code>worker_report</code> 消息注入主 Session；按照 <code class="long">prompts/dispatch.md</code>，主 Session 用带 <code>purpose=result</code> 的 <code>orchestrator_reply</code> 在最初发起请求的那场会话里完成交接，落到 issue #412 上，就是一条链接着 PR 的评论。</p>
+<p>随后，一位评审人要求修改。评审到来——经由通知，或经由订阅线程的轮询，两条路径最后都汇入 <code>intakeComments</code>——成为线程 <code>github:413</code> 上的一条人类触发。这一次，线程有了订阅者：<code>Intake.receive</code> 把这条触发作为一条输入（Input）扇出到工单上；又因为一张活跃工单的 worker 裁决自己线程上的消息（<code class="long">src/core/model.ts</code> 里的 <code>followupOwners</code>），评估不再排队，准入的 follow-up 强度也无从登场。Runtime 的事件钩子向主 Session 转发一条 <code>follow_up</code> 通知——消息在这张工单的 worker 手里，由它裁决——与此同时，<code>delivery</code> effect 预留出专为人类消息保留的那个额外名额，把渲染好的触发注入 <code>worker-&lt;ticket&gt;</code>，并上报 <code>Engine.inputsDelivered</code>；当 worker 的 Session 把这条消息纳入一个步骤，<code>Engine.inputsRead</code> 也会记下这一笔。worker 推送修复并报告 <code>progress</code>，这份进展留在系统内部。PR 上的 CI 结果以同样的方式作为机器触发到达：扇出为工单的输入，准入将这一批归档为 <code>not_human</code>，记成一条 ignore 决定——有记录、有送达，绝不会误当成请求。</p>
+<h2 id="ch-8-zh-s7">8.7 合并与终结</h2>
+<p>一位维护者合并了 PR。下一轮轮询中，<code>pollTicketPulls</code> 重新读取所有开启工单的 PR；<code>observePull</code> 看到 <code>merged</code>，<code>closePull</code> 经由 <code class="long">SourceContext.tickets.threadClosed</code> 报告这个事实。在 Engine 内部，<code>Tickets.threadClosed</code> 把那条 <code>follows</code> 记录标记为关闭，附上合并的结果与时间；<code>followsDone</code> 确认工单对自己开出的线程已全部了结，而它的工作已经完成、承接的事项没有一件悬而未决，于是工单终结——<code>by: 'executor'</code>、<code>outcome: 'merged'</code>，时间就取合并那一刻。它的订阅保留着，因此之后 #412 或 #413 上的一条人类评论，仍能在同一份授权之下把它重新唤醒；它 worker 的后台工作则在终结事务提交之后停止。</p>
+<p><code>ticket.ended</code> 事件变成发给主 Session 的一条 <code>ticket_ended</code> 通知；<code>pullEndNotices</code>（<code class="long">src/sources/github-pull.ts</code>）本可以向工单持有的每一个聊天渠道各发恰好一条终局通知——在这里它一条也不发，因为唯一的渠道就是 GitHub，而 GitHub 的时间线已经显示了这次合并。留下来的是记录，而记录全都在 Store 里（<code class="long">src/app/store.ts</code>，一个 SQLite 文件）：触发带着它的去向（Disposition）——哪次评估与哪条决定接下了它、它到达过哪些工单；accept 决定带着它的授权；工单带着它的派工、报告、输入和所跟随的线程。本章的每一跳事后都能回读，用的正是各个 Session 读取的同一批资源。</p>
+<h2 id="ch-8-zh-s8">8.8 这一路证明了什么</h2>
+<p>这条轨迹展现出四个性质，每一个都由构造保证，而非由警惕维持。每一跳都幂等：触发 id、评估 id、工单 id 和消息 id 都从各自的输入确定性推导而来（<code class="long">src/core/ids.ts</code> 里的 <code>key</code>），因此重读得到 <code>duplicate</code>，重复的 accept 找到它那张工单，重试的评论认得自己的标记。每个事实只有一个写入方：只有 Engine 写触发、线程、决定、工单和派工；来源拥有自己的游标；Outbox 拥有收据；Effects 拥有自己的队列。工作先存储、后执行：收据、启动、投递和转发都是决定它们的那笔事务里的行，提交之后才派发。而人只出现在领域指定的地方——授权的提及、纠正的评审、完成的合并，以及只可能来自允许发送者的 stop（叫停）。</p>
+<p>一个来自 Feishu 聊天的请求只会在边缘处不同：换一个来源（<code class="long">src/sources/feishu.ts</code>，由实时事件驱动而非轮询），为回复换一条渠道；领域路径原样不变，从触发一路走到已合并的工单。</p>
+</section>
+<section class="chapter lang-zh" id="ch-9-zh">
+<p class="eyebrow">第 9 章</p>
+<h1>源码阅读指南</h1>
+<p>dsh-superagent 有一百多个 TypeScript 源文件、十五个提示词文件和六十个测试文件——规模小到花几个晚上就能整体装进脑子。这个项目写出来就是给人读的：文档带编号，代码分层次，还有两个测试让文档保持诚实。本章是第一遍通读的指南。</p>
+<h2 id="ch-9-zh-s1">9.1 从哪里开始</h2>
+<p>先按顺序读文档。<code class="long">docs/000-philosophy.md</code> 给出了评判每个功能的标准——占用的人工注意力越少越好——<code class="long">docs/001-domain.md</code> 则命名了代码、工具和面板共用的词汇表：来源（Source）、触发（Trigger）、线程（Thread）、评估（Eval）、授权（Mandate）、工单（Ticket）等，每一个都附有它要遵守的规则，还有一张刻意拒绝的概念表。此后每份文档加一层：授权、执行、提示词、面板、部署、架构，以及一份新增来源的实操手册。README 说每份文档只建立在它之前的文档之上；<code class="long">tests/docs.spec.ts</code> 强制编号文档只能链接到更早的文档。</p>
+<p><code>SETUP.md</code> 是把系统各个活动部件最快过一遍的方式：一份让智能体照着走的脚本，用来与运维者敲定一次部署。它的九个问题一条消息问一个，沿着领域模型的流程走了一遍——触发从哪里来（哪些来源、哪个仓库、智能体以谁的账号行事），谁可以索要工作（允许名单），以及执行器（Executor）拿到一张工单后做什么（检出、提交身份、自动合并）。它把一个运行中的系统必须明确说出的每一项决定都摆了出来，也摆出了在&quot;一个值几乎适合每个团队&quot;之处选定的默认值。</p>
+<p>然后在三个位置打开代码。<code class="long">src/index.ts</code> 有 28 行：<code>apply</code> 读取机器配置，构造 <code>Runtime</code>，然后等待它的 <code>ready</code> promise。<code class="long">src/app/runtime.ts</code>——254 行——是在一个构造函数里装配起来的整个系统：它锁定状态目录，打开 Store（整个系统就这一个 SQLite 数据库），再构建 Setup、Effects、SourceRegistry、Sessions、Settings、DshExecutor、MasterAssessor、Outbox、Engine 和 Passes，每个部件都只接上自己用到的那条窄接口；Executor 和 Assessor 拿到的是 getter，因为它们要回调 Engine。它不含任何领域规则。最后，<code class="long">src/core/engine.ts</code>（270 行）是决策点：一个类、五个内部部件，每条命令都包在一个 <code>repo.atomic</code> 事务里，文件底部按角色划定的 <code>Pick</code> 接口则确切告诉你谁可以调用什么。</p>
+<h2 id="ch-9-zh-s2">9.2 三条线索</h2>
+<p>地图有了轮廓之后，走三条路径；每条路径的尽头，都是一个通读之后应当能回答的问题。</p>
+<h3>一次明确的请求，从进入系统到 accept（接单）</h3>
+<p>从 <code class="long">src/sources/github.ts</code>——GitHub 来源——开始：它的配置 schema（仓库、智能体用的 <code>gh</code> CLI 包装、四个 observe 开关），决定哪些事件会被监听的 <code>scope</code> 函数，以及对智能体账号通知进行的一轮轮询。然后是 <code class="long">src/sources/github-trigger.ts</code>，负载在这里变成领域对象：每条评论、每个 Issue 正文、每次 CI 状态流转都是一个触发——一个不可变事件——带着确定性的 id、一个行为者、是否出自真人的标记，以及文本点名智能体时的 <code>addressed: 'mention'</code>。</p>
+<p>轮询把触发交给它的 <code>SourceContext</code>，后者经由 <code>Passes</code>（<code class="long">src/app/passes.ts</code>）到达 <code>Engine.receive</code>；<code>Passes</code> 是调度器，另外还每两秒跑一轮 pass。<code class="long">src/core/intake.ts</code>（63 行）把触发只存一次——同一 id 第二次送达会返回 <code>duplicate</code>——记录它的去向（Disposition，即这条触发到了哪里），更新它的各条线程以及线程之间的关联（Correlation），把消息作为上下文扇出（fan-out）给订阅了相关线程的工单，并在它的主线程上把它排入评估，除非某张工单的 worker 已经替它做了决定。<code class="long">src/core/evals.ts</code> 在稍后一轮 pass 里启动评估：它把该线程排队的触发合批，向准入（Gate）询问准入的强度（strength）与依据，并让 MasterAssessor 把一张候选卡引导进主 Session（main Session，也就是编排者自己的 DSH Session）。一次 accept——典型情况是 <code class="long">src/app/tools/main.ts</code> 里的 <code>orchestrator_route</code> 调用 <code>Engine.decide</code>——落在 <code>Evals.accept</code>，它构建授权，写明这次 accept 授予了什么：强度、策略版本（Policy version）、依据、范围，然后调用 <code>Tickets.create</code>。</p>
+<p>这些发生在同一个事务里（<code class="long">src/core/tickets.ts:37</code>）：工单和它的各条渠道（Channel）在此组装，<code>prepareTicket</code> 钩子补上 worktree 名称、目录和派工文案，第一条派工（Assignment）随之创建，工单订阅（Subscription）这些触发所在的线程，确认消息经 Replies 排队，随后请执行器启动。<code class="long">src/app/outbox.ts</code> 在一个事务里记录这条确认消息的回执，并把它的 <code>reply</code> 效应入队；提交之后，效应再通过来源把它发出去。问题是：为什么同一条评论可以到达两次、决定两次，最终却只产出一张工单和一条回复？答案是三层的幂等——进入系统时的触发 id、<code>Evals.decide</code> 里&quot;已接受&quot;的检查、Outbox 回执里确定性的确认 id。</p>
+<h3>工作及其报告</h3>
+<p><code class="long">src/app/effects.ts</code> 是持久化的副作用队列：命令在自己的事务内调用 <code>enqueue</code>，提交之后执行才开始；副作用共六种（assessment、launch、delivery、relay、notice、reply），抛出 <code>Later</code> 表示推迟且不计为失败，失败的副作用按退避策略重试。<code class="long">src/executor/dsh.ts</code> 将 <code>launch</code> 和 <code>delivery</code> 效应入队：每张工单一个执行器 Session（worker）和一个目录（Session 名为 <code>worker-&lt;ticketId&gt;</code>），<code>WorkerSlots</code> 给并发封顶，一条 prepare 命令把工作区备好。<code class="long">src/app/sessions.ts</code> 创建并装饰两种角色的 Session——提示词、技能、worker 的受限工具清单、主 Session 的&quot;不等待&quot;护栏——并按请求 id 对每条消息只投递一次，同时记录每个 Session 工作时用的是哪一版提示词。</p>
+<p>事实经 <code class="long">src/core/assignments.ts</code> 流回：<code>assignmentStarted</code>、<code>inputsDelivered</code>、<code>inputsRead</code>、<code>turnEnded</code>，而最重要的是 <code>report</code>，worker 的话语在这里变成领域状态——待人工决定（Attention）问题被提出、保留或清除，被替换的问题若有尚未发出的回复，也一并撤回，一份 <code>blocked</code> 或 <code>failed</code> 的报告（Report）会扣住自动输入（Input），直到一条人类消息到来。<code class="long">src/core/stage.ts</code> 总共 26 行，把这些事实收拢成面板展示的那一行阶段（stage）记录。问题是：当 worker 报告 <code>ready</code> 时，谁来结束工单？答案是——由它跟随的线程来结束，除非它一条线程也不跟随——这是整个系统在&quot;谁拥有一个结果&quot;上最锋利的一个想法。</p>
+<h3>一次策略变更，端到端</h3>
+<p>第三条线索从 <code class="long">src/app/settings.ts</code> 的 <code>save</code> 开始：一次乐观的修订号检查、校验、出处守卫（只有面板可以更改执行环境），以及前后对照 <code>policyVersion</code>——它是规则、接受模式（accept mode）和各来源相关部分的哈希。版本变化时，保存动作会计算 <code>policyEffects</code>，并在与设置写入共用的同一个事务里调用 <code>Engine.policyChanged</code>。<code class="long">src/policy.ts</code> 里的 <code>policyEffects</code> 遍历打开的工单：匹配过的规则停用或变动；请求者不再获准（通过在旧规则与新名单之下重新校验，把发信人失去授权与模式变更区分开）；或者 <code>auto</code> 模式结束时收回主动接受。<code>Engine.policyChanged</code>（<code class="long">src/core/engine.ts:255</code>）把两半放进同一个事务：<code>Tickets.policyChanged</code> 记录通知，<code>Evals.policyChanged</code> 把进行中的评估以原因 <code>policyChanged</code> 结束为 <code>unavailable</code>，并把这些触发重新排队。通知本身是一条输入：<code>Tickets.policyChanged</code>（<code class="long">src/core/tickets.ts:200</code>）为每张受影响的工单添加一条 <code>policy-changed</code> 输入，投递效应把它交给 worker，由 <code>policyMessage</code>（<code class="long">src/executor/dsh.ts</code>）渲染成话：把按如今写法的规则仍然成立的部分做完，否则报告 <code>dropped</code>。问题是：一次策略（Policy）变更对已经接受的工作做了什么？变更本身不取消任何东西、不撤销任何授权；它只负责记录并投递，只有重新校验能够拦下继续。</p>
+<h2 id="ch-9-zh-s3">9.3 地图</h2>
+<p>目录树映照着分层。<code class="long">src/core</code> 装着领域——没有 I/O，也不引用自身之外的模块——承载最多理解的三个文件是 <code>engine.ts</code>（入口和它的五个部件：Intake、Evals、Tickets、Assignments、Replies）、<code>model.ts</code>（领域类型和 <code>waitsForPerson</code> 这样的共享谓词），以及 <code>tickets.ts</code>——多数规则最终汇聚的那条生命周期。<code class="long">src/app</code> 是宿主一侧的机械；除 <code>runtime.ts</code> 之外，值得读 <code>effects.ts</code> 和 <code>outbox.ts</code>，它们定义状态变化如何变成动作。<code class="long">src/app/tools</code> 把工具参数翻译成 Engine 命令——<code>main.ts</code> 对应主 Session 的十四个工具，<code>executor.ts</code> 对应 worker 的六个。<code class="long">src/app/views</code> 只读不写地推导面板的读模型；<code>overview.ts</code> 和 <code>tickets.ts</code> 展示面板认为值得占用一个人注意力的东西。</p>
+<p><code class="long">src/sources</code> 里有 <code>SourceKind</code> 协议（<code>kind.ts</code>）、持有各实例并实现 Engine 之 scope 的 <code>SourceRegistry</code>（<code>registry.ts</code>），以及两个实现：GitHub（<code>github.ts</code> 及其相邻文件）和 Feishu。<code class="long">src/executor</code> 放着 DshExecutor（<code>dsh.ts</code>）和 worker 的后台工作辅助（<code>background.ts</code>）。<code class="long">src/infra</code> 是进程一侧：<code>commands.ts</code> 负责 CLI 传输，<code>environment.ts</code> 负责智能体的进程环境，<code>health.ts</code> 负责它申报的健康条目。<code class="long">src/client</code> 是 React 面板，只从宿主一侧导入类型：<code>app.tsx</code> 决定它的形状，<code>api.ts</code>（类型来自 <code class="long">src/app/api.ts</code>）对应每一条路由。<code class="long">prompts/</code> 存放模型要读的指令（<code>orchestrator.md</code>、<code>worker.md</code>、<code>admission.md</code>），<code class="long">skills/</code> 存放两个来源技能，<code class="long">tests/</code> 存放测试套件。<code class="long">docs/007-architecture.md</code> 里的模块表和测试表是完整索引；<code class="long">tests/docs.spec.ts</code> 验证它们列全了每一个模块和每一个测试，因此索引不会腐烂。</p>
+<h2 id="ch-9-zh-s4">9.4 读者必须知道的约定</h2>
+<p>先说命名语法。请求做事的方法用祈使动词，而且可能遭到拒绝（<code>stopTicket</code>、<code>bindThread</code>）；记录适配器做过什么的方法用过去式，而且不会遭拒（<code>assignmentStarted</code>、<code>threadClosed</code>）；查询用名词（<code>candidate</code>）。过去式的名字意味着没有拒绝路径可读——这是 <code class="long">docs/007</code> 的&quot;请求与事实&quot;规则。</p>
+<p>拒绝与解释皆有枚举。人或智能体能够引发的拒绝是一个 <code>UserError</code>，代码固定取自 <code class="long">src/core/errors.ts</code> 里的 <code>USER_ERRORS</code>，每一条都标着 <code>missing</code> 或 <code>refused</code>，对 API（404 或 400）和面板使用完全相同的措辞。每个决定（Decision）都自我解释：它的 <code>reason</code> 是一列来自 <code class="long">src/core/reasons.ts</code> 的 <code class="long">Reason { code, values, triggerId }</code>，各道准入和各来源的 scope 提供自己的代码（<code>not_a_member</code>），<code>said</code> 携带某人或某个 assessor 写下的话——因此系统里没有一条记录是无声的。辅助状态有自己的地图：<code class="long">src/kv.ts</code> 把每条键值记录的键、类型和属主恰好各写一次。</p>
+<p>有两个测试是带强制力的文档。<code class="long">tests/class-docs.spec.ts</code> 在 <code>src</code> 中任何一个类缺少紧贴其前的 JSDoc 块时失败；<code class="long">tests/model-surface.spec.ts</code> 把模型读到的一切——工具、提示词、技能、投递下去的输入——对照工具 schema、词汇表和每个角色的篇幅预算逐一检查。最后，<code class="long">prompts/*.md</code> 一行一句地写，由 <code>promptFile</code>（<code class="long">src/app/skill-files.ts:29</code>）拼接成段落，因此修改的 diff 逐句对齐。</p>
+<h2 id="ch-9-zh-s5">9.5 测试即第二份文档</h2>
+<p>测试套件把行为编码在三个逐渐展宽的环里。<code class="long">tests/core-engine.spec.ts</code> 在 <code>MemoryRepositories</code>（<code class="long">src/core/memory.ts</code>）上运行 Engine，配上假的 Assessor、Executor 和 Outbox 端口；它的 <code>describe</code> 块以领域规则命名——intake、订阅扇出、follow-up 归属、被中断的派工、暂停——于是这个文件兼任一份不变量目录。<code class="long">tests/runtime.spec.ts</code> 在 <code class="long">tests/fixtures/host.ts</code> 模拟出的 DSH 宿主上运行整个应用：一个带真实收件箱机制的假 session 控制器（steered 消息与 queued 消息之别、认领步骤、取消）、假的 CLI、一个作业登记表和一个子智能体运行时。面板测试把每个页面对着 <code class="long">tests/fixtures/panel-server.ts</code> 渲染，那是一个覆盖全部管理路由、会记下误用的类型化假件。<code>pnpm check</code> 运行类型检查、测试和构建（<code>package.json</code>）。</p>
+<p>接下来值得读的是三份 spec。<code class="long">tests/policy.spec.ts</code> 端到端覆盖准入——来源 scope、准入、准入表、授权重校验、策略效应——是理解&quot;谁可以开始一项工作&quot;最快的路径。<code class="long">tests/followups.spec.ts</code> 展示完全绕开评估的那条路：一个人在已订阅线程上的 follow-up 直接到达 worker，而主 Session 只是收到告知。<code class="long">tests/runtime-concurrency.spec.ts</code> 考验重叠——一轮 pass 进行时触发到达、投递与启动期间工单变化——单写者设计要么在这些地方站住，要么露出接缝。</p>
+</section>
+<section class="chapter lang-zh" id="ch-10-zh">
+<p class="eyebrow">第 10 章</p>
+<h1>结语与观察</h1>
+<p>README 称 dsh-superagent 为研究原型，&quot;并非 DeepSeek 的官方产品&quot;，它是为公开发表而改编的，不是从生产环境里原样搬出来的。文档对&quot;系统不决定什么&quot;写得异常具体。有意思的收尾问题是：这些缺口里，哪些只是原型阶段的偶然，哪些是承重的留白——在后一种地方，设计者选择了记录，而不是决定。</p>
+<h2 id="ch-10-zh-s1">刻意留白之处</h2>
+<p>最具体的缺口是数据保留。<code class="long">docs/007-architecture.md</code> 的 Persistence 一节说得直白：目前没有任何东西删除旧记录。触发（Trigger）、它们的去向（Disposition）和决定（Decision）永远累积；已结束的工单（Ticket）和它们的线程（Thread）、Outbox 的回执（每条出站消息一条）同样如此；键值区里，保存过的每一份设置修订、每一版提示词、每个 Session 工作时所依据的提示词修订，以及各来源按线程记的簿记，同样无一例外。这句话与其说是待办事项，不如说是设计立场：审计轨迹是系统对&quot;自己为何如此行事&quot;的记忆，修剪它是一个策略问题——谁可以遗忘、何时可以遗忘——而不是一件工程杂务。把原型跑上一年的团队，等于背着自己收到过的每一条消息。</p>
+<p>信任问题更尖锐。一条触发的行为者与线程成员关系来自来源（Source）本身；它的正文与引用文字则出自发消息的人之手。原型记录了每一份授权（Mandate）的依据——谁发的、经过准入（Gate）的哪一格、依据哪个策略版本（Policy version）——但它还没有在&quot;当作证据对待的字段&quot;与&quot;当作主张对待的字段&quot;之间画出那条线。在那条线画出来之前，一段有说服力的消息正文可以声称任何事情，而为它开启的工作背书的，只剩准入对发信人的裁决。部署隔离是同一问题的近亲：智能体运行在自己的 DeepSeek Harness profile 上，悬而未决的是如何把它脚下的安装钉牢，好让机器上别处升级 DeepSeek Harness 时不至于弄坏这个智能体。而且系统在设计上就是单仓库：一个 github.com 仓库、没有 GitHub Enterprise Server、一个智能体账号——跨仓库不是它提供的机制，只能算第二次部署。</p>
+<h2 id="ch-10-zh-s2">可迁移的东西</h2>
+<p>可迁移的想法都是结构性的，没有一条依赖 DeepSeek Harness，也不依赖编码工作。第一条是命令/效应分离：命令在一个事务里改变状态并把副作用入队，适配器在提交之后才执行它们（<code class="long">src/app/effects.ts</code>）。在&quot;决定&quot;与&quot;执行&quot;之间崩溃变得不可能，重试成为队列的性质，而不再是每个调用方各自操心的事。第二条是每类状态单一写者：每一种记录都有唯一一个允许写它的类，其余角色只能读或请求。这条规则付出少量间接性，换来的是只读一个文件就能推断任何一条记录的能力。</p>
+<p>第三条是把授权当作已记录、可重校验的数据。一份授权不是会话里的一个标志位，也不是请求时的一次策略查询；它是一条存档的记录——授予了什么、给谁、依据哪个策略版本、凭什么依据——系统任何时候想知道这份授予是否仍然成立，都可以拿它对照现行策略（Policy）重新校验。第四条是把注意力当作预算：<code class="long">docs/000-philosophy.md</code> 用耗费的注意力评判每一条消息、每一个设置、每一个面板元素和文档的每一段，并删掉收不回成本的东西。把这条标准毫不留情地用到底，正是系统产出如此之少的原因。第五条是一个由拒绝概念清单守卫的小词汇表——<code class="long">docs/001-domain.md</code> 里十二条，每一条都是一个有名有姓的诱惑，并附拒绝的理由——领域模型于是要么靠论证生长，要么根本不生长。第六条是把提示词当作带版本的数据：配置是编号的快照，每个 Session 绑定在自己工作时所依据的修订上，worker 只能读自己用过的版本，这让每一次模型请求都能追溯到产生它的那份确切指令。</p>
+<h2 id="ch-10-zh-s3">作为成品的哲学</h2>
+<p>把代码剥掉，留存下来的成品是一组拒绝。智能体只在一个人必须行动或用得上结果时才开口；通知注入时不吵醒主 Session（main Session），worker 手里除了一个结构化的待人工决定（Attention）问题之外，没有任何向人发问或向人呈报的工具。它只在名单上的人开口、或成文规则允许时行动，记录下是什么授权了这项工作，并让那份记录接受重新校验，而不是相信自己的过去。它拒绝生长：新概念靠指名拒绝一个个诱惑而到来，不是靠功能层层堆积。每一次拒绝都在能力上付出一些代价，合在一起则买来可预测性——团队能预测智能体永远不会做什么，而这是容忍它做什么的前提。这就是值得带进任何自主系统的保守内核：自主性之所以能在团队中存活，只因看住它足够便宜；它保持便宜，只因系统把人的注意力当作唯一印不出来的预算。</p>
+</section>
 </main>
 
 <footer class="colophon">
   <a class="top-link" href="#top">Back to top ↑</a>
-  An independent analysis compiled from a close reading of the <a href="https://github.com/deepseek-ai/dsh-superagent-prototype" rel="noopener">dsh-superagent prototype repository</a> (MIT-licensed). Terminology follows the project&rsquo;s own domain model; interpretations — and any errors — are this book&rsquo;s, not the prototype&rsquo;s. Text size and typeface preferences are remembered on this device. · Assembled November 2026.
+  <div class="lang-en">An independent analysis compiled from a close reading of the <a href="https://github.com/deepseek-ai/dsh-superagent-prototype" rel="noopener">dsh-superagent prototype repository</a> (MIT-licensed). Terminology follows the project&rsquo;s own domain model; interpretations — and any errors — are this book&rsquo;s, not the prototype&rsquo;s. Text size, typeface and language preferences are remembered on this device. · Assembled November 2026.</div>
+<div class="lang-zh">本分析基于对 <a href="https://github.com/deepseek-ai/dsh-superagent-prototype" rel="noopener">dsh-superagent 原型仓库</a>（MIT 许可）的细读独立完成。术语沿用项目自身的领域模型；解读——以及可能的错误——归于本书，而非原型。字号、字体与语言偏好保存在本设备上。· 2026 年 11 月成书。</div>
 </footer>
 
 <script>
@@ -1338,6 +2302,33 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
   var savedFace = null;
   try { savedFace = localStorage.getItem(KEYF); } catch (e) {}
   if (savedFace === 'sans' || savedFace === 'serif') applyFace(savedFace);
+
+  var bEn = document.getElementById('lang-en');
+  var bZh = document.getElementById('lang-zh');
+  var KEYL = 'dsh-superagent-arch-lang';
+  var TITLES = {
+    en: 'dsh-superagent: An Architecture Analysis',
+    zh: 'dsh-superagent 架构解析'
+  };
+  function applyLang(lang) {
+    var zh = lang === 'zh';
+    root.setAttribute('data-lang', zh ? 'zh' : 'en');
+    root.setAttribute('lang', zh ? 'zh-CN' : 'en');
+    bEn.setAttribute('aria-pressed', String(!zh));
+    bZh.setAttribute('aria-pressed', String(zh));
+    document.title = TITLES[zh ? 'zh' : 'en'];
+    try { localStorage.setItem(KEYL, zh ? 'zh' : 'en'); } catch (e) {}
+  }
+  bEn.addEventListener('click', function () { applyLang('en'); });
+  bZh.addEventListener('click', function () { applyLang('zh'); });
+  var urlLang = null;
+  try { urlLang = new URLSearchParams(location.search).get('lang'); } catch (e) {}
+  if (urlLang === 'zh' || urlLang === 'en') applyLang(urlLang);
+  else {
+    var savedLang = null;
+    try { savedLang = localStorage.getItem(KEYL); } catch (e) {}
+    if (savedLang === 'zh' || savedLang === 'en') applyLang(savedLang);
+  }
 })();
 </script>
 </body>
