@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-textsize="default">
+<html lang="en" data-textsize="default" data-typeface="sans">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -33,11 +33,19 @@
     margin: 0;
     background: var(--paper);
     color: var(--ink);
-    font-family: var(--serif);
+    font-family: var(--sans);
     line-height: 1.72;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
   }
+  html[data-typeface="serif"] body { font-family: var(--serif); }
+  html[data-typeface="serif"] .chapter h1,
+  html[data-typeface="serif"] .chapter h2,
+  html[data-typeface="serif"] .chapter h3 { font-family: var(--serif); }
+  .chapter h1, .chapter h2, .chapter h3 { font-family: var(--sans); letter-spacing: -0.012em; }
+  html[data-typeface="serif"] .chapter h1,
+  html[data-typeface="serif"] .chapter h2,
+  html[data-typeface="serif"] .chapter h3 { letter-spacing: -0.005em; }
 
   /* ---------- top bar ---------- */
   .topbar {
@@ -305,7 +313,12 @@
     .cover { padding-top: 3.6rem; }
     .cover h1 { font-size: 2.05rem; }
     .chapter h1 { font-size: 1.55rem; }
+  }
+  @media (max-width: 760px) {
     .sizer .sizer-label { display: none; }
+    .crumb-rest { display: none; }
+    .topbar-inner { gap: 0.5rem; }
+    .sizer button { padding: 0.28rem 0.62rem; }
   }
   @media (max-width: 700px) {
     figure { overflow-x: auto; }
@@ -323,8 +336,13 @@
 
 <header class="topbar" id="top">
   <div class="topbar-inner">
-    <a class="crumb" href="#cover"><strong>dsh-superagent</strong> · An Architecture Analysis</a>
+    <a class="crumb" href="#cover"><strong>dsh-superagent</strong><span class="crumb-rest"> · An Architecture Analysis</span></a>
     <span class="spacer"></span>
+    <div class="sizer" role="group" aria-label="Typeface">
+      <span class="sizer-label">Typeface</span>
+      <button type="button" id="face-sans" aria-pressed="true">Sans</button>
+      <button type="button" id="face-serif" aria-pressed="false">Serif</button>
+    </div>
     <div class="sizer" role="group" aria-label="Text size">
       <span class="sizer-label">Text size</span>
       <button type="button" id="size-default" aria-pressed="true"><span class="aa">Aa</span>Default</button>
@@ -1283,7 +1301,7 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
 
 <footer class="colophon">
   <a class="top-link" href="#top">Back to top ↑</a>
-  An independent analysis compiled from a close reading of the <a href="https://github.com/deepseek-ai/dsh-superagent-prototype" rel="noopener">dsh-superagent prototype repository</a> (MIT-licensed). Terminology follows the project&rsquo;s own domain model; interpretations — and any errors — are this book&rsquo;s, not the prototype&rsquo;s. Text size preference is remembered on this device. · Assembled November 2026.
+  An independent analysis compiled from a close reading of the <a href="https://github.com/deepseek-ai/dsh-superagent-prototype" rel="noopener">dsh-superagent prototype repository</a> (MIT-licensed). Terminology follows the project&rsquo;s own domain model; interpretations — and any errors — are this book&rsquo;s, not the prototype&rsquo;s. Text size and typeface preferences are remembered on this device. · Assembled November 2026.
 </footer>
 
 <script>
@@ -1304,6 +1322,22 @@ export type EngineForPeople = Pick&lt;Engine, 'stopTicket' | 'retryTicket' | 're
   var saved = null;
   try { saved = localStorage.getItem(KEY); } catch (e) {}
   if (saved === 'large' || saved === 'default') apply(saved);
+
+  var bSans = document.getElementById('face-sans');
+  var bSerif = document.getElementById('face-serif');
+  var KEYF = 'dsh-superagent-arch-typeface';
+  function applyFace(face) {
+    var serif = face === 'serif';
+    root.setAttribute('data-typeface', serif ? 'serif' : 'sans');
+    bSans.setAttribute('aria-pressed', String(!serif));
+    bSerif.setAttribute('aria-pressed', String(serif));
+    try { localStorage.setItem(KEYF, face); } catch (e) {}
+  }
+  bSans.addEventListener('click', function () { applyFace('sans'); });
+  bSerif.addEventListener('click', function () { applyFace('serif'); });
+  var savedFace = null;
+  try { savedFace = localStorage.getItem(KEYF); } catch (e) {}
+  if (savedFace === 'sans' || savedFace === 'serif') applyFace(savedFace);
 })();
 </script>
 </body>
