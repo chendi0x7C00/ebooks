@@ -624,7 +624,7 @@ assert np.count_nonzero(mask) == 64
       const steps = [
         {
           title: "Observe the dominant failure",
-          copy: "Before inspecting tensors, characterize the output failure. The initial run produced 11 correct answers among 96 practice problems; 85 answers exhausted 32,768 tokens. Roughly 95% of truncated tails contained duplicate eight-word sequences. That made repetitive non-termination the dominant, measurable target.",
+          copy: "Before inspecting tensors, characterize the output failure. The initial run produced 11 correct answers among 96 practice problems; 85 answers exhausted 32,768 tokens. Repeated eight-word sequences accounted for about 95.8% of truncated-tail text on average. That made repetitive non-termination the dominant, measurable target.",
           data: "ORIGINAL / PRACTICE\ncorrect       11 / 96\ncut off       85 / 96\ntarget        repetitive non-termination\nnot target    generic ‘better math’"
         },
         {
