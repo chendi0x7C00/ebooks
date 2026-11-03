@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" data-font="sans" data-size="normal">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,14 +7,19 @@
 <title>How PyTorch Works — a first-principles tour for web developers</title>
 <script>
 (() => {
-  let theme;
+  let theme, font, size;
   try {
-    const q = new URLSearchParams(location.search).get('theme');
+    const q = new URLSearchParams(location.search);
+    const tq = q.get('theme');
     const saved = localStorage.getItem('ptw-theme');
-    theme = (q === 'dark' || q === 'light') ? q
+    theme = (tq === 'dark' || tq === 'light') ? tq
           : saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  } catch (_) { theme = 'light'; }
-  document.documentElement.dataset.theme = theme;
+    const fq = q.get('font');
+    font = (fq === 'serif' || fq === 'sans') ? fq : (localStorage.getItem('ptw-font') || 'sans');
+    size = q.get('size') === 'large' ? 'large' : (localStorage.getItem('ptw-size') || 'normal');
+  } catch (_) { theme = 'light'; font = 'sans'; size = 'normal'; }
+  const d = document.documentElement.dataset;
+  d.theme = theme; d.font = font; d.size = size;
 })();
 </script>
 <style>
@@ -45,6 +50,8 @@
   --pt-mono: "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   --pt-sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
   --pt-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --pt-body-font: var(--pt-sans);
+  --pt-body-fs: 18px;
   --pt-shadow: 0 10px 30px color-mix(in srgb, var(--pt-text) 7%, transparent);
 }
 :root[data-theme="dark"] {
@@ -80,11 +87,20 @@ body {
   margin: 0;
   background: var(--pt-bg);
   color: var(--pt-text);
-  font-family: var(--pt-serif);
-  font-size: 18px;
+  font-family: var(--pt-body-font);
+  font-size: var(--pt-body-fs);
   line-height: 1.72;
   text-rendering: optimizeLegibility;
 }
+/* reading settings: font family + size (persisted; see init script) */
+:root[data-font="serif"] { --pt-body-font: var(--pt-serif); }
+:root[data-size="large"] { --pt-body-fs: 20.5px; }
+:root[data-size="large"] .thesis { font-size: 21px; }
+:root[data-size="large"] .section-deck { font-size: 18px; }
+:root[data-size="large"] .callout p { font-size: 17px; }
+:root[data-size="large"] .recap-box p, :root[data-size="large"] .recap-box li { font-size: 17px; }
+:root[data-size="large"] pre.code-block { font-size: 14.5px; }
+:root[data-size="large"] table { font-size: 15.5px; }
 a { color: var(--pt-accent-strong); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 a:hover { color: var(--pt-accent); }
 button, select, input { font: inherit; color: inherit; }
@@ -120,6 +136,34 @@ code, pre, .mono { font-family: var(--pt-mono); }
   font-size: 12px;
 }
 .theme-toggle:hover { border-color: var(--pt-accent); color: var(--pt-accent); }
+/* reading settings popover */
+.settings-wrap { position: relative; }
+.aa-toggle {
+  min-height: 36px; min-width: 42px; padding: 6px 10px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-family: var(--pt-serif); font-size: 14.5px; line-height: 1;
+}
+.aa-toggle:hover, .aa-toggle[aria-expanded="true"] { border-color: var(--pt-accent); color: var(--pt-accent); }
+.aa-panel {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 90;
+  display: grid; gap: 14px; width: 232px; padding: 15px;
+  border: 1px solid var(--pt-line); border-radius: 8px;
+  background: var(--pt-surface); box-shadow: var(--pt-shadow);
+}
+.aa-panel[hidden] { display: none; }
+.aa-row { display: grid; gap: 8px; }
+.aa-label { font-family: var(--pt-mono); font-size: 10px; letter-spacing: .16em; color: var(--pt-faint); }
+.aa-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.aa-seg button {
+  min-height: 34px; padding: 5px 8px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-family: var(--pt-sans); font-size: 13px;
+}
+.aa-seg button:hover { border-color: var(--pt-accent); }
+.aa-seg button[aria-pressed="true"] {
+  border-color: var(--pt-accent); background: var(--pt-accent-soft);
+  color: var(--pt-accent-strong); font-weight: 650;
+}
 :root[data-theme="dark"] .sun-icon, :root:not([data-theme="dark"]) .moon-icon { display: none; }
 .theme-toggle svg { width: 15px; height: 15px; }
 .progress-track {
@@ -239,6 +283,7 @@ pre.code-block .fn { color: var(--pt-data); }
 .widget {
   border: 1px solid var(--pt-line); border-radius: 9px;
   background: var(--pt-surface); overflow: hidden;
+  font-family: var(--pt-sans);
   box-shadow: var(--pt-shadow);
 }
 .widget-head {
@@ -287,7 +332,9 @@ footer { margin-top: 76px; padding: 26px 0 10px; border-top: 1px solid var(--pt-
   .shell { grid-template-columns: 188px minmax(0, 1fr); gap: 30px; padding: 0 22px; }
 }
 @media (max-width: 860px) {
-  body { font-size: 16.5px; }
+  :root { --pt-body-fs: 16.5px; }
+  :root[data-size="large"] { --pt-body-fs: 18.5px; }
+  :root[data-size="large"] .thesis { font-size: 18px; }
   .shell { display: block; padding: 0 18px; }
   .topbar { padding: 8px 16px; }
   .read-note, .brand-copy span { display: none; }
@@ -336,6 +383,27 @@ footer { margin-top: 76px; padding: 26px 0 10px; border-top: 1px solid var(--pt-
   </div>
   <div class="top-actions">
     <span class="read-note">≈60 MIN READ · INTERACTIVE</span>
+    <div class="settings-wrap">
+      <button class="aa-toggle" id="aa-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="aa-panel" aria-label="Reading settings: font family and size">
+        <span aria-hidden="true">Aa</span>
+      </button>
+      <div class="aa-panel" id="aa-panel" hidden>
+        <div class="aa-row">
+          <span class="aa-label" id="aa-font-label">FONT FAMILY</span>
+          <div class="aa-seg" role="group" aria-labelledby="aa-font-label">
+            <button type="button" data-set="font" data-val="sans">Sans</button>
+            <button type="button" data-set="font" data-val="serif">Serif</button>
+          </div>
+        </div>
+        <div class="aa-row">
+          <span class="aa-label" id="aa-size-label">FONT SIZE</span>
+          <div class="aa-seg" role="group" aria-labelledby="aa-size-label">
+            <button type="button" data-set="size" data-val="normal">Normal</button>
+            <button type="button" data-set="size" data-val="large">Large</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle light/dark theme">
       <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
       <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
@@ -886,6 +954,36 @@ Meta     → add_meta          # shape/dtype math only, no data</code></pre>
   };
   addEventListener('scroll', onScroll, { passive: true });
   onScroll();
+})();
+
+/* reading settings: font family + size */
+(() => {
+  const wrap = document.querySelector('.settings-wrap');
+  if (!wrap) return;
+  const btn = document.getElementById('aa-toggle');
+  const panel = document.getElementById('aa-panel');
+  const segs = Array.from(panel.querySelectorAll('.aa-seg button'));
+  const sync = () => {
+    const d = document.documentElement.dataset;
+    segs.forEach(b => b.setAttribute('aria-pressed', String(d[b.dataset.set] === b.dataset.val)));
+  };
+  const close = () => { panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = panel.hidden;
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) { sync(); (segs.find(b => b.getAttribute('aria-pressed') === 'true') || segs[0]).focus(); }
+  });
+  segs.forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.set, v = b.dataset.val;
+    document.documentElement.dataset[k] = v;
+    try { localStorage.setItem(k === 'font' ? 'ptw-font' : 'ptw-size', v); } catch (_) {}
+    sync();
+  }));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) { close(); btn.focus(); } });
+  document.addEventListener('click', e => { if (!panel.hidden && !wrap.contains(e.target)) close(); });
+  sync();
 })();
 
 /* mount widgets */
