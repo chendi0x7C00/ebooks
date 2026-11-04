@@ -1,0 +1,1827 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-font="sans" data-size="normal">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="PyTorch Internals 101: the whole machine in about fifteen minutes — tensors as memory + metadata, one op's journey through the dispatcher, the autograd tape, and the training loop. Interactive, with deep links when you want more.">
+<title>PyTorch Internals 101 — the whole machine in fifteen minutes</title>
+<script>
+(() => {
+  let theme, font, size;
+  try {
+    const q = new URLSearchParams(location.search);
+    const tq = q.get('theme');
+    const saved = localStorage.getItem('ptw-theme');
+    theme = (tq === 'dark' || tq === 'light') ? tq
+          : saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const fq = q.get('font');
+    font = (fq === 'serif' || fq === 'sans') ? fq : (localStorage.getItem('ptw-font') || 'sans');
+    size = q.get('size') === 'large' ? 'large' : (localStorage.getItem('ptw-size') || 'normal');
+  } catch (_) { theme = 'light'; font = 'sans'; size = 'normal'; }
+  const d = document.documentElement.dataset;
+  d.theme = theme; d.font = font; d.size = size;
+})();
+</script>
+<style>
+/* ============ tokens (mirror of widgets/tokens.css) ============ */
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --pt-bg: #faf7f4;
+  --pt-surface: #ffffff;
+  --pt-surface-alt: #f1ebe5;
+  --pt-line: #ddd2c8;
+  --pt-line-strong: #b9a898;
+  --pt-text: #221c17;
+  --pt-muted: #5f554c;
+  --pt-faint: #8a7d71;
+  --pt-accent: #d64726;
+  --pt-accent-strong: #b03517;
+  --pt-accent-soft: #fbe4dc;
+  --pt-on-accent: #fff6f2;
+  --pt-data: #2f6ea8;
+  --pt-data-soft: #dde9f5;
+  --pt-warn: #96650f;
+  --pt-warn-soft: #f7ead0;
+  --pt-danger: #a84040;
+  --pt-danger-soft: #f6dfdd;
+  --pt-ok: #2f7a4d;
+  --pt-ok-soft: #dcf0e4;
+  --pt-code: #33261d;
+  --pt-mono: "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --pt-sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --pt-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --pt-body-font: var(--pt-sans);
+  --pt-body-fs: 18px;
+  --pt-shadow: 0 10px 30px color-mix(in srgb, var(--pt-text) 7%, transparent);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --pt-bg: #17120e;
+  --pt-surface: #201a15;
+  --pt-surface-alt: #2a221c;
+  --pt-line: #3d332b;
+  --pt-line-strong: #5c4e42;
+  --pt-text: #ede4db;
+  --pt-muted: #b3a598;
+  --pt-faint: #8d7f72;
+  --pt-accent: #ff6a45;
+  --pt-accent-strong: #ff8f70;
+  --pt-accent-soft: #4a2417;
+  --pt-on-accent: #2a0f06;
+  --pt-data: #7db3e8;
+  --pt-data-soft: #1d2c3d;
+  --pt-warn: #e5b565;
+  --pt-warn-soft: #3d301a;
+  --pt-danger: #e58a8a;
+  --pt-danger-soft: #43221f;
+  --pt-ok: #7bcf9d;
+  --pt-ok-soft: #1c3527;
+  --pt-code: #f0d9c9;
+  --pt-shadow: 0 14px 40px color-mix(in srgb, #000 45%, transparent);
+}
+
+/* ============ base ============ */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--pt-bg);
+  color: var(--pt-text);
+  font-family: var(--pt-body-font);
+  font-size: var(--pt-body-fs);
+  line-height: 1.72;
+  text-rendering: optimizeLegibility;
+}
+/* reading settings: font family + size (persisted; see init script) */
+:root[data-font="serif"] { --pt-body-font: var(--pt-serif); }
+:root[data-size="large"] { --pt-body-fs: 20.5px; }
+:root[data-size="large"] .thesis { font-size: 21px; }
+:root[data-size="large"] .section-deck { font-size: 18px; }
+:root[data-size="large"] .callout p { font-size: 17px; }
+:root[data-size="large"] .recap-box p, :root[data-size="large"] .recap-box li { font-size: 17px; }
+:root[data-size="large"] pre.code-block { font-size: 14.5px; }
+:root[data-size="large"] table { font-size: 15.5px; }
+a { color: var(--pt-accent-strong); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--pt-accent); }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--pt-warn); outline-offset: 3px; border-radius: 2px; }
+::selection { background: var(--pt-accent-soft); }
+code, pre, .mono { font-family: var(--pt-mono); }
+
+/* ============ topbar ============ */
+.topbar {
+  position: sticky; top: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  min-height: 54px; padding: 8px 26px;
+  border-bottom: 1px solid var(--pt-line);
+  background: color-mix(in srgb, var(--pt-bg) 90%, transparent);
+  backdrop-filter: blur(12px);
+}
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto;
+  border: 1.5px solid var(--pt-accent); border-radius: 4px;
+  color: var(--pt-accent); font-family: var(--pt-mono); font-weight: 700; font-size: 13px;
+}
+.brand-copy { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.brand-copy strong { font-family: var(--pt-mono); font-size: 12px; letter-spacing: .06em; white-space: nowrap; }
+.brand-copy span { font-size: 11.5px; color: var(--pt-faint); white-space: nowrap; }
+.top-actions { display: flex; align-items: center; gap: 14px; }
+.read-note { font-family: var(--pt-mono); font-size: 11px; color: var(--pt-faint); white-space: nowrap; }
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 6px 11px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-size: 12px;
+}
+.theme-toggle:hover { border-color: var(--pt-accent); color: var(--pt-accent); }
+/* reading settings popover */
+.settings-wrap { position: relative; }
+.aa-toggle {
+  min-height: 36px; min-width: 42px; padding: 6px 10px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-family: var(--pt-serif); font-size: 14.5px; line-height: 1;
+}
+.aa-toggle:hover, .aa-toggle[aria-expanded="true"] { border-color: var(--pt-accent); color: var(--pt-accent); }
+.aa-panel {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 90;
+  display: grid; gap: 14px; width: 232px; padding: 15px;
+  border: 1px solid var(--pt-line); border-radius: 8px;
+  background: var(--pt-surface); box-shadow: var(--pt-shadow);
+}
+.aa-panel[hidden] { display: none; }
+.aa-row { display: grid; gap: 8px; }
+.aa-label { font-family: var(--pt-mono); font-size: 10px; letter-spacing: .16em; color: var(--pt-faint); }
+.aa-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.aa-seg button {
+  min-height: 34px; padding: 5px 8px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-family: var(--pt-sans); font-size: 13px;
+}
+.aa-seg button:hover { border-color: var(--pt-accent); }
+.aa-seg button[aria-pressed="true"] {
+  border-color: var(--pt-accent); background: var(--pt-accent-soft);
+  color: var(--pt-accent-strong); font-weight: 650;
+}
+:root[data-theme="dark"] .sun-icon, :root:not([data-theme="dark"]) .moon-icon { display: none; }
+.theme-toggle svg { width: 15px; height: 15px; }
+.progress-track {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: transparent; pointer-events: none;
+}
+.progress-fill { height: 100%; width: 0; background: var(--pt-accent); transition: width .12s linear; }
+
+/* ============ shell ============ */
+.shell {
+  max-width: 1280px; margin: 0 auto;
+  display: grid; grid-template-columns: 208px minmax(0, 1fr);
+  gap: 44px; padding: 0 30px;
+}
+.toc { align-self: start; position: sticky; top: 78px; padding: 36px 0 60px; }
+.toc-label { margin: 0 0 10px; font-family: var(--pt-mono); font-size: 10.5px; letter-spacing: .16em; color: var(--pt-faint); }
+.toc nav { display: grid; gap: 2px; }
+.toc a {
+  display: grid; grid-template-columns: 24px 1fr; gap: 8px;
+  padding: 7px 8px; border-left: 2px solid transparent;
+  font-family: var(--pt-mono); font-size: 11.5px; line-height: 1.45;
+  color: var(--pt-muted); text-decoration: none;
+  transition: color .15s, border-color .15s;
+}
+.toc a span:first-child { color: var(--pt-faint); }
+.toc a:hover { color: var(--pt-text); }
+.toc a.active { color: var(--pt-accent-strong); border-left-color: var(--pt-accent); }
+.toc a.active span:first-child { color: var(--pt-accent); }
+.toc-foot { margin-top: 22px; padding: 13px 8px 0; border-top: 1px solid var(--pt-line); font-size: 11px; color: var(--pt-faint); line-height: 1.65; }
+main { min-width: 0; max-width: 980px; padding-bottom: 90px; }
+
+/* ============ hero ============ */
+.hero { padding: 84px 0 66px; }
+.eyebrow { margin: 0 0 14px; font-family: var(--pt-mono); font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--pt-accent); }
+h1 {
+  margin: 0 0 22px;
+  font-family: var(--pt-sans); font-weight: 680; letter-spacing: -.04em;
+  font-size: clamp(40px, 5vw, 64px); line-height: 1.04; text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--pt-accent); }
+.thesis { max-width: 640px; margin: 0 0 20px; font-size: 19px; line-height: 1.75; color: var(--pt-muted); }
+.thesis strong { color: var(--pt-text); }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--pt-mono); font-size: 12px; color: var(--pt-faint); }
+.hero-meta .dot { color: var(--pt-accent); }
+
+/* ============ sections ============ */
+.section { padding: 72px 0 34px; scroll-margin-top: 64px; }
+.section + .section { border-top: 1px solid var(--pt-line); }
+.section-heading { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 26px; }
+.section-index { padding-top: 8px; font-family: var(--pt-mono); font-size: 11.5px; letter-spacing: .1em; color: var(--pt-accent); }
+h2 {
+  margin: 0 0 10px;
+  font-family: var(--pt-sans); font-weight: 660; letter-spacing: -.028em;
+  font-size: clamp(27px, 3.2vw, 38px); line-height: 1.14; text-wrap: balance;
+}
+.section-deck { max-width: 640px; margin: 0; font-size: 16.5px; color: var(--pt-muted); }
+
+/* ============ prose ============ */
+.prose { max-width: 700px; }
+.prose p { margin: 0 0 20px; color: var(--pt-muted); }
+.prose p strong, .prose li strong { color: var(--pt-text); font-weight: 650; }
+.prose strong.term { color: var(--pt-accent-strong); }
+h3 { margin: 34px 0 12px; font-family: var(--pt-sans); font-size: 21px; letter-spacing: -.015em; font-weight: 640; line-height: 1.3; }
+h4 { margin: 24px 0 8px; font-family: var(--pt-sans); font-size: 16px; font-weight: 640; }
+.prose ul, .prose ol { margin: 0 0 20px; padding-left: 24px; color: var(--pt-muted); }
+.prose li { margin: 6px 0; }
+.prose li::marker { color: var(--pt-accent); font-family: var(--pt-mono); font-size: .85em; }
+.prose code, .callout code {
+  font-size: .82em; padding: 1.5px 6px; border: 1px solid var(--pt-line);
+  border-radius: 4px; background: var(--pt-surface-alt); color: var(--pt-code);
+  white-space: nowrap;
+}
+.prose code.math { border-style: dashed; white-space: nowrap; }
+p.math-line { margin: 4px 0 22px; text-align: center; max-width: 100%; overflow-x: auto; }
+p.math-line code.math { padding: 6px 14px; font-size: .92em; }
+.go-deeper { font-family: var(--pt-mono); font-size: 12px; color: var(--pt-faint); margin: -6px 0 6px; }
+.go-deeper a { white-space: nowrap; }
+.colophon { font-size: 12.5px; color: var(--pt-faint); margin-top: 28px; line-height: 1.75; }
+code .cm { color: var(--pt-faint); } /* comment */
+
+/* code blocks */
+pre.code-block {
+  overflow-x: auto; margin: 4px 0 24px; padding: 16px 18px;
+  border: 1px solid var(--pt-line); border-left: 3px solid var(--pt-accent);
+  border-radius: 6px; background: var(--pt-surface);
+  font-size: 13px; line-height: 1.62; color: var(--pt-code);
+}
+pre.code-block code { white-space: pre; }
+pre.code-block .out { color: var(--pt-faint); }
+pre.code-block .kw { color: var(--pt-accent-strong); }
+pre.code-block .str { color: var(--pt-ok); }
+pre.code-block .fn { color: var(--pt-data); }
+.code-caption { margin: -18px 0 24px; font-size: 12px; color: var(--pt-faint); font-family: var(--pt-mono); }
+
+/* callouts */
+.callout {
+  margin: 26px 0; padding: 16px 20px 14px;
+  border: 1px solid var(--pt-line); border-radius: 7px;
+  background: var(--pt-surface); box-shadow: var(--pt-shadow);
+}
+.callout h4 { margin: 0 0 7px; font-family: var(--pt-mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; }
+.callout p { margin: 0 0 10px; font-size: 15.5px; color: var(--pt-muted); }
+.callout p:last-child { margin-bottom: 2px; }
+.callout[data-kind="analogy"] { border-left: 3px solid var(--pt-data); }
+.callout[data-kind="analogy"] h4 { color: var(--pt-data); }
+.callout[data-kind="gotcha"] { border-left: 3px solid var(--pt-warn); }
+.callout[data-kind="gotcha"] h4 { color: var(--pt-warn); }
+.callout[data-kind="deeper"] { border-left: 3px solid var(--pt-accent); }
+.callout[data-kind="deeper"] h4 { color: var(--pt-accent-strong); }
+.callout[data-kind="history"] { border-left: 3px solid var(--pt-faint); }
+.callout[data-kind="history"] h4 { color: var(--pt-faint); }
+
+/* widget slots */
+.widget-slot { margin: 34px 0 30px; }
+.widget-slot > figcaption {
+  margin-top: 9px; font-family: var(--pt-mono); font-size: 11.5px;
+  color: var(--pt-faint); line-height: 1.6;
+}
+.widget {
+  border: 1px solid var(--pt-line); border-radius: 9px;
+  background: var(--pt-surface); overflow: hidden;
+  font-family: var(--pt-sans);
+  box-shadow: var(--pt-shadow);
+}
+.widget-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-bottom: 1px solid var(--pt-line);
+  background: var(--pt-surface-alt);
+  font-family: var(--pt-mono); font-size: 11px; letter-spacing: .08em; color: var(--pt-accent);
+}
+.widget-body { padding: 16px; }
+.widget-fallback { padding: 22px; font-family: var(--pt-mono); font-size: 12px; color: var(--pt-faint); }
+
+/* tables */
+.table-wrap { overflow-x: auto; margin: 6px 0 26px; border: 1px solid var(--pt-line); border-radius: 7px; background: var(--pt-surface); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th { padding: 11px 14px; text-align: left; font-family: var(--pt-mono); font-weight: 500; font-size: 11px; letter-spacing: .05em; color: var(--pt-faint); border-bottom: 1px solid var(--pt-line); }
+td { padding: 11px 14px; color: var(--pt-muted); border-bottom: 1px solid var(--pt-line); vertical-align: top; }
+td strong { color: var(--pt-text); }
+tr:last-child td { border-bottom: 0; }
+td code, th code { white-space: nowrap; }
+
+/* svg diagram classes (shared with chapter inline SVGs) */
+.svg-box { fill: var(--pt-surface); stroke: var(--pt-line-strong); stroke-width: 1.2; }
+.svg-accent { fill: var(--pt-accent-soft); stroke: var(--pt-accent); stroke-width: 1.3; }
+.svg-data-fill { fill: var(--pt-data-soft); stroke: var(--pt-data); stroke-width: 1.2; }
+.svg-warn { fill: var(--pt-warn-soft); stroke: var(--pt-warn); stroke-width: 1.2; }
+.svg-text { fill: var(--pt-text); font-family: var(--pt-sans); font-size: 13px; }
+.svg-small { fill: var(--pt-muted); font-family: var(--pt-mono); font-size: 10.5px; }
+.svg-label { fill: var(--pt-accent-strong); font-family: var(--pt-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; }
+.svg-faint { fill: var(--pt-faint); font-family: var(--pt-mono); font-size: 9.5px; }
+.svg-edge { fill: none; stroke: var(--pt-data); stroke-width: 1.7; }
+.svg-edge-back { fill: none; stroke: var(--pt-accent); stroke-width: 1.7; stroke-dasharray: 6 5; }
+.diagram-scroll { overflow-x: auto; }
+.diagram-scroll svg { display: block; max-width: 100%; height: auto; }
+figure.diagram { margin: 28px 0; }
+figure.diagram figcaption { margin-top: 8px; font-family: var(--pt-mono); font-size: 11.5px; color: var(--pt-faint); }
+
+/* recap + footer */
+.recap-box { margin-top: 40px; padding: 24px 26px; border: 1px solid var(--pt-accent); border-radius: 8px; background: var(--pt-accent-soft); }
+.recap-box h3 { margin-top: 0; color: var(--pt-accent-strong); }
+.recap-box p, .recap-box li { color: var(--pt-muted); font-size: 15.5px; }
+footer { margin-top: 76px; padding: 26px 0 10px; border-top: 1px solid var(--pt-line-strong); font-size: 12px; color: var(--pt-faint); }
+.footer-row { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: space-between; font-family: var(--pt-mono); }
+
+/* responsive */
+@media (max-width: 1020px) {
+  .shell { grid-template-columns: 188px minmax(0, 1fr); gap: 30px; padding: 0 22px; }
+}
+@media (max-width: 860px) {
+  :root { --pt-body-fs: 16.5px; }
+  :root[data-size="large"] { --pt-body-fs: 18.5px; }
+  :root[data-size="large"] .thesis { font-size: 18px; }
+  .shell { display: block; padding: 0 18px; }
+  .topbar { padding: 8px 16px; }
+  .read-note, .brand-copy span { display: none; }
+  .toc {
+    position: sticky; top: 53px; z-index: 50;
+    margin: 0 -18px; padding: 7px 18px 8px;
+    border-bottom: 1px solid var(--pt-line);
+    background: color-mix(in srgb, var(--pt-bg) 94%, transparent); backdrop-filter: blur(10px);
+  }
+  .toc-label, .toc-foot { display: none; }
+  .toc nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
+  .toc a { flex: 0 0 auto; display: flex; gap: 6px; padding: 6px 9px; border: 1px solid var(--pt-line); border-radius: 4px; background: var(--pt-surface); }
+  .toc a.active { border-color: var(--pt-accent); }
+  .section { padding-top: 58px; scroll-margin-top: 110px; }
+  .hero { padding-top: 56px; }
+  .section-heading { grid-template-columns: 1fr; gap: 4px; }
+  .section-index { padding-top: 0; }
+}
+@media (max-width: 480px) {
+  .hero { padding-top: 42px; }
+  h1 { font-size: 37px; }
+  .thesis { font-size: 17px; }
+  /* let inline code wrap on phones (pre blocks keep white-space: pre via their own rule) */
+  .prose p code, .callout p code { white-space: normal; overflow-wrap: break-word; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media print {
+  .topbar, .toc, .progress-track, .theme-toggle { display: none !important; }
+  .shell { display: block; max-width: none; padding: 0; }
+  .section { break-inside: avoid-page; padding-top: 30px; }
+  body { background: #fff; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">PT</span>
+    <div class="brand-copy">
+      <strong>PYTORCH INTERNALS 101</strong>
+      <span>the whole machine, fast</span>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="read-note">≈15 MIN READ · SPEED RUN</span>
+    <div class="settings-wrap">
+      <button class="aa-toggle" id="aa-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="aa-panel" aria-label="Reading settings: font family and size">
+        <span aria-hidden="true">Aa</span>
+      </button>
+      <div class="aa-panel" id="aa-panel" hidden>
+        <div class="aa-row">
+          <span class="aa-label" id="aa-font-label">FONT FAMILY</span>
+          <div class="aa-seg" role="group" aria-labelledby="aa-font-label">
+            <button type="button" data-set="font" data-val="sans">Sans</button>
+            <button type="button" data-set="font" data-val="serif">Serif</button>
+          </div>
+        </div>
+        <div class="aa-row">
+          <span class="aa-label" id="aa-size-label">FONT SIZE</span>
+          <div class="aa-seg" role="group" aria-labelledby="aa-size-label">
+            <button type="button" data-set="size" data-val="normal">Normal</button>
+            <button type="button" data-set="size" data-val="large">Large</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle light/dark theme">
+      <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+      <span id="theme-label">dark</span>
+    </button>
+  </div>
+  <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progress-fill"></div></div>
+</header>
+
+<div class="shell">
+  <aside class="toc" aria-label="Table of contents">
+    <p class="toc-label">CONTENTS</p>
+    <nav id="toc-nav">
+      <a href="#hero" class="active"><span>00</span><span>The thesis</span></a>
+      <a href="#layers"><span>01</span><span>The machine</span></a>
+      <a href="#tensors"><span>02</span><span>Tensors are views</span></a>
+      <a href="#dispatch"><span>03</span><span>One op's journey</span></a>
+      <a href="#autograd"><span>04</span><span>The tape</span></a>
+      <a href="#loop"><span>05</span><span>The loop</span></a>
+      <a href="#deeper"><span>06</span><span>Go deeper</span></a>
+    </nav>
+    <div class="toc-foot">Widgets are live — click and step through them. Want the 60-minute version? <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html" target="_blank" rel="noopener">How PyTorch Works</a>.</div>
+  </aside>
+
+  <main id="book">
+<section class="hero" id="hero" aria-labelledby="hero-title">
+  <p class="eyebrow">Ebook · Interactive · The speed run</p>
+  <h1 id="hero-title">PyTorch is a <em>tape recorder</em><br>around a math library.</h1>
+  <p class="thesis"><strong>That one sentence is the whole machine</strong> — and this book proves it in about fifteen minutes. A library of number blocks (tensors), a router that runs each operation on whatever hardware you have (the dispatcher), and a recorder that writes down every operation so it can replay them backwards to compute gradients (the tape). Three ideas; everything else is scale and conveniences. If you have solid CS fundamentals and no ML background, you are exactly the intended reader.</p>
+  <div class="hero-meta">
+    <span><span class="dot">◆</span> ≈15 minutes end to end</span>
+    <span><span class="dot">◆</span> 3 live widgets, zero servers</span>
+    <span><span class="dot">◆</span> deep links when you want the 60-minute version</span>
+  </div>
+</section>
+
+<section class="section" id="layers">
+  <div class="section-heading">
+    <span class="section-index">01 / THE MACHINE</span>
+    <div>
+      <h2 id="layers-title">Three Layers, One Machine</h2>
+      <p class="section-deck">PyTorch is a tape recorder wrapped around a math library: a thin Python skin, a routing table, and kernels that own the bytes.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Strip the branding and <code>import torch</code> gives you three layers. The <strong>Python API</strong> is a thin skin — <code>torch.Tensor</code>, <code>a + b</code>, <code>torch.nn</code> — that mostly parses arguments and hands them down. The <strong>dispatcher</strong> is a routing table, one per operator: it inspects the tensors in each call and picks an implementation. The <strong>kernels</strong> are compiled functions that loop over raw memory to do the actual arithmetic — one set per device, because CPU, CUDA GPUs, and Apple's MPS each want different code.</p>
+    <p>The layering earns its keep twice. One op name runs anywhere: the same <code>a + b</code> reaches a laptop CPU or a data-center GPU unchanged, because routing is decided per call, by the tensors themselves. And autograd — the derivative machinery training feeds on — plugs in between API and kernel as a wrapper: when a tensor is recording gradients, an extra layer takes notes, then calls the real kernel. Execution stays eager throughout: each op runs the moment its line is reached, like any other scripting-language call.</p>
+    <figure class="diagram">
+      <div class="diagram-scroll">
+        <svg viewBox="0 0 560 248" role="img" aria-label="PyTorch in three layers over a hardware strip">
+          <rect class="svg-accent" x="150" y="12" width="260" height="44" rx="8"/>
+          <text class="svg-label" x="280" y="31" text-anchor="middle">PYTHON API</text>
+          <text class="svg-small" x="280" y="47" text-anchor="middle">thin skin — parse args, hand down</text>
+          <line class="svg-edge" x1="280" y1="56" x2="280" y2="72"/>
+          <rect class="svg-box" x="150" y="72" width="260" height="44" rx="8"/>
+          <text class="svg-label" x="280" y="91" text-anchor="middle">DISPATCHER</text>
+          <text class="svg-small" x="280" y="107" text-anchor="middle">one routing table per operator</text>
+          <line class="svg-edge" x1="280" y1="116" x2="280" y2="132"/>
+          <rect class="svg-box" x="150" y="132" width="260" height="44" rx="8"/>
+          <text class="svg-label" x="280" y="151" text-anchor="middle">KERNELS</text>
+          <text class="svg-small" x="280" y="167" text-anchor="middle">the loops that touch memory</text>
+          <line class="svg-edge" x1="280" y1="176" x2="280" y2="192"/>
+          <rect class="svg-box" x="150" y="192" width="260" height="36" rx="8"/>
+          <text class="svg-faint" x="280" y="214" text-anchor="middle">HARDWARE — CPU RAM · GPU VRAM</text>
+          <text class="svg-faint" x="424" y="98">autograd wraps in here ↓</text>
+        </svg>
+      </div>
+      <figcaption>Every call goes down through the dispatcher to a kernel; every result comes back up as a new tensor.</figcaption>
+    </figure>
+    <p>The rest of this run walks the stack once: what a tensor is (02), one op's trip through the router (03), the tape autograd writes on the way (04), and the four-line loop that trains everything (05).</p>
+    <p>Takeaway: <strong>thin Python skin, one routing table, kernels that own the bytes.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#big-picture" target="_blank" rel="noopener">the long book's chapter on the big picture</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="tensors">
+  <div class="section-heading">
+    <span class="section-index">02 / TENSORS</span>
+    <div>
+      <h2 id="tensors-title">A Tensor Is Metadata Over Raw Memory</h2>
+      <p class="section-deck">One flat block of bytes plus a reading order — shape, dtype, strides, offset — and nothing else.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Every tensor is a pointer to a <strong>Storage</strong> — one flat, untyped block of memory — plus four pieces of metadata: <strong>shape</strong> (size of each axis), <strong>dtype</strong> (bytes per element and how to interpret them), a <strong>stride</strong> per axis (elements to jump along it), and a <strong>storage offset</strong> (where the view starts). No per-element headers, no lookups — an element's location is pure arithmetic:</p>
+    <p class="math-line"><code class="math">element_offset = storage_offset + Σ index[i] · stride[i]</code></p>
+    <p>Take a 3×4 float32 tensor, built row-major so memory holds 0, 1, 2, …, 11 in order:</p>
+    <pre class="code-block"><code>&gt;&gt;&gt; a = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+&gt;&gt;&gt; a.stride(), a.storage_offset()
+# → ((4, 1), 0)</code></pre>
+    <p>Strides <code>(4, 1)</code>: down a row skips 4 elements, right a column skips 1. So <code>a[1, 2]</code> lands at <code>1·4 + 2·1</code> — element 6, byte 24. Every kernel from section 01 finds its bytes with this exact formula. Poke the pairing yourself:</p>
+    <figure class="widget-slot"><div class="widget" data-widget="stride-explorer"></div><figcaption>A 3×4 tensor wired to its 12 storage slots — hover cells, press ops, watch what moves.</figcaption></figure>
+    <p>Transposes are where the design shows off. <code>.t()</code> moves zero bytes: it swaps the stride tuple to <code>(1, 4)</code> and keeps the same <code>data_ptr</code>, so the same twelve floats are read column-first. Slicing works the same knob — the second column <code>a[:, 1]</code> is a view at <code>storage_offset</code> 1 with stride <code>(4,)</code>, still jumping row to row. Views share storage, so writing through one writes the base tensor.</p>
+    <p>Reshaping follows the same economy. <code>.view()</code> re-tags the storage with new strides and never copies — legal only when the current layout can express the new shape. <code>.reshape()</code> returns a view when possible and <strong>silently copies</strong> when not. What decides is <strong>contiguity</strong>: strides matching plain row-major order, last axis fastest. <code>.t()</code> and column slices break it; <code>.contiguous()</code> repairs it by copying.</p>
+    <p>Byte budgets are then head arithmetic: <strong>bytes = numel × element_size</strong>. float32 is 4 bytes, so a million floats is 4 MB; a 7-billion-parameter model in bf16 (2 bytes) weighs 14 GB — which is why dtype is a deployment decision, not a formality.</p>
+    <p>Takeaway: <strong>tensor = storage + shape + strides + offset; transposes are metadata edits.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#tensors" target="_blank" rel="noopener">the long book's chapter on tensors</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="dispatch">
+  <div class="section-heading">
+    <span class="section-index">03 / ONE OP</span>
+    <div>
+      <h2 id="dispatch-title">What <code>a + b</code> Actually Does</h2>
+      <p class="section-deck">Five hops from Python to silicon — and only one of them decides anything.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p><code>a + b</code> calls <code>Tensor.__add__</code>, which lands in an auto-generated C++ binding: parse the arguments, release the GIL, call the operator. Every operator — <code>add</code>, <code>matmul</code>, <code>relu</code> — is declared once in ATen, PyTorch's operator library, by a schema fixing its name and signature. The whole of <code>a + b</code> is:</p>
+    <p class="math-line"><code class="math">aten::add.Tensor(Tensor self, Tensor other, *, Scalar alpha=1) -&gt; Tensor</code></p>
+    <p>Below the schema sits the <strong>dispatcher</strong>: per operator, a table of function pointers indexed by <strong>dispatch key</strong> — a vtable per operator, not per class. Each tensor argument contributes its key set (a backend key from its device, plus functionality keys like Autograd); the sets union, and the highest-priority key picks the row. Autograd keys outrank backend keys, so if either input records gradients, that row runs first: it writes an <code>AddBackward0</code> node on the tape (section 04), then redispatches with Autograd excluded, and the same lookup lands on the real kernel. Autograd never reimplements math — it takes notes, then calls the kernel that does. The table itself is a registration grid, one cell per (operator, dispatch key); an exact cell beats a catch-all, and a catch-all beats a column-wide fallback.</p>
+    <p>Which backend row runs is the tensors' own business: each carries its device in its metadata, and its storage lives in that device's memory. There is no global "current device" flag for ops. Mixing devices in one call errors, and <code>.to('cuda')</code> is an explicit copy. Ride along:</p>
+    <figure class="widget-slot"><div class="widget" data-widget="dispatch-journey"></div><figcaption>One op, every hop — press run and follow <code>a + b</code> from Python to kernel and back.</figcaption></figure>
+    <p>Takeaway: <strong>every op is a table lookup; which row runs is the tensors' choice.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#dispatch" target="_blank" rel="noopener">the long book's chapter on dispatch</a> unpacks this at full length; ezyang's <a href="https://blog.ezyang.com/2020/09/lets-talk-about-the-pytorch-dispatcher/" target="_blank" rel="noopener">dispatcher post</a> is the canonical source.</p>
+  </div>
+</section>
+
+
+<section class="section" id="autograd">
+  <div class="section-heading">
+    <span class="section-index">04 / THE TAPE</span>
+    <div>
+      <h2 id="autograd-title">The Tape, End to End</h2>
+      <p class="section-deck">The forward pass takes notes; backward() replays them in reverse — one sweep, every gradient.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Training adjusts a model's <strong>parameters</strong> to push a <strong>loss</strong> — a scalar scoring how wrong the model is — downward, and the correct nudge for each parameter is the derivative of the loss with respect to it. A model has millions of parameters, and <strong>reverse-mode autodiff</strong> produces all of those derivatives in a single backward sweep: while ops run, record each one's local derivative; afterward, apply the chain rule in reverse — multiply along edges, sum where paths merge.</p>
+    <p>Recording switches on per tensor. Give one <code>requires_grad=True</code> and every op touching it writes a node — the <code>grad_fn</code> — holding that op's backward formula plus links to the nodes that produced its inputs. Chained together, the nodes are the <strong>tape</strong>. It records the ops that actually executed — the taken branch of an <code>if</code>, the real loop count — and it is rebuilt from scratch every iteration: <em>what you run is what you differentiate</em>.</p>
+    <pre class="code-block"><code>&gt;&gt;&gt; x = torch.tensor(2.0, requires_grad=True)   # recording leaf
+&gt;&gt;&gt; y = 3*x**2 + 2*x
+&gt;&gt;&gt; y
+# → tensor(16., grad_fn=&lt;AddBackward0&gt;)
+&gt;&gt;&gt; y.backward(); x.grad
+# → tensor(14.)</code></pre>
+    <p>The whole mechanism is that expression with named intermediates t = x², a = 3t, c = 2x:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>expression</th><th>forward value</th><th>grad_fn node</th><th>backward work</th></tr></thead>
+      <tbody>
+        <tr><td><code>x</code> (leaf)</td><td>2.0</td><td>—</td><td>AccumulateGrad writes <code>x.grad = 14</code></td></tr>
+        <tr><td><code>t = x**2</code></td><td>4.0</td><td><code>PowBackward0</code></td><td>d(x²)/dx = 2x = 4; receives 1·3, passes 3·4 = 12 toward x</td></tr>
+        <tr><td><code>a = 3*t</code></td><td>12.0</td><td><code>MulBackward0</code></td><td>passes 1·3 = 3 toward t</td></tr>
+        <tr><td><code>c = 2*x</code></td><td>4.0</td><td><code>MulBackward0</code></td><td>passes 1·2 = 2 toward x</td></tr>
+        <tr><td><code>y = a + c</code></td><td>16.0</td><td><code>AddBackward0</code></td><td>routes the incoming grad 1 to both inputs</td></tr>
+      </tbody>
+    </table></div>
+    <p><code>y.backward()</code> seeds y with 1.0 and the engine walks root to leaves, each node multiplying its local derivative into whatever arrives. x sits at a fork — reached through x² and through 2x — so its contributions, 3·4 = 12 and 1·2 = 2, sum: <code class="math">x.grad = 14 = dy/dx = 6x + 2</code>. Nobody coded that formula anywhere; it composes itself out of local facts. Step it by hand:</p>
+    <figure class="widget-slot"><div class="widget" data-widget="autograd-stepper"></div><figcaption>y = 3x² + 2x as a live tape — step forward, step backward, drag x.</figcaption></figure>
+    <p>Two consequences of the leaf's <code>AccumulateGrad</code> node. It does <code>x.grad += incoming</code>, never assignment — so nothing clears <code>.grad</code> on its own, which is why <code>optimizer.zero_grad()</code> exists, and why accumulating gradients across micro-batches (backward per micro-batch, one update) is free. Only leaves get a <code>.grad</code> at all — intermediates like t stay <code>None</code> unless you ask with <code>t.retain_grad()</code>. And the tape has two off switches: <code>torch.no_grad()</code> runs ops without recording; <code>x.detach()</code> returns the same storage severed from the graph — the value without the history.</p>
+    <p>Takeaway: <strong>forward writes the tape; backward replays it — multiplying along edges, summing at forks, += into leaves.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#autograd" target="_blank" rel="noopener">the long book's chapter on autograd</a> unpacks this at full length; the <a href="https://docs.pytorch.org/docs/stable/notes/autograd.html" target="_blank" rel="noopener">official autograd notes</a> are the source of record.</p>
+  </div>
+</section>
+
+
+<section class="section" id="loop">
+  <div class="section-heading">
+    <span class="section-index">05 / THE LOOP</span>
+    <div>
+      <h2 id="loop-title">Four Lines Train Everything</h2>
+      <p class="section-deck">The whole training regime is one loop: zero, forward, backward, nudge.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Everything above assembles into four lines. A model is an <code>nn.Module</code> — a tree of submodules holding the parameter tensors as recording leaves; calling <code>model(xb)</code> runs ordinary Python that issues ops. An optimizer is an update rule aimed at those parameters.</p>
+    <pre class="code-block"><code>for xb, yb in loader:
+    optimizer.zero_grad()            # clear last step's .grad (set to None)
+    loss = loss_fn(model(xb), yb)    # forward: ops run eagerly, tape written
+    loss.backward()                  # engine: root→leaves, .grad += on leaves
+    optimizer.step()                 # read .grad, nudge parameters in place</code></pre>
+    <p>Read it as forget, predict-and-record, critique, correct. Zeroing exists because of section 04's <code>+=</code>. The forward pass computes the loss and writes the tape. Backward fills <code>.grad</code> on every parameter. Step reads those gradients and updates the parameter tensors in place. SGD, Adam, AdamW differ only in the arithmetic of that last line.</p>
+    <p>A GPU changes none of the lines. Move model and data with <code>.to('cuda')</code> and the same ops dispatch to wider kernels over faster memory. Two things are mechanically different. Launches are async: each op is queued on a per-device stream and executes in order — an unawaited promise — so your Python races ahead, and you actually wait only at <code>.item()</code>, <code>.cpu()</code>, or a print, all of which force a sync. And every launch costs CPU time, so on small models launch overhead dominates and the GPU loses to the CPU. <code>torch.compile</code> is the escape hatch: trace the Python once, emit fused kernels, and both overheads shrink.</p>
+    <p>Takeaway: <strong>training is a loop — zero, forward, backward, nudge; GPUs make it wide and async, not different.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#training" target="_blank" rel="noopener">the long book's chapter on the training loop</a> unpacks this at full length, with <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#gpu" target="_blank" rel="noopener">GPUs</a> and <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#optimizers" target="_blank" rel="noopener">optimizers</a> in sibling chapters — and its in-page mini-torch widget is a real autodiff engine, in JavaScript, training a network on the page.</p>
+  </div>
+</section>
+
+
+<section class="section" id="deeper">
+  <div class="section-heading">
+    <span class="section-index">06 / GO DEEPER</span>
+    <div>
+      <h2 id="deeper-title">Where to Go Next</h2>
+      <p class="section-deck">The long book, chapter by chapter, plus the primary sources.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>This run gave you the whole machine in outline. The long book gives you each part in full:</p>
+    <ul>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#big-picture" target="_blank" rel="noopener">The big picture</a> — the stack and eager execution</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#tensors" target="_blank" rel="noopener">Tensors</a> — storage, strides, views, dtypes</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#dispatch" target="_blank" rel="noopener">Dispatch</a> — schemas, keys, kernel selection</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#autograd" target="_blank" rel="noopener">Autograd</a> — the tape, leaves, and the engine</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#module" target="_blank" rel="noopener">Modules</a> — nn.Module, parameters, state</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#training" target="_blank" rel="noopener">Training</a> — the loop line by line, plus mini-torch</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#gpu" target="_blank" rel="noopener">GPUs</a> — streams, async launches, memory</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html#optimizers" target="_blank" rel="noopener">Optimizers</a> — SGD through AdamW, the actual math</li>
+    </ul>
+    <p>Primary sources: the <a href="https://docs.pytorch.org/docs/stable/notes/autograd.html" target="_blank" rel="noopener">official autograd notes</a>; ezyang's <a href="https://blog.ezyang.com/2019/05/pytorch-internals/" target="_blank" rel="noopener">PyTorch Internals</a> and his <a href="https://blog.ezyang.com/2020/09/lets-talk-about-the-pytorch-dispatcher/" target="_blank" rel="noopener">dispatcher post</a>; the <a href="https://docs.pytorch.org/tutorials/intermediate/torch_compile_tutorial.html" target="_blank" rel="noopener">torch.compile tutorial</a>; the <a href="https://docs.pytorch.org/tutorials/beginner/deep_learning_60min_blitz.html" target="_blank" rel="noopener">60-minute blitz</a> for hands-on practice; and <a href="https://github.com/karpathy/micrograd" target="_blank" rel="noopener">micrograd</a>, a tiny autograd engine that is section 04 as runnable code.</p>
+    <p>From here on, <code>loss.backward()</code> is a mechanism, not an incantation.</p>
+  </div>
+</section>
+
+    <footer>
+      <div class="footer-row">
+        <span>PYTORCH INTERNALS 101 · 2026</span>
+        <span>single-file HTML · no trackers · no network calls</span>
+      </div>
+      <p style="margin-top:14px; line-height:1.8">Fact-checked against the <a href="https://docs.pytorch.org/docs/stable/index.html" target="_blank" rel="noopener">PyTorch documentation</a>, the PyTorch source on GitHub, and Edward Z. Yang's <a href="https://blog.ezyang.com/2019/05/pytorch-internals/" target="_blank" rel="noopener">PyTorch Internals</a> posts. Behavior examples verified on PyTorch 2.10. Errors are mine — the mechanisms belong to the PyTorch team. The full-length companion is <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html" target="_blank" rel="noopener">How PyTorch Works</a>.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+/* theme toggle */
+(() => {
+  const btn = document.getElementById('theme-toggle');
+  const label = document.getElementById('theme-label');
+  const sync = () => { label.textContent = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; };
+  btn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('ptw-theme', next); } catch (_) {}
+    document.dispatchEvent(new CustomEvent('ptw-theme', { detail: { theme: next } }));
+    sync();
+  });
+  sync();
+})();
+
+/* scroll spy + progress */
+(() => {
+  const links = Array.from(document.querySelectorAll('#toc-nav a'));
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const sections = Array.from(map.keys()).map(id => document.getElementById(id)).filter(Boolean);
+  const fill = document.getElementById('progress-fill');
+  let ticking = false;
+  const onScroll = () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      const y = window.scrollY + 140;
+      let active = sections[0];
+      for (const s of sections) if (s.offsetTop <= y) active = s;
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + active.id));
+      const h = document.documentElement;
+      const p = h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight);
+      fill.style.width = (p * 100).toFixed(2) + '%';
+    });
+  };
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+
+/* reading settings: font family + size */
+(() => {
+  const wrap = document.querySelector('.settings-wrap');
+  if (!wrap) return;
+  const btn = document.getElementById('aa-toggle');
+  const panel = document.getElementById('aa-panel');
+  const segs = Array.from(panel.querySelectorAll('.aa-seg button'));
+  const sync = () => {
+    const d = document.documentElement.dataset;
+    segs.forEach(b => b.setAttribute('aria-pressed', String(d[b.dataset.set] === b.dataset.val)));
+  };
+  const close = () => { panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = panel.hidden;
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) { sync(); (segs.find(b => b.getAttribute('aria-pressed') === 'true') || segs[0]).focus(); }
+  });
+  segs.forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.set, v = b.dataset.val;
+    document.documentElement.dataset[k] = v;
+    try { localStorage.setItem(k === 'font' ? 'ptw-font' : 'ptw-size', v); } catch (_) {}
+    sync();
+  }));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) { close(); btn.focus(); } });
+  document.addEventListener('click', e => { if (!panel.hidden && !wrap.contains(e.target)) close(); });
+  sync();
+})();
+
+/* mount widgets */
+(() => {
+  const mountAll = () => {
+    document.querySelectorAll('.widget[data-widget]').forEach(el => {
+      if (el.dataset.mounted) return;
+      const name = el.dataset.widget;
+      const fn = window.PT_WIDGETS && window.PT_WIDGETS[name];
+      if (typeof fn === 'function') { fn(el); el.dataset.mounted = '1'; }
+      else if (!el.firstChild) { el.innerHTML = '<div class="widget-fallback">widget "' + name + '" could not load</div>'; }
+    });
+  };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', mountAll);
+  else mountAll();
+})();
+</script>
+<script data-widget-src="stride-explorer">
+/* W1 "stride-explorer" — "How PyTorch Works", ch 2 (tensors).
+   A 12-element float32 tensor whose ops you apply one at a time. Every op
+   rewrites only metadata (shape, strides, storage_offset) until a copy is
+   forced (.contiguous(), or a non-contiguous .reshape()). Semantics verified
+   against an independent node check (85 assertions). Vanilla ES2018, no deps. */
+(function () {
+  'use strict';
+  window.PT_WIDGETS = window.PT_WIDGETS || {};
+
+  window.PT_WIDGETS['stride-explorer'] = function mount(root) {
+    if (root.dataset.mounted) return; // must be safe to call once
+    root.dataset.mounted = '1';
+
+    var el = function (tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    };
+
+    /* ---------- scoped styles: only --pt-* design tokens ---------- */
+    var styleEl = el('style');
+    styleEl.textContent = [
+      '.pt-stride *{box-sizing:border-box}',
+      '.pt-stride button{font-family:var(--pt-mono)}',
+      '.pt-stride button:focus-visible,.pt-stride summary:focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}',
+      '.se-controls{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}',
+      '.se-btn{font-size:12px;font-weight:600;line-height:1;letter-spacing:.01em;padding:7px 10px;border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface);color:var(--pt-text);cursor:pointer}',
+      '.se-btn:hover:not(:disabled){border-color:var(--pt-accent);color:var(--pt-accent)}',
+      '.se-btn:active:not(:disabled){transform:translateY(1px)}',
+      '.se-btn:disabled{opacity:.35;cursor:not-allowed}',
+      '.se-status{font:12px/1.6 var(--pt-mono);color:var(--pt-muted);min-height:20px;margin:0 0 12px;white-space:pre-wrap}',
+      '.se-status b{font-weight:600;color:var(--pt-data)}',
+      '.se-err{display:none;border:1px solid var(--pt-danger);border-left-width:4px;border-radius:6px;background:var(--pt-danger-soft);color:var(--pt-danger);padding:8px 10px;font:12px/1.5 var(--pt-mono);margin:0 0 12px;white-space:pre-wrap}',
+      '.se-err.show{display:block}',
+      '.se-err .se-hint{display:block;margin-top:4px;color:var(--pt-muted)}',
+      '.se-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:12px}',
+      '@media (max-width:760px){.se-panels{grid-template-columns:minmax(0,1fr)}}',
+      '.se-col{display:flex;flex-direction:column;gap:12px;min-width:0}',
+      '.se-panel{border:1px solid var(--pt-line);border-radius:8px;padding:10px;background:var(--pt-surface)}',
+      '.se-plabel{font:700 10px/1.3 var(--pt-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pt-faint);margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}',
+      '.se-grid{display:grid;gap:4px;max-width:380px}',
+      '.se-cell{font-size:13px;font-weight:600;line-height:1;padding:9px 2px;border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface-alt);color:var(--pt-text);cursor:pointer}',
+      '.se-cell:hover,.se-cell:focus-visible{border-color:var(--pt-accent);color:var(--pt-accent)}',
+      '.se-cell.sel{background:var(--pt-accent-soft);border-color:var(--pt-accent);color:var(--pt-accent);box-shadow:inset 0 0 0 1px var(--pt-accent)}',
+      '.se-mem{display:flex;flex-direction:column;gap:10px}',
+      '.se-stripwrap{border:1px dashed var(--pt-line);border-radius:8px;padding:8px}',
+      '.se-stripwrap.active{border-style:solid;border-color:var(--pt-line-strong)}',
+      '.se-stripwrap.stale{opacity:.55;filter:grayscale(1)}',
+      '.se-strip{display:grid;gap:2px}',
+      '.se-mcell{border:1px solid var(--pt-line);border-radius:4px;background:var(--pt-surface);text-align:center;padding:3px 0 2px;min-width:0}',
+      '.se-mcell .v{display:block;font:600 12px/1.3 var(--pt-mono);color:var(--pt-text)}',
+      '.se-mcell .b{display:block;font:9px/1.3 var(--pt-mono);color:var(--pt-faint)}',
+      '.se-mcell.hit{background:var(--pt-data-soft);border-color:var(--pt-data);box-shadow:inset 0 0 0 1px var(--pt-data)}',
+      '.se-mcell.hit .v{color:var(--pt-data)}',
+      '.se-mcell.ghost{opacity:.28}',
+      '.se-marks{display:grid;gap:2px;margin-top:3px}',
+      '.se-marks i{display:block;height:8px}',
+      '.se-marks .off::before{content:"";display:block;margin:0 auto;width:0;height:0;border:4px solid transparent;border-bottom-color:var(--pt-accent)}',
+      '.se-copybadge{font:700 9px/1 var(--pt-mono);letter-spacing:.1em;color:var(--pt-warn);background:var(--pt-warn-soft);border:1px solid var(--pt-warn);border-radius:4px;padding:2px 5px}',
+      '.se-kv{display:flex;justify-content:space-between;gap:8px;font:12px/2 var(--pt-mono)}',
+      '.se-kv span{color:var(--pt-muted)}',
+      '.se-kv b{font-weight:600;color:var(--pt-text)}',
+      '.se-badge{font:700 10px/1 var(--pt-mono);letter-spacing:.08em;border-radius:4px;padding:3px 6px}',
+      '.se-badge.ok{color:var(--pt-ok);background:var(--pt-ok-soft);border:1px solid var(--pt-ok)}',
+      '.se-badge.warn{color:var(--pt-warn);background:var(--pt-warn-soft);border:1px solid var(--pt-warn)}',
+      '.se-code{margin-top:12px;background:var(--pt-surface-alt);border:1px solid var(--pt-line);border-radius:6px;padding:8px 10px;font:12px/1.6 var(--pt-mono);color:var(--pt-code);white-space:pre-wrap;word-break:break-word}',
+      '.se-code .lbl{color:var(--pt-faint)}',
+      '.se-teach{margin-top:14px;border-top:1px solid var(--pt-line);padding-top:10px}',
+      '.se-teach summary{cursor:pointer;font:700 11px/1.4 var(--pt-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--pt-accent)}',
+      '.se-teach ul{margin:8px 0 0;padding-left:18px;font:13px/1.55 var(--pt-sans);color:var(--pt-muted)}',
+      '.se-teach li+li{margin-top:4px}',
+      '.se-teach code{font:12px var(--pt-mono);color:var(--pt-text)}',
+      '@media (prefers-reduced-motion:reduce){.pt-stride *{transition:none!important;animation:none!important}}'
+    ].join('\n');
+    root.appendChild(styleEl);
+
+    /* ---------- model (verified by /tmp/pt-stride-check.js) ---------- */
+    var ARANGE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    var st = {
+      buffers: [], // [{data:[...], copy:bool}] — last is active
+      view: null,  // {shape:[..], strides:[..], offset:int}
+      chain: [],   // ops appended after torch.arange(12)
+      sel: null,   // selected logical index [i] or [i,j]
+      msg: '',     // last narration
+      err: null    // {text, hint}
+    };
+    var hov = null; // hover/focus preview index (memory highlight only)
+
+    function buf() { return st.buffers[st.buffers.length - 1]; }
+    function numel(v) { var n = 1; for (var i = 0; i < v.shape.length; i++) n *= v.shape[i]; return n; }
+    function contigStrides(shape) {
+      var s = [], acc = 1;
+      for (var i = shape.length - 1; i >= 0; i--) { s[i] = acc; acc *= shape[i]; }
+      return s;
+    }
+    function isContig(v) {
+      var c = contigStrides(v.shape);
+      if (v.strides.length !== c.length) return false;
+      for (var i = 0; i < c.length; i++) if (c[i] !== v.strides[i]) return false;
+      return true;
+    }
+    function memIdx(v, idx) {
+      var m = v.offset;
+      for (var i = 0; i < v.shape.length; i++) m += idx[i] * v.strides[i];
+      return m;
+    }
+    function eachLogical(v, fn) {
+      if (v.shape.length === 1) { for (var i = 0; i < v.shape[0]; i++) fn([i]); return; }
+      for (var r = 0; r < v.shape[0]; r++) for (var c = 0; c < v.shape[1]; c++) fn([r, c]);
+    }
+    function fmt(a) { return '[' + a.join(', ') + ']'; }
+    function say(m) { st.msg = m; st.err = null; }
+
+    function copyInto(shape) { // new contiguous buffer holding the logical values
+      var src = buf(), v = st.view, data = [];
+      eachLogical(v, function (idx) { data.push(src.data[memIdx(v, idx)]); });
+      st.buffers.push({ data: data, copy: true });
+      if (st.buffers.length > 3) st.buffers.shift(); // keep the panel bounded
+      st.view = { shape: shape, strides: contigStrides(shape), offset: 0 };
+    }
+
+    var ERR_VIEW = {
+      text: "RuntimeError: view size is not compatible with input tensor's size and stride (at least one dimension spans across two contiguous subspaces). Use .reshape(...) instead.",
+      hint: 'view() never copies, so the flat layout must already match. Click .contiguous() first (it copies into row-major storage), then .view(-1) will work.'
+    };
+
+    function applyOp(action) {
+      var v = st.view;
+      if (action === 'reset') {
+        st.buffers = [{ data: ARANGE.slice(), copy: false }];
+        st.view = { shape: [3, 4], strides: [4, 1], offset: 0 };
+        st.chain = ['view(3, 4)']; st.sel = null;
+        say('reset → shape [3, 4], strides [4, 1], offset 0 — fresh arange(12) storage');
+        return;
+      }
+      if (action === 't' || action === 'permute') {
+        st.view = { shape: [v.shape[1], v.shape[0]], strides: [v.strides[1], v.strides[0]], offset: v.offset };
+        st.chain.push(action === 't' ? 't()' : 'permute(1, 0)');
+        var nm = action === 't' ? '.t()' : '.permute(1, 0)';
+        say(nm + ' → shape ' + fmt(st.view.shape) + ', strides ' + fmt(st.view.strides) + ' — metadata swap only, zero bytes moved');
+        return;
+      }
+      if (action === 'slice') {
+        var n = Math.min(v.shape[0], 3) - 1; // t[1:3] on dim 0
+        st.view = { shape: [n, v.shape[1]], strides: v.strides.slice(), offset: v.offset + 1 * v.strides[0] };
+        st.chain.push('[1:3]');
+        say('t[1:3] → offset += 1·' + v.strides[0] + ' = ' + st.view.offset + ', shape ' + fmt(st.view.shape) + ' — same memory, narrower window');
+        return;
+      }
+      if (action === 'view') {
+        if (!isContig(v)) { st.err = ERR_VIEW; return; }
+        st.view = { shape: [numel(v)], strides: [1], offset: v.offset };
+        st.chain.push('view(-1)');
+        say('.view(-1) → contiguous, so it stays a view: shape [' + numel(v) + '], strides [1], offset ' + st.view.offset);
+        return;
+      }
+      if (action === 'reshape') {
+        if (numel(v) !== 12) {
+          st.err = {
+            text: "RuntimeError: shape '[4, 3]' is invalid for input of size " + numel(v),
+            hint: 'The active view holds ' + numel(v) + ' elements; reshape(4, 3) needs 12. reset and try it on the full tensor.'
+          };
+          return;
+        }
+        if (isContig(v)) {
+          st.view = { shape: [4, 3], strides: [3, 1], offset: v.offset };
+          st.chain.push('reshape(4, 3)');
+          say('.reshape(4, 3) → view is contiguous: free view, no copy');
+        } else {
+          copyInto([4, 3]);
+          st.chain.push('reshape(4, 3)');
+          say('.reshape(4, 3) → not contiguous, so PyTorch silently copies into a new storage (COPY badge below)');
+        }
+        return;
+      }
+      if (action === 'contiguous') {
+        if (isContig(v)) {
+          st.chain.push('contiguous()');
+          say('.contiguous() → already contiguous: returns the same tensor, no copy');
+        } else {
+          copyInto(v.shape.slice());
+          st.chain.push('contiguous()');
+          say('.contiguous() → copies the logical values into a fresh row-major storage of ' + numel(st.view) + ' elements');
+        }
+      }
+    }
+
+    function clampSel() {
+      var v = st.view;
+      if (!st.sel) return;
+      var s = st.sel;
+      if (s.length !== v.shape.length || s[0] >= v.shape[0] || (v.shape.length === 2 && s[1] >= v.shape[1])) st.sel = null;
+    }
+
+    function formula(sel) {
+      var v = st.view, m = memIdx(v, sel), terms = [];
+      for (var i = 0; i < sel.length; i++) terms.push(sel[i] + '·' + v.strides[i]);
+      return 't[' + sel.join(', ') + '] → ' + terms.join(' + ') + ' + ' + v.offset + ' = offset ' + m +
+        '  (byte ' + (m * 4) + ', value ' + buf().data[m] + ')';
+    }
+
+    /* ---------- static skeleton ---------- */
+    root.appendChild(el('div', 'widget-head', 'INTERACTIVE · STRIDE-EXPLORER'));
+    var body = el('div', 'widget-body pt-stride');
+    root.appendChild(body);
+
+    var controls = el('div', 'se-controls');
+    body.appendChild(controls);
+    var BTNS = [
+      { id: 't', label: '.t()' }, { id: 'slice', label: 't[1:3]' },
+      { id: 'view', label: '.view(-1)' }, { id: 'reshape', label: '.reshape(4,3)' },
+      { id: 'permute', label: '.permute(1,0)' }, { id: 'contiguous', label: '.contiguous()' },
+      { id: 'reset', label: 'reset' }
+    ];
+    var btns = {};
+    BTNS.forEach(function (b) {
+      var n = el('button', 'se-btn', b.label);
+      n.type = 'button';
+      n.addEventListener('click', function () { applyOp(b.id); clampSel(); hov = null; render(); });
+      controls.appendChild(n);
+      btns[b.id] = n;
+    });
+
+    var errBox = el('div', 'se-err'); errBox.setAttribute('role', 'alert');
+    body.appendChild(errBox);
+
+    var status = el('p', 'se-status', '');
+    status.setAttribute('aria-live', 'polite');
+    body.appendChild(status);
+
+    var panels = el('div', 'se-panels');
+    body.appendChild(panels);
+    var colL = el('div', 'se-col'); panels.appendChild(colL);
+    var colR = el('div', 'se-col'); panels.appendChild(colR);
+
+    var pLogical = el('div', 'se-panel');
+    var logicalLabel = el('p', 'se-plabel');
+    pLogical.appendChild(logicalLabel);
+    var grid = el('div', 'se-grid'); grid.setAttribute('role', 'grid');
+    pLogical.appendChild(grid);
+    colL.appendChild(pLogical);
+
+    var pState = el('div', 'se-panel');
+    var stateLabel = el('p', 'se-plabel', 'state — the metadata PyTorch rewrites');
+    pState.appendChild(stateLabel);
+    var kvShape = el('div', 'se-kv'), kvStrides = el('div', 'se-kv'), kvOffset = el('div', 'se-kv'), kvContig = el('div', 'se-kv');
+    pState.appendChild(kvShape); pState.appendChild(kvStrides); pState.appendChild(kvOffset); pState.appendChild(kvContig);
+    colL.appendChild(pState);
+
+    var pMem = el('div', 'se-panel');
+    var memLabel = el('p', 'se-plabel', 'linear memory — one float32 per cell');
+    pMem.appendChild(memLabel);
+    var mem = el('div', 'se-mem');
+    mem.setAttribute('aria-label', 'linear memory strips, one cell per float32, byte offsets on the ruler');
+    pMem.appendChild(mem);
+    colR.appendChild(pMem);
+
+    var codeBox = el('div', 'se-code');
+    body.appendChild(codeBox);
+
+    var teach = el('details', 'se-teach');
+    teach.appendChild(el('summary', null, 'What this teaches'));
+    var ul = el('ul');
+    [
+      'A tensor is one flat buffer plus metadata: <code>shape</code>, <code>strides</code>, <code>storage_offset</code>. <code>.t()</code>, <code>permute</code> and slicing only rewrite that metadata — not a single element moves.',
+      'Address = <code>storage_offset + Σ index[i]·strides[i]</code>. Click any logical cell to see that arithmetic with numbers substituted.',
+      '<code>.view()</code> may not copy, so it needs a compatible (row-major) layout; <code>.reshape()</code> hides a copy when the layout does not fit. <code>.contiguous()</code> makes that copy explicit — the old storage greys out and a fresh row-major one appears.'
+    ].forEach(function (t) {
+      var li = el('li'); li.innerHTML = t; ul.appendChild(li);
+    });
+    teach.appendChild(ul);
+    body.appendChild(teach);
+
+    /* ---------- rendering ---------- */
+    function renderButtons() {
+      var v = st.view, twoD = v.shape.length === 2;
+      btns['t'].disabled = btns['permute'].disabled = !twoD;
+      btns['t'].title = btns['permute'].title = twoD ? '' : 'needs a 2-D view';
+      btns['slice'].disabled = v.shape[0] < 2;
+      btns['slice'].title = v.shape[0] < 2 ? 'fewer than 2 rows in dim 0' : '';
+    }
+
+    function renderErr() {
+      if (st.err) {
+        errBox.textContent = st.err.text;
+        var hint = el('span', 'se-hint', st.err.hint);
+        errBox.appendChild(hint);
+        errBox.classList.add('show');
+      } else {
+        errBox.classList.remove('show');
+        errBox.textContent = '';
+      }
+    }
+
+    function renderStatus() {
+      if (st.sel) {
+        status.innerHTML = '';
+        var b = el('b', null, formula(st.sel));
+        status.appendChild(b);
+      } else {
+        status.textContent = st.msg || 'Click any logical cell (left) to see how its address is computed from strides.';
+      }
+    }
+
+    function renderGrid() {
+      var v = st.view;
+      var rows = v.shape.length === 1 ? 1 : v.shape[0];
+      var cols = v.shape.length === 1 ? v.shape[0] : v.shape[1];
+      logicalLabel.textContent = '';
+      logicalLabel.appendChild(document.createTextNode('logical view — shape ' + fmt(v.shape)));
+      var badge = el('span', 'se-badge ' + (isContig(v) ? 'ok' : 'warn'), isContig(v) ? 'CONTIGUOUS' : 'NON-CONTIGUOUS');
+      logicalLabel.appendChild(badge);
+      grid.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0, 1fr))';
+      grid.innerHTML = '';
+      var focusIdx = root.contains(document.activeElement) ? document.activeElement.getAttribute('data-i') : null;
+      for (var r = 0; r < rows; r++) {
+        for (var c = 0; c < cols; c++) {
+          (function () {
+            var idx = v.shape.length === 1 ? [c] : [r, c];
+            var key = idx.join(','), m = memIdx(v, idx), val = buf().data[m];
+            var b = el('button', 'se-cell', String(val));
+            b.type = 'button';
+            b.setAttribute('data-i', key);
+            b.setAttribute('aria-label', 't[' + idx.join(', ') + '], value ' + val);
+            if (st.sel && st.sel.join(',') === key) b.classList.add('sel');
+            b.addEventListener('click', function () { st.sel = idx; st.err = null; render(); b.focus(); });
+            b.addEventListener('mouseenter', function () { hov = idx; renderMemory(); });
+            b.addEventListener('mouseleave', function () { hov = null; renderMemory(); });
+            b.addEventListener('focus', function () { hov = idx; renderMemory(); });
+            b.addEventListener('blur', function () { hov = null; renderMemory(); });
+            grid.appendChild(b);
+          })();
+        }
+      }
+      if (focusIdx) {
+        var again = grid.querySelector('[data-i="' + focusIdx + '"]');
+        if (again) again.focus();
+      }
+    }
+
+    function buildStrip(b, isActive, index) {
+      var v = st.view;
+      var wrap = el('div', 'se-stripwrap ' + (isActive ? 'active' : 'stale'));
+      var label = el('p', 'se-plabel');
+      label.appendChild(document.createTextNode('storage ' + (index + 1) + (isActive ? '' : ' — superseded')));
+      if (isActive && b.copy) {
+        var badge = el('span', 'se-copybadge', 'COPY');
+        label.appendChild(badge);
+      }
+      label.appendChild(document.createTextNode(' ' + (b.data.length * 4) + ' B'));
+      wrap.appendChild(label);
+      var strip = el('div', 'se-strip');
+      strip.style.gridTemplateColumns = 'repeat(' + b.data.length + ', minmax(0, 1fr))';
+      var reach = {};
+      if (isActive) eachLogical(v, function (idx) { reach[memIdx(v, idx)] = 1; });
+      var hit = isActive && (st.sel || hov) ? memIdx(v, st.sel || hov) : -1;
+      b.data.forEach(function (val, i) {
+        var cell = el('div', 'se-mcell' + (i === hit ? ' hit' : '') + (isActive && !reach[i] ? ' ghost' : ''));
+        cell.appendChild(el('span', 'v', String(val)));
+        cell.appendChild(el('span', 'b', String(i * 4)));
+        if (isActive) cell.title = 'element ' + i + ' · bytes ' + (i * 4) + '–' + (i * 4 + 3);
+        strip.appendChild(cell);
+      });
+      wrap.appendChild(strip);
+      if (isActive && v.offset < b.data.length) {
+        var marks = el('div', 'se-marks');
+        marks.style.gridTemplateColumns = 'repeat(' + b.data.length + ', minmax(0, 1fr))';
+        marks.setAttribute('aria-hidden', 'true');
+        for (var i = 0; i < b.data.length; i++) {
+          marks.appendChild(el('i', i === v.offset ? 'off' : ''));
+        }
+        wrap.appendChild(marks);
+        var cap = el('p', 'se-plabel', 'ruler: element × 4 bytes (float32) · arrow marks storage_offset ' + v.offset);
+        cap.style.marginTop = '6px';
+        wrap.appendChild(cap);
+      }
+      return wrap;
+    }
+
+    function renderMemory() {
+      mem.innerHTML = '';
+      st.buffers.forEach(function (b, i) {
+        mem.appendChild(buildStrip(b, i === st.buffers.length - 1, i));
+      });
+    }
+
+    function renderState() {
+      var v = st.view, c = isContig(v);
+      kvShape.innerHTML = ''; kvShape.appendChild(el('span', null, 'shape')); kvShape.appendChild(el('b', null, fmt(v.shape)));
+      kvStrides.innerHTML = ''; kvStrides.appendChild(el('span', null, 'strides')); kvStrides.appendChild(el('b', null, fmt(v.strides)));
+      kvOffset.innerHTML = ''; kvOffset.appendChild(el('span', null, 'storage_offset')); kvOffset.appendChild(el('b', null, v.offset + ' (byte ' + v.offset * 4 + ')'));
+      kvContig.innerHTML = '';
+      kvContig.appendChild(el('span', null, 'is_contiguous'));
+      kvContig.appendChild(el('span', 'se-badge ' + (c ? 'ok' : 'warn'), c ? 'True' : 'False'));
+    }
+
+    function renderCode() {
+      codeBox.innerHTML = '';
+      codeBox.appendChild(el('span', 'lbl', 'pytorch '));
+      codeBox.appendChild(document.createTextNode('t = torch.arange(12)' + st.chain.map(function (e) {
+        return e.charAt(0) === '[' ? e : '.' + e;
+      }).join('')));
+    }
+
+    function render() {
+      renderButtons(); renderErr(); renderStatus(); renderGrid(); renderMemory(); renderState(); renderCode();
+    }
+
+    /* ---------- init ---------- */
+    applyOp('reset');
+    say('reset → shape [3, 4], strides [4, 1], offset 0 — click an op, then click cells to trace addresses');
+    render();
+  };
+})();
+
+</script>
+<script data-widget-src="dispatch-journey">
+/* W2 "dispatch-journey" (ch3): trace c = a + b from Python down to the kernel. */
+(function () {
+  window.PT_WIDGETS = window.PT_WIDGETS || {};
+
+  var CSS = [
+    '.djw *{box-sizing:border-box;margin:0;padding:0}',
+    '.djw button{font:inherit;cursor:pointer}',
+    '.djw button:focus-visible,.djw input:focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}',
+    '.djw .dj-controls{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-bottom:12px}',
+    '.djw .dj-btn{border:1px solid var(--pt-line-strong);background:var(--pt-surface);color:var(--pt-text);border-radius:6px;padding:6px 14px;font-size:13px}',
+    '.djw .dj-btn:hover:not(:disabled){border-color:var(--pt-accent);color:var(--pt-accent)}',
+    '.djw .dj-btn:disabled{opacity:.45;cursor:not-allowed}',
+    '.djw .dj-btn-primary{background:var(--pt-accent);border-color:var(--pt-accent);color:var(--pt-on-accent);font-weight:600}',
+    '.djw .dj-btn-primary:hover:not(:disabled){color:var(--pt-on-accent);box-shadow:0 0 0 3px var(--pt-accent-soft)}',
+    '.djw .dj-seglab{font-family:var(--pt-mono);font-size:11px;color:var(--pt-faint);margin-left:4px}',
+    '.djw .dj-seg{display:inline-flex;border:1px solid var(--pt-line-strong);border-radius:6px;overflow:hidden}',
+    '.djw .dj-seg button{border:0;border-left:1px solid var(--pt-line);background:var(--pt-surface);color:var(--pt-muted);padding:6px 10px;font-family:var(--pt-mono);font-size:12px}',
+    '.djw .dj-seg button:first-child{border-left:0}',
+    '.djw .dj-seg button:hover{color:var(--pt-text)}',
+    '.djw .dj-seg button[aria-pressed="true"]{background:var(--pt-data-soft);color:var(--pt-data);font-weight:600}',
+    '.djw .dj-status{font-family:var(--pt-mono);font-size:11.5px;color:var(--pt-muted);margin-bottom:10px;min-height:15px}',
+    '.djw .dj-scroller{overflow-x:auto;padding:4px 2px 8px}',
+    '.djw .dj-pipe{position:relative;display:flex;gap:24px;min-width:max-content;padding-top:14px}',
+    '.djw .dj-station{position:relative;width:142px;border:1px solid var(--pt-line);border-radius:8px;background:var(--pt-surface);padding:8px 10px 9px;transition:border-color .3s,box-shadow .3s,background .3s}',
+    '.djw .dj-station.wide{width:172px}',
+    '.djw .dj-station.on{border-color:var(--pt-accent);box-shadow:0 0 0 3px var(--pt-accent-soft)}',
+    '.djw .dj-station.done{border-color:var(--pt-line-strong);background:var(--pt-surface-alt)}',
+    '.djw .dj-station:not(:last-child)::after{content:"";position:absolute;top:calc(50% - 1px);right:-16px;width:12px;height:2px;background:var(--pt-line-strong)}',
+    '.djw .dj-station:not(:last-child)::before{content:"";position:absolute;top:50%;right:-19px;transform:translateY(-50%);width:0;height:0;border-left:5px solid var(--pt-line-strong);border-top:4px solid transparent;border-bottom:4px solid transparent}',
+    '.djw .dj-stnum{font-family:var(--pt-mono);font-size:10px;letter-spacing:.08em;color:var(--pt-faint)}',
+    '.djw .dj-stname{font-size:12.5px;font-weight:600;color:var(--pt-text);margin:2px 0 1px}',
+    '.djw .dj-stcode{font-family:var(--pt-mono);font-size:11px;color:var(--pt-accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.djw .dj-keys{width:100%;border-collapse:collapse;font-family:var(--pt-mono);font-size:9.5px;margin-top:7px}',
+    '.djw .dj-keys td{border-top:1px solid var(--pt-line);padding:2px 3px;white-space:nowrap;color:var(--pt-muted)}',
+    '.djw .dj-keys td.k{color:var(--pt-text);padding-right:6px}',
+    '.djw .dj-keys tr.was td{color:var(--pt-data)}',
+    '.djw .dj-keys tr.act td{background:var(--pt-accent-soft);color:var(--pt-accent)}',
+    '.djw .dj-tape{display:inline-block;margin-top:6px;font-family:var(--pt-mono);font-size:9.5px;padding:2px 6px;border-radius:4px;background:var(--pt-ok-soft);color:var(--pt-ok);visibility:hidden}',
+    '.djw .dj-tape.show{visibility:visible}',
+    '.djw .dj-res{font-family:var(--pt-mono);font-size:15px;color:var(--pt-data);margin-top:4px;visibility:hidden}',
+    '.djw .dj-res.show{visibility:visible}',
+    '.djw .dj-restag{font-family:var(--pt-mono);font-size:9.5px;color:var(--pt-warn);margin-top:2px;visibility:hidden}',
+    '.djw .dj-restag.show{visibility:visible}',
+    '.djw .dj-restag.none{color:var(--pt-faint)}',
+    '.djw .dj-token{position:absolute;top:-12px;left:0;width:46px;height:22px;border-radius:11px;background:var(--pt-accent);color:var(--pt-on-accent);font-family:var(--pt-mono);font-size:11px;display:flex;align-items:center;justify-content:center;z-index:2;box-shadow:0 0 0 3px var(--pt-accent-soft),0 0 18px var(--pt-accent-soft);transition:left .55s cubic-bezier(.4,0,.2,1)}',
+    '.djw .dj-explain{border:1px solid var(--pt-line);border-radius:8px;background:var(--pt-surface-alt);padding:12px 14px;margin-top:6px;min-height:132px}',
+    '.djw .dj-etitle{font-family:var(--pt-mono);font-size:12px;font-weight:600;color:var(--pt-accent);margin-bottom:6px}',
+    '.djw .dj-ebody{font-size:13.5px;line-height:1.55;color:var(--pt-text);margin-bottom:9px}',
+    '.djw .dj-ecode{font-family:var(--pt-mono);font-size:11.5px;line-height:1.55;background:var(--pt-surface);border:1px solid var(--pt-line);border-radius:6px;padding:8px 10px;color:var(--pt-code);white-space:pre;overflow-x:auto}',
+    '.djw details{margin-top:12px}',
+    '.djw summary{cursor:pointer;font-family:var(--pt-mono);font-size:11.5px;letter-spacing:.04em;color:var(--pt-muted)}',
+    '.djw details ul{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.55;color:var(--pt-muted)}',
+    '@media (prefers-reduced-motion: reduce){.djw .dj-token,.djw .dj-station{transition:none}}'
+  ].join('\n');
+
+  var KEY_ROWS = [
+    ['Autograd', 'autograd wrapper'],
+    ['CPU', 'add_cpu_kernel'],
+    ['CUDA', 'add_cuda_kernel']
+  ];
+
+  function h(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  window.PT_WIDGETS['dispatch-journey'] = function mount(root) {
+    if (root.__djMounted) return;
+    root.__djMounted = true;
+    root.classList.add('djw');
+
+    var style = document.createElement('style');
+    style.textContent = CSS;
+    root.appendChild(style);
+
+    var head = h('div', 'widget-head', 'INTERACTIVE · DISPATCH JOURNEY');
+    var body = h('div', 'widget-body');
+    root.appendChild(head);
+    root.appendChild(body);
+
+    var state = { device: 'CPU', grad: false, stop: -1 };
+    var stops = [];
+
+    /* ---------- controls ---------- */
+    var controls = h('div', 'dj-controls');
+    var stepBtn = h('button', 'dj-btn dj-btn-primary', 'Step');
+    stepBtn.type = 'button';
+    var resetBtn = h('button', 'dj-btn', 'Reset');
+    resetBtn.type = 'button';
+    controls.appendChild(stepBtn);
+    controls.appendChild(resetBtn);
+
+    function seg(labelText, options, get, set) {
+      controls.appendChild(h('span', 'dj-seglab', labelText));
+      var wrap = h('div', 'dj-seg');
+      wrap.setAttribute('role', 'group');
+      wrap.setAttribute('aria-label', labelText);
+      var btns = options.map(function (opt) {
+        var b = h('button', null, opt);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(get() === opt));
+        b.addEventListener('click', function () {
+          if (get() === opt) return;
+          set(opt);
+          btns.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+          reset();
+        });
+        wrap.appendChild(b);
+        return b;
+      });
+      controls.appendChild(wrap);
+    }
+    seg('device', ['CPU', 'CUDA'], function () { return state.device; }, function (v) { state.device = v; });
+    seg('requires_grad', ['off', 'on'], function () { return state.grad ? 'on' : 'off'; }, function (v) { state.grad = v === 'on'; });
+    body.appendChild(controls);
+
+    var status = h('div', 'dj-status');
+    status.setAttribute('aria-live', 'polite');
+    body.appendChild(status);
+
+    /* ---------- pipeline ---------- */
+    var scroller = h('div', 'dj-scroller');
+    var pipe = h('div', 'dj-pipe');
+    scroller.appendChild(pipe);
+    body.appendChild(scroller);
+
+    var token = h('div', 'dj-token', 'a+b');
+    pipe.appendChild(token);
+
+    var STATIONS = [
+      { num: '01', name: 'Python', code: 'c = a + b' },
+      { num: '02', name: 'pybind11', code: 'PyObject* \u2192 at::Tensor' },
+      { num: '03', name: 'ATen', code: 'aten::add' },
+      { num: '04', name: 'Dispatcher', code: 'key \u2192 kernel', wide: true, table: true },
+      { num: '05', name: 'Kernel', code: 'add_cpu_kernel' },
+      { num: '06', name: 'Result', code: 'c' }
+    ];
+    var stationEls = STATIONS.map(function (s) {
+      var card = h('div', 'dj-station' + (s.wide ? ' wide' : ''));
+      card.appendChild(h('div', 'dj-stnum', s.num));
+      card.appendChild(h('div', 'dj-stname', s.name));
+      card.appendChild(h('div', 'dj-stcode', s.code));
+      if (s.table) {
+        var tbl = document.createElement('table');
+        tbl.className = 'dj-keys';
+        var tbody = document.createElement('tbody');
+        KEY_ROWS.forEach(function (r) {
+          var tr = document.createElement('tr');
+          var td1 = h('td', 'k', r[0]);
+          var td2 = h('td', null, '\u2192 ' + r[1]);
+          tr.appendChild(td1);
+          tr.appendChild(td2);
+          tr.dataset.key = r[0];
+          tbody.appendChild(tr);
+        });
+        tbl.appendChild(tbody);
+        card.appendChild(tbl);
+        card.appendChild(h('div', 'dj-tape', 'Tape: AddBackward0'));
+      }
+      if (s.num === '06') {
+        card.appendChild(h('div', 'dj-res', '3.20'));
+        card.appendChild(h('div', 'dj-restag', 'grad_fn=AddBackward0'));
+      }
+      pipe.appendChild(card);
+      return card;
+    });
+    stationEls[4].querySelector('.dj-stcode').textContent = 'add_cpu_kernel';
+
+    /* ---------- explanation panel ---------- */
+    var explain = h('div', 'dj-explain');
+    var etitle = h('div', 'dj-etitle');
+    var ebody = h('p', 'dj-ebody');
+    var ecode = h('pre', 'dj-ecode');
+    explain.appendChild(etitle);
+    explain.appendChild(ebody);
+    explain.appendChild(ecode);
+    body.appendChild(explain);
+
+    var teaches = document.createElement('details');
+    teaches.appendChild(h('summary', null, 'What this teaches'));
+    var ul = document.createElement('ul');
+    [
+      'One op name (add) maps to many kernels; the tensor\u2019s dispatch key picks the row.',
+      'requires_grad stacks the Autograd key on top: the wrapper records a tape node before any math runs.',
+      'On CUDA the kernel is queued on a stream and Python continues immediately \u2014 the story of chapter 7.'
+    ].forEach(function (t) { ul.appendChild(h('li', null, t)); });
+    teaches.appendChild(ul);
+    body.appendChild(teaches);
+
+    /* ---------- stop scripts ---------- */
+    function kernelName() { return state.device === 'CPU' ? 'add_cpu_kernel' : 'add_cuda_kernel'; }
+
+    function buildStops() {
+      var dev = state.device, rg = state.grad, kern = kernelName();
+      var list = [];
+      list.push({
+        st: 0, t: 'Python \u2014 c = a + b',
+        b: 'In Python, + on two tensors is sugar for a.__add__(b). The interpreter never touches tensor memory itself \u2014 it can only pass the request down to the compiled C++ core. That descent is what you are stepping through.',
+        c: '>>> a = torch.tensor([2.0]' + (rg ? ', requires_grad=True' : '') + ')\n>>> b = torch.tensor([1.2])\n>>> c = a + b    # -> a.__add__(b)'
+      });
+      list.push({
+        st: 1, t: 'pybind11 \u2014 crossing into C++',
+        b: 'pybind11 is the generated bridge: it unwraps the two Python tensor objects into at::Tensor handles and forwards the call into libtorch; on the way back it wraps the result into a Python object again. Each crossing is cheap for one op, but it adds up when a Python loop dispatches millions of ops.',
+        c: '// torch/csrc, generated binding (simplified)\n"__add__" \u2192 at::add(self, other, /*alpha=*/1)'
+      });
+      list.push({
+        st: 2, t: 'ATen \u2014 aten::add',
+        b: 'ATen is PyTorch\u2019s C++ tensor library. aten::add itself does no arithmetic: it checks shapes, dtypes and devices, then asks the dispatcher which kernel should run. Every PyTorch op funnels through this same choke point.',
+        c: '// aten::add (simplified)\nTensor add(const Tensor& self, const Tensor& other,\n           const Scalar& alpha) {\n  check_shape_dtype_device(self, other);\n  return dispatch_add(self, other, alpha);\n}'
+      });
+      if (rg) {
+        list.push({
+          st: 3, t: 'Dispatcher \u2014 Autograd key first', hl: ['Autograd'], tape: true,
+          b: 'requires_grad=True stacks the Autograd key on top of the backend key, so the autograd wrapper intercepts the call before any math runs. Its one job: record an AddBackward0 node on the tape \u2014 the metadata that makes .backward() possible in chapter 4. No arithmetic happens at this stop.',
+          c: '# inside the autograd wrapper\ntape.push(AddBackward0(a, b))   # becomes c.grad_fn\nredispatch(add, keys_without_autograd)'
+        });
+        list.push({
+          st: 3, t: 'Dispatcher \u2014 redispatch to ' + dev, hl: [dev], hlDone: ['Autograd'],
+          b: 'The tape node is recorded, so the wrapper replays the lookup with the Autograd key excluded. This time the row that answers is the backend: ' + kern + ' on the ' + dev + ' key. The same registry is how custom kernels plug in through torch.library.',
+          c: 'lookup(aten::add, ' + dev + ') \u2192 ' + kern
+        });
+      } else {
+        list.push({
+          st: 3, t: 'Dispatcher \u2014 the key table', hl: [dev],
+          b: 'Every tensor carries a dispatch key naming where its memory lives \u2014 here ' + dev + '. The dispatcher looks up aten::add in a table keyed by that dispatch key and selects the matching row. One op name, many implementations: that is how CPU, CUDA and custom backends share one Python API.',
+          c: 'key_set = { ' + dev + ' }\nlookup(aten::add, ' + dev + ') \u2192 ' + kern
+        });
+      }
+      if (dev === 'CPU') {
+        list.push({
+          st: 4, t: 'Kernel \u2014 add_cpu_kernel', hl: [dev],
+          b: 'This is the function that actually loops over memory: one pass over both flat storages, SIMD-vectorized, writing the sum into a freshly allocated output tensor. Everything above was routing; this stop is the work itself.',
+          c: '// the actual loop, SIMD-vectorized\nfor (i = 0; i < n; ++i)\n  out[i] = a[i] + b[i];'
+        });
+      } else {
+        list.push({
+          st: 4, t: 'Kernel \u2014 add_cuda_kernel launch', hl: [dev],
+          b: 'No loop runs here and now: the launch of add_cuda_kernel is queued on a CUDA stream and Python continues immediately \u2014 like a promise you enqueue but never await (chapter 7 tells that story). Thousands of GPU lanes run the loop in parallel once the stream reaches it.',
+          c: 'add_cuda_kernel<<<grid, block>>>(out, a, b);\nreturn c;   // queued, not computed \u2014 async!'
+        });
+      }
+      list.push({
+        st: 5, t: 'Result \u2014 c',
+        b: (rg
+          ? 'c returns to Python carrying 3.20 \u2014 plus invisible metadata: grad_fn=AddBackward0, a pointer back into the tape. When you later call loss.backward(), that pointer is where chapter 4 picks up.'
+          : 'c returns to Python as a plain tensor holding 3.20, with grad_fn=None: nothing was recorded, so .backward() would refuse. Flip requires_grad on and send another op down the pipe to see the difference.')
+          + (dev === 'CUDA' ? ' On CUDA the value already sits in GPU memory.' : ''),
+        c: rg ? '>>> c\ntensor([3.2000], grad_fn=<AddBackward0>)' : '>>> c\ntensor([3.2000])'
+      });
+      return list;
+    }
+
+    /* ---------- rendering ---------- */
+    function placeToken(idx, animate) {
+      var card = stationEls[idx];
+      if (!animate) token.style.transition = 'none';
+      token.style.left = (card.offsetLeft + card.offsetWidth / 2 - 23) + 'px';
+      if (!animate) {
+        void token.offsetWidth; /* flush so the transition can resume */
+        token.style.transition = '';
+      }
+      var target = Math.max(0, card.offsetLeft - 80);
+      scroller.scrollTo({ left: target, behavior: animate ? 'smooth' : 'auto' });
+    }
+
+    function render() {
+      var s = state.stop < 0 ? null : stops[state.stop];
+      stationEls.forEach(function (card, i) {
+        card.classList.toggle('on', !!s && s.st === i);
+        card.classList.toggle('done', !!s && s.st > i);
+      });
+      /* dispatch key table highlight */
+      var rows = stationEls[3].querySelectorAll('tr');
+      rows.forEach(function (tr) {
+        var key = tr.dataset.key;
+        tr.classList.toggle('act', !!(s && s.hl && s.hl.indexOf(key) >= 0));
+        tr.classList.toggle('was', !!(s && s.hlDone && s.hlDone.indexOf(key) >= 0));
+      });
+      /* tape chip appears once the autograd stop has run */
+      var tapeStopIdx = -1;
+      stops.forEach(function (sp, i) { if (sp.tape) tapeStopIdx = i; });
+      var tapeEl = stationEls[3].querySelector('.dj-tape');
+      tapeEl.classList.toggle('show', state.stop >= tapeStopIdx && tapeStopIdx >= 0);
+      /* kernel card label + result card */
+      stationEls[4].querySelector('.dj-stcode').textContent = kernelName();
+      var res = stationEls[5].querySelector('.dj-res');
+      var tag = stationEls[5].querySelector('.dj-restag');
+      var atEnd = !!s && s.st === 5;
+      res.classList.toggle('show', atEnd);
+      tag.classList.toggle('show', atEnd);
+      tag.textContent = state.grad ? 'grad_fn=AddBackward0' : 'grad_fn=None';
+      tag.classList.toggle('none', !state.grad);
+
+      if (s) {
+        status.textContent = 'Stop ' + (state.stop + 1) + '/' + stops.length + ' \u00b7 ' + s.t;
+        etitle.textContent = (state.stop + 1) + '/' + stops.length + ' \u00b7 ' + s.t;
+        ebody.textContent = s.b;
+        ecode.textContent = s.c;
+      } else {
+        status.textContent = 'Ready \u00b7 device ' + state.device + ' \u00b7 requires_grad ' + (state.grad ? 'on' : 'off');
+        etitle.textContent = 'a + b is about to travel';
+        ebody.textContent = 'Five layers stand between your Python line and the silicon: the Python API, a pybind11 bridge, the ATen library, the dispatcher, and finally a kernel that loops over memory. Set the toggles, then press Step.';
+        ecode.textContent = '>>> c = a + b    # a=2.0, b=1.2\n# device: ' + state.device + ' \u00b7 requires_grad: ' + (state.grad ? 'on' : 'off');
+      }
+      stepBtn.disabled = state.stop >= stops.length - 1;
+      stepBtn.title = stepBtn.disabled ? 'Journey complete \u2014 press Reset to run again' : '';
+      placeToken(s ? s.st : 0, true);
+    }
+
+    function reset() {
+      state.stop = -1;
+      stops = buildStops();
+      render();
+    }
+
+    stepBtn.addEventListener('click', function () {
+      if (state.stop >= stops.length - 1) return;
+      state.stop += 1;
+      render();
+    });
+    resetBtn.addEventListener('click', reset);
+
+    window.addEventListener('resize', function () { placeToken(state.stop < 0 ? 0 : stops[state.stop].st, false); });
+    reset();
+  };
+})();
+
+</script>
+<script data-widget-src="autograd-stepper">
+/* W3 "autograd-stepper" (ch4): forward + backward through y = 3x^2 + 2x. */
+(function () {
+  window.PT_WIDGETS = window.PT_WIDGETS || {};
+
+  var CSS = [
+    '.asw *{box-sizing:border-box;margin:0;padding:0}',
+    '.asw button{font:inherit;cursor:pointer}',
+    '.asw button:focus-visible,.asw input:focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}',
+    '.asw .as-controls{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-bottom:10px}',
+    '.asw .as-btn{border:1px solid var(--pt-line-strong);background:var(--pt-surface);color:var(--pt-text);border-radius:6px;padding:6px 14px;font-size:13px}',
+    '.asw .as-btn:hover:not(:disabled){border-color:var(--pt-accent);color:var(--pt-accent)}',
+    '.asw .as-btn:disabled{opacity:.45;cursor:not-allowed}',
+    '.asw .as-btn-primary{background:var(--pt-accent);border-color:var(--pt-accent);color:var(--pt-on-accent);font-weight:600}',
+    '.asw .as-btn-primary:hover:not(:disabled){color:var(--pt-on-accent);box-shadow:0 0 0 3px var(--pt-accent-soft)}',
+    '.asw .as-toggle[aria-pressed="true"]{background:var(--pt-warn-soft);border-color:var(--pt-warn);color:var(--pt-warn);font-weight:600}',
+    '.asw .as-xrow{display:flex;align-items:center;gap:10px;flex:1 1 240px;min-width:220px}',
+    '.asw .as-xlab{font-family:var(--pt-mono);font-size:12px;color:var(--pt-muted);white-space:nowrap}',
+    '.asw .as-xval{font-family:var(--pt-mono);font-size:12px;color:var(--pt-data);min-width:64px;text-align:right}',
+    '.asw input[type="range"]{flex:1;accent-color:var(--pt-accent);min-width:120px}',
+    '.asw .as-svg-wrap{overflow-x:auto;border:1px solid var(--pt-line);border-radius:8px;background:var(--pt-surface-alt)}',
+    '.asw svg{display:block;width:100%;min-width:620px;height:auto}',
+    '.asw .as-edge{stroke:var(--pt-line-strong);stroke-width:2;fill:none;transition:stroke .3s}',
+    '.asw .as-edge.done{stroke:var(--pt-data)}',
+    '.asw .as-edge.bdone{stroke:var(--pt-accent)}',
+    '.asw .as-edge.blive{stroke:var(--pt-accent);stroke-dasharray:9 6;animation:as-dash .7s linear infinite}',
+    '@keyframes as-dash{from{stroke-dashoffset:0}to{stroke-dashoffset:15}}',
+    '.asw .as-elab{font-family:var(--pt-mono);font-size:11px;fill:var(--pt-accent);text-anchor:middle;visibility:hidden;paint-order:stroke;stroke:var(--pt-surface);stroke-width:3px}',
+    '.asw .as-elab.show{visibility:visible}',
+    '.asw .as-box{fill:var(--pt-surface);stroke:var(--pt-line-strong);stroke-width:1.5;transition:stroke .3s}',
+    '.asw .as-node.leaf .as-box{stroke-dasharray:4 3}',
+    '.asw .as-node.got .as-box{stroke:var(--pt-data)}',
+    '.asw .as-node.graded .as-box{stroke:var(--pt-accent)}',
+    '.asw .as-node.act .as-box{stroke:var(--pt-accent);stroke-width:2.5;filter:drop-shadow(0 0 5px var(--pt-accent-soft))}',
+    '.asw .as-nname{font-size:13px;font-weight:600;fill:var(--pt-text);text-anchor:middle}',
+    '.asw .as-nval{font-family:var(--pt-mono);font-size:12px;fill:var(--pt-faint);text-anchor:middle}',
+    '.asw .as-nval.set{fill:var(--pt-data)}',
+    '.asw .as-ngrad{font-family:var(--pt-mono);font-size:10.5px;fill:var(--pt-accent);text-anchor:middle;visibility:hidden}',
+    '.asw .as-ngrad.show{visibility:visible}',
+    '.asw .as-gfn{font-family:var(--pt-mono);font-size:9.5px;fill:var(--pt-warn);text-anchor:middle;visibility:hidden}',
+    '.asw .as-gfn.show{visibility:visible}',
+    '.asw .as-leaflab{font-family:var(--pt-mono);font-size:9.5px;fill:var(--pt-faint);text-anchor:middle}',
+    '.asw .as-status{font-size:13px;line-height:1.55;color:var(--pt-text);min-height:20px;margin-top:10px}',
+    '.asw .as-result{display:none;margin-top:8px;border:1px solid var(--pt-accent);background:var(--pt-accent-soft);border-radius:8px;padding:8px 12px;font-family:var(--pt-mono)}',
+    '.asw .as-result.show{display:block}',
+    '.asw .as-chain{font-size:11px;color:var(--pt-muted);margin-bottom:3px}',
+    '.asw .as-final{font-size:13px;color:var(--pt-accent);font-weight:600}',
+    '.asw details{margin-top:12px}',
+    '.asw summary{cursor:pointer;font-family:var(--pt-mono);font-size:11.5px;letter-spacing:.04em;color:var(--pt-muted)}',
+    '.asw details ul{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.55;color:var(--pt-muted)}',
+    '@media (prefers-reduced-motion: reduce){.asw .as-edge.blive{animation:none}}'
+  ].join('\n');
+
+  var NAME = { x: 'x', n1: 'x\u00b2', n2: '3\u00b7x\u00b2', n3: '2\u00b7x', n4: 'y' };
+  var NODES = [
+    { id: 'x', label: 'x', x: 16, y: 132, w: 104, h: 64, leaf: true },
+    { id: 'n1', label: NAME.n1, x: 196, y: 28, w: 112, h: 64, gf: 'PowBackward0' },
+    { id: 'n2', label: NAME.n2, x: 374, y: 28, w: 112, h: 64, gf: 'MulBackward0' },
+    { id: 'n3', label: NAME.n3, x: 196, y: 232, w: 112, h: 64, gf: 'MulBackward0' },
+    { id: 'n4', label: NAME.n4, x: 556, y: 132, w: 112, h: 64, gf: 'AddBackward0' }
+  ];
+  var EDGES = [
+    { a: 'x', b: 'n1', d: 'M 120 156 C 152 156 160 60 196 60', lx: 140, ly: 124 },
+    { a: 'n1', b: 'n2', d: 'M 308 60 L 374 60', lx: 341, ly: 16 },
+    { a: 'x', b: 'n3', d: 'M 120 172 C 152 172 160 264 196 264', lx: 148, ly: 226 },
+    { a: 'n2', b: 'n4', d: 'M 486 60 C 518 60 524 156 556 156', lx: 538, ly: 104 },
+    { a: 'n3', b: 'n4', d: 'M 308 264 C 400 264 476 196 556 172', lx: 414, ly: 242 }
+  ];
+
+  function h(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function svgEl(tag, attrs, parent) {
+    var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function fmt(n) { return (Math.round(n * 100) / 100).toFixed(2); }
+
+  window.PT_WIDGETS['autograd-stepper'] = function mount(root) {
+    if (root.__asMounted) return;
+    root.__asMounted = true;
+    root.classList.add('asw');
+
+    var style = document.createElement('style');
+    style.textContent = CSS;
+    root.appendChild(style);
+
+    root.appendChild(h('div', 'widget-head', 'INTERACTIVE · AUTOGRAD STEPPER'));
+    var body = h('div', 'widget-body');
+    root.appendChild(body);
+
+    var S = { x: 2.0, fwd: 0, bwd: 0, noGrad: false, active: null };
+    var V = {}, G = {}, bwdOrder = [];
+
+    /* ---------- controls ---------- */
+    var controls = h('div', 'as-controls');
+    var xrow = h('div', 'as-xrow');
+    var lab = document.createElement('label');
+    lab.className = 'as-xlab';
+    lab.setAttribute('for', 'as-x');
+    lab.textContent = 'x';
+    var xval = h('span', 'as-xval', 'x = 2.00');
+    var slider = document.createElement('input');
+    slider.type = 'range';
+    slider.id = 'as-x';
+    slider.min = '0.5'; slider.max = '4'; slider.step = '0.1'; slider.value = '2';
+    xrow.appendChild(lab);
+    xrow.appendChild(slider);
+    xrow.appendChild(xval);
+    controls.appendChild(xrow);
+    body.appendChild(controls);
+
+    var btnrow = h('div', 'as-controls');
+    var fwdBtn = h('button', 'as-btn as-btn-primary', 'Step forward');
+    fwdBtn.type = 'button';
+    var bwdBtn = h('button', 'as-btn', 'Step backward');
+    bwdBtn.type = 'button';
+    var resetBtn = h('button', 'as-btn', 'Reset');
+    resetBtn.type = 'button';
+    var ngBtn = h('button', 'as-btn as-toggle', 'torch.no_grad()');
+    ngBtn.type = 'button';
+    ngBtn.setAttribute('aria-pressed', 'false');
+    btnrow.appendChild(fwdBtn);
+    btnrow.appendChild(bwdBtn);
+    btnrow.appendChild(resetBtn);
+    btnrow.appendChild(ngBtn);
+    body.appendChild(btnrow);
+
+    /* ---------- SVG graph ---------- */
+    var wrap = h('div', 'as-svg-wrap');
+    var svg = svgEl('svg', {
+      viewBox: '0 0 720 330', role: 'img',
+      'aria-label': 'Computation graph: x feeds x squared, which feeds 3x squared; x also feeds 2x; both feed y.'
+    });
+    wrap.appendChild(svg);
+    body.appendChild(wrap);
+
+    var defs = svgEl('defs', {}, svg);
+    [['as-arr', 'var(--pt-faint)'], ['as-arr-d', 'var(--pt-data)'], ['as-arr-a', 'var(--pt-accent)']].forEach(function (m) {
+      var mk = svgEl('marker', { id: m[0], viewBox: '0 0 10 10', refX: '8.5', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse' }, defs);
+      svgEl('path', { d: 'M0,0 L10,5 L0,10 z', fill: m[1] }, mk);
+    });
+
+    var edgeEls = {};
+    EDGES.forEach(function (e) {
+      var p = svgEl('path', { d: e.d, 'class': 'as-edge', 'marker-end': 'url(#as-arr)' }, svg);
+      var t = svgEl('text', { x: e.lx, y: e.ly, 'class': 'as-elab' }, svg);
+      edgeEls[e.a + '|' + e.b] = { path: p, lab: t };
+    });
+
+    var nodeEls = {};
+    NODES.forEach(function (n) {
+      var g = svgEl('g', { 'class': 'as-node' + (n.leaf ? ' leaf' : ''), transform: 'translate(' + n.x + ',' + n.y + ')' }, svg);
+      svgEl('rect', { width: n.w, height: n.h, rx: 8, 'class': 'as-box' }, g);
+      svgEl('text', { x: n.w / 2, y: 22, 'class': 'as-nname' }, g).textContent = n.label;
+      var val = svgEl('text', { x: n.w / 2, y: 40, 'class': 'as-nval' }, g);
+      var grad = svgEl('text', { x: n.w / 2, y: 57, 'class': 'as-ngrad' }, g);
+      var gf = svgEl('text', { x: n.w / 2, y: 80, 'class': n.leaf ? 'as-leaflab' : 'as-gfn' }, g);
+      nodeEls[n.id] = { g: g, val: val, grad: grad, gf: gf };
+    });
+
+    /* ---------- status + result ---------- */
+    var status = h('div', 'as-status');
+    status.setAttribute('aria-live', 'polite');
+    body.appendChild(status);
+    var result = h('div', 'as-result');
+    var chain = h('div', 'as-chain');
+    var final = h('div', 'as-final');
+    result.appendChild(chain);
+    result.appendChild(final);
+    body.appendChild(result);
+
+    var teaches = document.createElement('details');
+    teaches.appendChild(h('summary', null, 'What this teaches'));
+    var ul = document.createElement('ul');
+    [
+      'Forward with requires_grad records a grad_fn node per op \u2014 the tape \u2014 as a side effect of computing values.',
+      'backward() replays the same graph in reverse, multiplying local derivatives along every edge (the chain rule).',
+      'x has two paths to y: 3\u00b7(2x) from the squared branch and 2 from the linear branch accumulate into x.grad = 6x + 2.',
+      'Under torch.no_grad() no tape is recorded, so there is nothing to walk backward over.'
+    ].forEach(function (t) { ul.appendChild(h('li', null, t)); });
+    teaches.appendChild(ul);
+    body.appendChild(teaches);
+
+    /* ---------- step logic ---------- */
+    var FWD = [
+      { id: 'n1', edges: ['x|n1'], compute: function () { return S.x * S.x; },
+        say: function (v) { return 'Forward: x\u00b2 = ' + fmt(S.x) + ' \u00b7 ' + fmt(S.x) + ' = ' + fmt(v) + tapeBit('PowBackward0'); } },
+      { id: 'n2', edges: ['n1|n2'], compute: function () { return 3 * V.n1; },
+        say: function (v) { return 'Forward: 3\u00b7x\u00b2 = 3 \u00b7 ' + fmt(V.n1) + ' = ' + fmt(v) + tapeBit('MulBackward0'); } },
+      { id: 'n3', edges: ['x|n3'], compute: function () { return 2 * S.x; },
+        say: function (v) { return 'Forward: 2\u00b7x = 2 \u00b7 ' + fmt(S.x) + ' = ' + fmt(v) + tapeBit('MulBackward0'); } },
+      { id: 'n4', edges: ['n2|n4', 'n3|n4'], compute: function () { return V.n2 + V.n3; },
+        say: function (v) { return 'Forward: y = ' + fmt(V.n2) + ' + ' + fmt(V.n3) + ' = ' + fmt(v) + (S.noGrad ? ' \u2014 the tape stays empty under no_grad().' : ' \u2014 grad_fn AddBackward0 recorded. The tape now holds 4 nodes.'); } }
+    ];
+    function tapeBit(gf) {
+      return S.noGrad ? ' \u2014 no grad_fn: no_grad() skips the tape.' : ' \u2014 grad_fn ' + gf + ' recorded on the tape.';
+    }
+    function bsteps() {
+      return [
+        { seed: true },
+        { from: 'n4', to: 'n2', loc: 1, disp: '1' },
+        { from: 'n4', to: 'n3', loc: 1, disp: '1' },
+        { from: 'n2', to: 'n1', loc: 3, disp: '3' },
+        { from: 'n1', to: 'x', loc: 2 * S.x, disp: '2x = ' + fmt(2 * S.x) },
+        { from: 'n3', to: 'x', loc: 2, disp: '2' }
+      ];
+    }
+
+    function fwdEdgeDone(key) {
+      for (var i = 0; i < S.fwd; i++) if (FWD[i].edges.indexOf(key) >= 0) return true;
+      return false;
+    }
+
+    function render() {
+      NODES.forEach(function (n) {
+        var el = nodeEls[n.id];
+        var hasV = V[n.id] != null;
+        el.val.textContent = hasV ? fmt(V[n.id]) : '\u00b7';
+        el.val.classList.toggle('set', hasV);
+        var hasG = G[n.id] != null;
+        el.grad.textContent = hasG ? 'g ' + fmt(G[n.id]) : '';
+        el.grad.classList.toggle('show', hasG);
+        el.g.classList.toggle('got', hasV);
+        el.g.classList.toggle('graded', hasG);
+        el.g.classList.toggle('act', S.active === n.id);
+        if (n.leaf) {
+          el.gf.textContent = S.noGrad ? 'leaf \u00b7 no_grad' : 'leaf';
+        } else {
+          el.gf.textContent = n.gf;
+          el.gf.classList.toggle('show', !S.noGrad && hasV);
+        }
+      });
+      EDGES.forEach(function (e) {
+        var key = e.a + '|' + e.b;
+        var el = edgeEls[key];
+        var cls = 'as-edge';
+        var marker = 'as-arr';
+        var bi = bwdOrder.indexOf(key);
+        if (bi >= 0) {
+          marker = 'as-arr-a';
+          cls += (bi === bwdOrder.length - 1 && S.bwd < bsteps().length) ? ' blive' : ' bdone';
+        } else if (fwdEdgeDone(key)) {
+          cls += ' done';
+          marker = 'as-arr-d';
+        }
+        el.path.setAttribute('class', cls);
+        el.path.setAttribute('marker-end', 'url(#' + marker + ')');
+      });
+      xval.textContent = 'x = ' + fmt(S.x);
+      var doneBwd = S.bwd >= bsteps().length;
+      fwdBtn.disabled = S.fwd >= FWD.length;
+      fwdBtn.title = fwdBtn.disabled ? 'Forward complete \u2014 step backward next' : '';
+      bwdBtn.disabled = S.fwd < FWD.length || S.noGrad || doneBwd;
+      bwdBtn.title = S.noGrad ? 'torch.no_grad() skipped the tape \u2014 there is no graph to walk backward over.'
+        : S.fwd < FWD.length ? 'Finish the forward pass first.'
+        : doneBwd ? 'Backward complete \u2014 press Reset to run again.' : '';
+      result.classList.toggle('show', doneBwd && !S.noGrad);
+    }
+
+    function say(text) { status.textContent = text; }
+
+    function clearBackward() {
+      S.bwd = 0;
+      G = {};
+      bwdOrder = [];
+      EDGES.forEach(function (e) {
+        var el = edgeEls[e.a + '|' + e.b];
+        el.lab.textContent = '';
+        el.lab.classList.remove('show');
+      });
+      render();
+    }
+
+    function stepForward() {
+      if (S.fwd >= FWD.length) return;
+      var step = FWD[S.fwd];
+      var v = step.compute();
+      V[step.id] = v;
+      S.active = step.id;
+      S.fwd += 1;
+      say(step.say(v));
+      render();
+    }
+
+    function stepBackward() {
+      var steps = bsteps();
+      if (S.bwd >= steps.length) return;
+      var st = steps[S.bwd];
+      if (st.seed) {
+        G.n4 = 1;
+        S.active = 'n4';
+        say('Backward: y.backward() seeds the output with d(out)/d(y) = 1.00 \u2014 the chain rule now walks the tape in reverse.');
+      } else {
+        var up = G[st.from];
+        var prod = st.loc * up;
+        G[st.to] = (G[st.to] || 0) + prod;
+        S.active = st.from;
+        var key = st.to + '|' + st.from; /* EDGES keys are parent|child */
+        bwdOrder.push(key);
+        var el = edgeEls[key];
+        el.lab.textContent = 'd(' + NAME[st.from] + ')/d(' + NAME[st.to] + ') = ' + st.disp;
+        el.lab.classList.add('show');
+        say('Backward at ' + NAME[st.from] + ': local d(' + NAME[st.from] + ')/d(' + NAME[st.to] + ') = ' + st.disp +
+          ', upstream ' + fmt(up) + ' \u2192 ' + NAME[st.to] + ' receives ' + fmt(prod) + '.');
+      }
+      S.bwd += 1;
+      if (S.bwd >= steps.length) {
+        var total = G.x;
+        say('Backward at 2\u00b7x: local d(2\u00b7x)/d(x) = 2, upstream ' + fmt(G.n3) + ' \u2192 x receives ' + fmt(2 * G.n3) +
+          '. Done \u2014 x.grad = 6x + 2 = 6\u00b7' + fmt(S.x) + ' + 2 = ' + fmt(total) + '.');
+        chain.textContent = 'dy/dx = 3\u00b7(2x) + 1\u00b7(2) = 6x + 2   \u2192   3\u00b7' + fmt(2 * S.x) + ' + 2 = ' + fmt(total);
+        final.textContent = 'x.grad = 6x + 2 = ' + fmt(total);
+      }
+      render();
+    }
+
+    function reset() {
+      S.fwd = 0;
+      S.active = null;
+      V = { x: S.x };
+      clearBackward();
+      say('Set x with the slider, then press Step forward. Each op computes a value and, with the tape on, records its grad_fn node.');
+      render();
+    }
+
+    fwdBtn.addEventListener('click', stepForward);
+    bwdBtn.addEventListener('click', stepBackward);
+    resetBtn.addEventListener('click', reset);
+
+    slider.addEventListener('input', function () {
+      S.x = Math.round(parseFloat(slider.value) * 10) / 10;
+      V.x = S.x;
+      if (S.fwd > 0) {
+        for (var i = 0; i < S.fwd; i++) V[FWD[i].id] = FWD[i].compute();
+        var hadBwd = S.bwd > 0;
+        clearBackward();
+        say('x = ' + fmt(S.x) + ' \u2014 forward values recomputed' + (hadBwd ? ', backward reset.' : '.'));
+      } else {
+        render();
+        say('x = ' + fmt(S.x) + ' \u2014 press Step forward to compute.');
+      }
+    });
+
+    ngBtn.addEventListener('click', function () {
+      S.noGrad = !S.noGrad;
+      ngBtn.setAttribute('aria-pressed', String(S.noGrad));
+      if (S.noGrad) {
+        clearBackward();
+        say('torch.no_grad() is on: forward still computes values, but no grad_fn nodes are recorded \u2014 backward is disabled.');
+      } else {
+        render();
+        say('torch.no_grad() is off: ops record grad_fn nodes again, so backward will work.');
+      }
+    });
+
+    reset();
+  };
+})();
+
+</script>
+</body>
+</html>
