@@ -1,0 +1,2042 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-font="sans" data-size="normal">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="torch.add to Silicon 101: the whole GPU stack in about fifteen minutes — the dispatcher's bitset arithmetic, PyTorch's launch config, what a kernel launch really is, and warps/coalescing. Interactive, with deep links into the full deep dive.">
+<title>torch.add → Silicon 101 — the whole stack, fast</title>
+<script>
+(() => {
+  let theme, font, size;
+  try {
+    const q = new URLSearchParams(location.search);
+    const tq = q.get('theme');
+    const saved = localStorage.getItem('ptw-theme');
+    theme = (tq === 'dark' || tq === 'light') ? tq
+          : saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const fq = q.get('font');
+    font = (fq === 'serif' || fq === 'sans') ? fq : (localStorage.getItem('ptw-font') || 'sans');
+    size = q.get('size') === 'large' ? 'large' : (localStorage.getItem('ptw-size') || 'normal');
+  } catch (_) { theme = 'light'; font = 'sans'; size = 'normal'; }
+  const d = document.documentElement.dataset;
+  d.theme = theme; d.font = font; d.size = size;
+})();
+</script>
+<style>
+/* ============ tokens (mirror of widgets/tokens.css) ============ */
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --pt-bg: #faf7f4;
+  --pt-surface: #ffffff;
+  --pt-surface-alt: #f1ebe5;
+  --pt-line: #ddd2c8;
+  --pt-line-strong: #b9a898;
+  --pt-text: #221c17;
+  --pt-muted: #5f554c;
+  --pt-faint: #8a7d71;
+  --pt-accent: #d64726;
+  --pt-accent-strong: #b03517;
+  --pt-accent-soft: #fbe4dc;
+  --pt-on-accent: #fff6f2;
+  --pt-data: #2f6ea8;
+  --pt-data-soft: #dde9f5;
+  --pt-warn: #96650f;
+  --pt-warn-soft: #f7ead0;
+  --pt-danger: #a84040;
+  --pt-danger-soft: #f6dfdd;
+  --pt-ok: #2f7a4d;
+  --pt-ok-soft: #dcf0e4;
+  --pt-code: #33261d;
+  --pt-mono: "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --pt-sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --pt-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --pt-body-font: var(--pt-sans);
+  --pt-body-fs: 18px;
+  --pt-shadow: 0 10px 30px color-mix(in srgb, var(--pt-text) 7%, transparent);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --pt-bg: #17120e;
+  --pt-surface: #201a15;
+  --pt-surface-alt: #2a221c;
+  --pt-line: #3d332b;
+  --pt-line-strong: #5c4e42;
+  --pt-text: #ede4db;
+  --pt-muted: #b3a598;
+  --pt-faint: #8d7f72;
+  --pt-accent: #ff6a45;
+  --pt-accent-strong: #ff8f70;
+  --pt-accent-soft: #4a2417;
+  --pt-on-accent: #2a0f06;
+  --pt-data: #7db3e8;
+  --pt-data-soft: #1d2c3d;
+  --pt-warn: #e5b565;
+  --pt-warn-soft: #3d301a;
+  --pt-danger: #e58a8a;
+  --pt-danger-soft: #43221f;
+  --pt-ok: #7bcf9d;
+  --pt-ok-soft: #1c3527;
+  --pt-code: #f0d9c9;
+  --pt-shadow: 0 14px 40px color-mix(in srgb, #000 45%, transparent);
+}
+
+/* ============ base ============ */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--pt-bg);
+  color: var(--pt-text);
+  font-family: var(--pt-body-font);
+  font-size: var(--pt-body-fs);
+  line-height: 1.72;
+  text-rendering: optimizeLegibility;
+}
+/* reading settings: font family + size (persisted; see init script) */
+:root[data-font="serif"] { --pt-body-font: var(--pt-serif); }
+:root[data-size="large"] { --pt-body-fs: 20.5px; }
+:root[data-size="large"] .thesis { font-size: 21px; }
+:root[data-size="large"] .section-deck { font-size: 18px; }
+:root[data-size="large"] .callout p { font-size: 17px; }
+:root[data-size="large"] .recap-box p, :root[data-size="large"] .recap-box li { font-size: 17px; }
+:root[data-size="large"] pre.code-block { font-size: 14.5px; }
+:root[data-size="large"] table { font-size: 15.5px; }
+a { color: var(--pt-accent-strong); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--pt-accent); }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--pt-warn); outline-offset: 3px; border-radius: 2px; }
+::selection { background: var(--pt-accent-soft); }
+code, pre, .mono { font-family: var(--pt-mono); }
+
+/* ============ topbar ============ */
+.topbar {
+  position: sticky; top: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  min-height: 54px; padding: 8px 26px;
+  border-bottom: 1px solid var(--pt-line);
+  background: color-mix(in srgb, var(--pt-bg) 90%, transparent);
+  backdrop-filter: blur(12px);
+}
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand-mark {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 auto;
+  border: 1.5px solid var(--pt-accent); border-radius: 4px;
+  color: var(--pt-accent); font-family: var(--pt-mono); font-weight: 700; font-size: 13px;
+}
+.brand-copy { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.brand-copy strong { font-family: var(--pt-mono); font-size: 12px; letter-spacing: .06em; white-space: nowrap; }
+.brand-copy span { font-size: 11.5px; color: var(--pt-faint); white-space: nowrap; }
+.top-actions { display: flex; align-items: center; gap: 14px; }
+.read-note { font-family: var(--pt-mono); font-size: 11px; color: var(--pt-faint); white-space: nowrap; }
+.theme-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 36px; padding: 6px 11px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-size: 12px;
+}
+.theme-toggle:hover { border-color: var(--pt-accent); color: var(--pt-accent); }
+/* reading settings popover */
+.settings-wrap { position: relative; }
+.aa-toggle {
+  min-height: 36px; min-width: 42px; padding: 6px 10px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-family: var(--pt-serif); font-size: 14.5px; line-height: 1;
+}
+.aa-toggle:hover, .aa-toggle[aria-expanded="true"] { border-color: var(--pt-accent); color: var(--pt-accent); }
+.aa-panel {
+  position: absolute; right: 0; top: calc(100% + 10px); z-index: 90;
+  display: grid; gap: 14px; width: 232px; padding: 15px;
+  border: 1px solid var(--pt-line); border-radius: 8px;
+  background: var(--pt-surface); box-shadow: var(--pt-shadow);
+}
+.aa-panel[hidden] { display: none; }
+.aa-row { display: grid; gap: 8px; }
+.aa-label { font-family: var(--pt-mono); font-size: 10px; letter-spacing: .16em; color: var(--pt-faint); }
+.aa-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.aa-seg button {
+  min-height: 34px; padding: 5px 8px;
+  border: 1px solid var(--pt-line-strong); border-radius: 5px; background: var(--pt-surface);
+  font-family: var(--pt-sans); font-size: 13px;
+}
+.aa-seg button:hover { border-color: var(--pt-accent); }
+.aa-seg button[aria-pressed="true"] {
+  border-color: var(--pt-accent); background: var(--pt-accent-soft);
+  color: var(--pt-accent-strong); font-weight: 650;
+}
+:root[data-theme="dark"] .sun-icon, :root:not([data-theme="dark"]) .moon-icon { display: none; }
+.theme-toggle svg { width: 15px; height: 15px; }
+.progress-track {
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: transparent; pointer-events: none;
+}
+.progress-fill { height: 100%; width: 0; background: var(--pt-accent); transition: width .12s linear; }
+
+/* ============ shell ============ */
+.shell {
+  max-width: 1280px; margin: 0 auto;
+  display: grid; grid-template-columns: 208px minmax(0, 1fr);
+  gap: 44px; padding: 0 30px;
+}
+.toc { align-self: start; position: sticky; top: 78px; padding: 36px 0 60px; }
+.toc-label { margin: 0 0 10px; font-family: var(--pt-mono); font-size: 10.5px; letter-spacing: .16em; color: var(--pt-faint); }
+.toc nav { display: grid; gap: 2px; }
+.toc a {
+  display: grid; grid-template-columns: 24px 1fr; gap: 8px;
+  padding: 7px 8px; border-left: 2px solid transparent;
+  font-family: var(--pt-mono); font-size: 11.5px; line-height: 1.45;
+  color: var(--pt-muted); text-decoration: none;
+  transition: color .15s, border-color .15s;
+}
+.toc a span:first-child { color: var(--pt-faint); }
+.toc a:hover { color: var(--pt-text); }
+.toc a.active { color: var(--pt-accent-strong); border-left-color: var(--pt-accent); }
+.toc a.active span:first-child { color: var(--pt-accent); }
+.toc-foot { margin-top: 22px; padding: 13px 8px 0; border-top: 1px solid var(--pt-line); font-size: 11px; color: var(--pt-faint); line-height: 1.65; }
+main { min-width: 0; max-width: 980px; padding-bottom: 90px; }
+
+/* ============ hero ============ */
+.hero { padding: 84px 0 66px; }
+.eyebrow { margin: 0 0 14px; font-family: var(--pt-mono); font-size: 11px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--pt-accent); }
+h1 {
+  margin: 0 0 22px;
+  font-family: var(--pt-sans); font-weight: 680; letter-spacing: -.04em;
+  font-size: clamp(40px, 5vw, 64px); line-height: 1.04; text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--pt-accent); }
+.thesis { max-width: 640px; margin: 0 0 20px; font-size: 19px; line-height: 1.75; color: var(--pt-muted); }
+.thesis strong { color: var(--pt-text); }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--pt-mono); font-size: 12px; color: var(--pt-faint); }
+.hero-meta .dot { color: var(--pt-accent); }
+
+/* ============ sections ============ */
+.section { padding: 72px 0 34px; scroll-margin-top: 64px; }
+.section + .section { border-top: 1px solid var(--pt-line); }
+.section-heading { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; align-items: start; margin-bottom: 26px; }
+.section-index { padding-top: 8px; font-family: var(--pt-mono); font-size: 11.5px; letter-spacing: .1em; color: var(--pt-accent); }
+h2 {
+  margin: 0 0 10px;
+  font-family: var(--pt-sans); font-weight: 660; letter-spacing: -.028em;
+  font-size: clamp(27px, 3.2vw, 38px); line-height: 1.14; text-wrap: balance;
+}
+.section-deck { max-width: 640px; margin: 0; font-size: 16.5px; color: var(--pt-muted); }
+
+/* ============ prose ============ */
+.prose { max-width: 700px; }
+.prose p { margin: 0 0 20px; color: var(--pt-muted); }
+.prose p strong, .prose li strong { color: var(--pt-text); font-weight: 650; }
+.prose strong.term { color: var(--pt-accent-strong); }
+h3 { margin: 34px 0 12px; font-family: var(--pt-sans); font-size: 21px; letter-spacing: -.015em; font-weight: 640; line-height: 1.3; }
+h4 { margin: 24px 0 8px; font-family: var(--pt-sans); font-size: 16px; font-weight: 640; }
+.prose ul, .prose ol { margin: 0 0 20px; padding-left: 24px; color: var(--pt-muted); }
+.prose li { margin: 6px 0; }
+.prose li::marker { color: var(--pt-accent); font-family: var(--pt-mono); font-size: .85em; }
+.prose code, .callout code {
+  font-size: .82em; padding: 1.5px 6px; border: 1px solid var(--pt-line);
+  border-radius: 4px; background: var(--pt-surface-alt); color: var(--pt-code);
+  white-space: nowrap;
+}
+.prose code.math { border-style: dashed; white-space: nowrap; }
+p.math-line { margin: 4px 0 22px; text-align: center; max-width: 100%; overflow-x: auto; }
+p.math-line code.math { padding: 6px 14px; font-size: .92em; }
+.colophon { font-size: 12.5px; color: var(--pt-faint); margin-top: 28px; line-height: 1.75; }
+code .cm { color: var(--pt-faint); } /* comment */
+
+/* code blocks */
+pre.code-block {
+  overflow-x: auto; margin: 4px 0 24px; padding: 16px 18px;
+  border: 1px solid var(--pt-line); border-left: 3px solid var(--pt-accent);
+  border-radius: 6px; background: var(--pt-surface);
+  font-size: 13px; line-height: 1.62; color: var(--pt-code);
+}
+pre.code-block code { white-space: pre; }
+pre.code-block .out { color: var(--pt-faint); }
+pre.code-block .kw { color: var(--pt-accent-strong); }
+pre.code-block .str { color: var(--pt-ok); }
+pre.code-block .fn { color: var(--pt-data); }
+.code-caption { margin: -18px 0 24px; font-size: 12px; color: var(--pt-faint); font-family: var(--pt-mono); }
+
+/* callouts */
+.callout {
+  margin: 26px 0; padding: 16px 20px 14px;
+  border: 1px solid var(--pt-line); border-radius: 7px;
+  background: var(--pt-surface); box-shadow: var(--pt-shadow);
+}
+.callout h4 { margin: 0 0 7px; font-family: var(--pt-mono); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; }
+.callout p { margin: 0 0 10px; font-size: 15.5px; color: var(--pt-muted); }
+.callout p:last-child { margin-bottom: 2px; }
+.callout[data-kind="analogy"] { border-left: 3px solid var(--pt-data); }
+.callout[data-kind="analogy"] h4 { color: var(--pt-data); }
+.callout[data-kind="gotcha"] { border-left: 3px solid var(--pt-warn); }
+.callout[data-kind="gotcha"] h4 { color: var(--pt-warn); }
+.callout[data-kind="deeper"] { border-left: 3px solid var(--pt-accent); }
+.callout[data-kind="deeper"] h4 { color: var(--pt-accent-strong); }
+.callout[data-kind="history"] { border-left: 3px solid var(--pt-faint); }
+.callout[data-kind="history"] h4 { color: var(--pt-faint); }
+
+/* widget slots */
+.widget-slot { margin: 34px 0 30px; }
+.widget-slot > figcaption {
+  margin-top: 9px; font-family: var(--pt-mono); font-size: 11.5px;
+  color: var(--pt-faint); line-height: 1.6;
+}
+.widget {
+  border: 1px solid var(--pt-line); border-radius: 9px;
+  background: var(--pt-surface); overflow: hidden;
+  font-family: var(--pt-sans);
+  box-shadow: var(--pt-shadow);
+}
+.widget-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-bottom: 1px solid var(--pt-line);
+  background: var(--pt-surface-alt);
+  font-family: var(--pt-mono); font-size: 11px; letter-spacing: .08em; color: var(--pt-accent);
+}
+.widget-body { padding: 16px; }
+.widget-fallback { padding: 22px; font-family: var(--pt-mono); font-size: 12px; color: var(--pt-faint); }
+
+/* tables */
+.table-wrap { overflow-x: auto; margin: 6px 0 26px; border: 1px solid var(--pt-line); border-radius: 7px; background: var(--pt-surface); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th { padding: 11px 14px; text-align: left; font-family: var(--pt-mono); font-weight: 500; font-size: 11px; letter-spacing: .05em; color: var(--pt-faint); border-bottom: 1px solid var(--pt-line); }
+td { padding: 11px 14px; color: var(--pt-muted); border-bottom: 1px solid var(--pt-line); vertical-align: top; }
+td strong { color: var(--pt-text); }
+tr:last-child td { border-bottom: 0; }
+td code, th code { white-space: nowrap; }
+
+/* svg diagram classes (shared with chapter inline SVGs) */
+.svg-box { fill: var(--pt-surface); stroke: var(--pt-line-strong); stroke-width: 1.2; }
+.svg-accent { fill: var(--pt-accent-soft); stroke: var(--pt-accent); stroke-width: 1.3; }
+.svg-data-fill { fill: var(--pt-data-soft); stroke: var(--pt-data); stroke-width: 1.2; }
+.svg-warn { fill: var(--pt-warn-soft); stroke: var(--pt-warn); stroke-width: 1.2; }
+.svg-text { fill: var(--pt-text); font-family: var(--pt-sans); font-size: 13px; }
+.svg-small { fill: var(--pt-muted); font-family: var(--pt-mono); font-size: 10.5px; }
+.svg-label { fill: var(--pt-accent-strong); font-family: var(--pt-mono); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; }
+.svg-faint { fill: var(--pt-faint); font-family: var(--pt-mono); font-size: 9.5px; }
+.svg-edge { fill: none; stroke: var(--pt-data); stroke-width: 1.7; }
+.svg-edge-back { fill: none; stroke: var(--pt-accent); stroke-width: 1.7; stroke-dasharray: 6 5; }
+.diagram-scroll { overflow-x: auto; }
+.diagram-scroll svg { display: block; max-width: 100%; height: auto; }
+figure.diagram { margin: 28px 0; }
+figure.diagram figcaption { margin-top: 8px; font-family: var(--pt-mono); font-size: 11.5px; color: var(--pt-faint); }
+
+/* recap + footer */
+.recap-box { margin-top: 40px; padding: 24px 26px; border: 1px solid var(--pt-accent); border-radius: 8px; background: var(--pt-accent-soft); }
+.recap-box h3 { margin-top: 0; color: var(--pt-accent-strong); }
+.recap-box p, .recap-box li { color: var(--pt-muted); font-size: 15.5px; }
+footer { margin-top: 76px; padding: 26px 0 10px; border-top: 1px solid var(--pt-line-strong); font-size: 12px; color: var(--pt-faint); }
+.footer-row { display: flex; flex-wrap: wrap; gap: 10px 26px; justify-content: space-between; font-family: var(--pt-mono); }
+
+/* responsive */
+@media (max-width: 1020px) {
+  .shell { grid-template-columns: 188px minmax(0, 1fr); gap: 30px; padding: 0 22px; }
+}
+@media (max-width: 860px) {
+  :root { --pt-body-fs: 16.5px; }
+  :root[data-size="large"] { --pt-body-fs: 18.5px; }
+  :root[data-size="large"] .thesis { font-size: 18px; }
+  .shell { display: block; padding: 0 18px; }
+  .topbar { padding: 8px 16px; }
+  .read-note, .brand-copy span { display: none; }
+  .toc {
+    position: sticky; top: 53px; z-index: 50;
+    margin: 0 -18px; padding: 7px 18px 8px;
+    border-bottom: 1px solid var(--pt-line);
+    background: color-mix(in srgb, var(--pt-bg) 94%, transparent); backdrop-filter: blur(10px);
+  }
+  .toc-label, .toc-foot { display: none; }
+  .toc nav { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; scrollbar-width: thin; }
+  .toc a { flex: 0 0 auto; display: flex; gap: 6px; padding: 6px 9px; border: 1px solid var(--pt-line); border-radius: 4px; background: var(--pt-surface); }
+  .toc a.active { border-color: var(--pt-accent); }
+  .section { padding-top: 58px; scroll-margin-top: 110px; }
+  .hero { padding-top: 56px; }
+  .section-heading { grid-template-columns: 1fr; gap: 4px; }
+  .section-index { padding-top: 0; }
+}
+@media (max-width: 480px) {
+  .hero { padding-top: 42px; }
+  h1 { font-size: 37px; }
+  .thesis { font-size: 17px; }
+  /* let inline code wrap on phones (pre blocks keep white-space: pre via their own rule) */
+  .prose p code, .callout p code { white-space: normal; overflow-wrap: break-word; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media print {
+  .topbar, .toc, .progress-track, .theme-toggle { display: none !important; }
+  .shell { display: block; max-width: none; padding: 0; }
+  .section { break-inside: avoid-page; padding-top: 30px; }
+  body { background: #fff; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">PT</span>
+    <div class="brand-copy">
+      <strong>SILICON 101</strong>
+      <span>the whole stack, fast</span>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="read-note">≈15 MIN READ · SPEED RUN</span>
+    <div class="settings-wrap">
+      <button class="aa-toggle" id="aa-toggle" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="aa-panel" aria-label="Reading settings: font family and size">
+        <span aria-hidden="true">Aa</span>
+      </button>
+      <div class="aa-panel" id="aa-panel" hidden>
+        <div class="aa-row">
+          <span class="aa-label" id="aa-font-label">FONT FAMILY</span>
+          <div class="aa-seg" role="group" aria-labelledby="aa-font-label">
+            <button type="button" data-set="font" data-val="sans">Sans</button>
+            <button type="button" data-set="font" data-val="serif">Serif</button>
+          </div>
+        </div>
+        <div class="aa-row">
+          <span class="aa-label" id="aa-size-label">FONT SIZE</span>
+          <div class="aa-seg" role="group" aria-labelledby="aa-size-label">
+            <button type="button" data-set="size" data-val="normal">Normal</button>
+            <button type="button" data-set="size" data-val="large">Large</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle light/dark theme">
+      <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+      <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>
+      <span id="theme-label">dark</span>
+    </button>
+  </div>
+  <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progress-fill"></div></div>
+</header>
+
+<div class="shell">
+  <aside class="toc" aria-label="Table of contents">
+    <p class="toc-label">CONTENTS</p>
+    <nav id="toc-nav">
+      <a href="#hero" class="active"><span>00</span><span>The thesis</span></a>
+      <a href="#layers"><span>01</span><span>The cast</span></a>
+      <a href="#dispatcher"><span>02</span><span>The dispatcher</span></a>
+      <a href="#config"><span>03</span><span>The config</span></a>
+      <a href="#launch"><span>04</span><span>The launch</span></a>
+      <a href="#warps"><span>05</span><span>On the GPU</span></a>
+      <a href="#deeper"><span>06</span><span>Go deeper</span></a>
+    </nav>
+    <div class="toc-foot">The speed run of the deep dive. Want the 55-minute version? <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html" target="_blank" rel="noopener">From torch.add to Silicon</a>.</div>
+  </aside>
+
+  <main id="book">
+<section class="hero" id="hero" aria-labelledby="hero-title">
+  <p class="eyebrow">Ebook · Interactive · The GPU stack speed run</p>
+  <h1 id="hero-title">Between your Python line<br>and the ALUs: <em>four layers</em>, fifteen minutes.</h1>
+  <p class="thesis"><strong>PyTorch decides what to run</strong> — the dispatcher's bitset arithmetic and the entire launch configuration, computed on the CPU. <strong>The CUDA runtime packs the launch.</strong> <strong>The driver is the only software that touches the hardware.</strong> <strong>The GPU executes SASS, warp by warp.</strong> Compilers built the kernels ahead of time or just in time. This is the whole stack of <strong>torch.add</strong>, fast — the speed run of <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html" target="_blank" rel="noopener">From torch.add to Silicon</a>.</p>
+  <div class="hero-meta">
+    <span><span class="dot">◆</span> ≈15 minutes end to end</span>
+    <span><span class="dot">◆</span> 3 live widgets: keys, launch, warps</span>
+    <span><span class="dot">◆</span> deep links when you want the 55-minute version</span>
+  </div>
+</section>
+
+<section class="section" id="layers">
+  <div class="section-heading">
+    <span class="section-index">01 / THE CAST</span>
+    <div>
+      <h2 id="layers-title">Four Layers, One Job Each</h2>
+      <p class="section-deck">From torch.add on CUDA tensors to the arithmetic units — four layers, one job each.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>You know the top of this stack: tensors, the dispatcher, the tape, streams as queues. This run covers everything below it.</p>
+    <p><strong>PyTorch</strong> decides <em>what</em>. Op semantics, dispatch — and, the fact most people miss, the <em>entire launch configuration</em>: block size, grid size, vector width, all computed right here on the CPU (section 03). CUDA never hears "add these tensors" — it receives a function handle plus integers PyTorch already chose.</p>
+    <p><strong>The CUDA runtime</strong> (<code>libcudart</code>) is a thin C API layered over the driver. Its job is convenience and bookkeeping: validate arguments, track the current device and context, pack the launch.</p>
+    <p><strong>The kernel driver</strong> (<code>libcuda</code>) is the only software in the picture that touches hardware. It owns the command channels, loads kernel modules, and JIT-compiles PTX for chips the binaries never targeted.</p>
+    <p><strong>The hardware</strong> runs two kinds of worker: <strong>streaming multiprocessors</strong> (SMs), which execute kernels, and <strong>copy engines</strong>, DMA units that move bytes while SMs compute. A compiler sidecar supplies the code: <code>nvcc</code> built libtorch's kernels at compile time; NVRTC and Triton build new ones at runtime, on first use.</p>
+    <figure class="diagram">
+      <div class="diagram-scroll">
+        <svg viewBox="0 0 560 236" role="img" aria-label="Layer map: PyTorch above the CUDA runtime above the kernel driver above hardware, with a compiler sidecar feeding cubins to the driver">
+          <rect class="svg-accent" x="40" y="8" width="320" height="46" rx="6"/>
+          <text class="svg-label" x="200" y="27" text-anchor="middle">PYTORCH</text>
+          <text class="svg-small" x="200" y="44" text-anchor="middle">decides WHAT — dispatch + launch config</text>
+          <line class="svg-edge" x1="200" y1="54" x2="200" y2="66"/>
+          <rect class="svg-box" x="40" y="66" width="320" height="46" rx="6"/>
+          <text class="svg-label" x="200" y="85" text-anchor="middle">CUDA RUNTIME — libcudart</text>
+          <text class="svg-small" x="200" y="102" text-anchor="middle">thin C API — validates + packs the launch</text>
+          <line class="svg-edge" x1="200" y1="112" x2="200" y2="124"/>
+          <rect class="svg-box" x="40" y="124" width="320" height="46" rx="6"/>
+          <text class="svg-label" x="200" y="143" text-anchor="middle">KERNEL DRIVER — libcuda</text>
+          <text class="svg-small" x="200" y="160" text-anchor="middle">only hardware talker — channels · modules · JIT</text>
+          <line class="svg-edge" x1="200" y1="170" x2="200" y2="182"/>
+          <rect class="svg-box" x="40" y="182" width="320" height="46" rx="6"/>
+          <text class="svg-label" x="200" y="201" text-anchor="middle">HARDWARE</text>
+          <text class="svg-small" x="200" y="218" text-anchor="middle">SMs compute · copy engines move bytes</text>
+          <rect class="svg-box" x="424" y="66" width="132" height="104" rx="6"/>
+          <text class="svg-label" x="490" y="88" text-anchor="middle">COMPILERS</text>
+          <text class="svg-small" x="490" y="114" text-anchor="middle">nvcc build · NVRTC/Triton runtime</text>
+          <text class="svg-faint" x="490" y="150" text-anchor="middle">cubins → driver modules</text>
+          <line class="svg-edge-back" x1="424" y1="118" x2="360" y2="118"/>
+        </svg>
+      </div>
+      <figcaption>Ops flow down the column; the compilers feed cubins into the driver's modules.</figcaption>
+    </figure>
+    <p>The map for the rest of the run: sections 02 and 03 are pure PyTorch, 04 is runtime-plus-driver, 05 is silicon, 06 is the compilers.</p>
+    <p>Takeaway: <strong>PyTorch decides what, the runtime packs it, the driver delivers it, the GPU executes it.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#cast" target="_blank" rel="noopener">the deep dive's chapter on the cast of layers</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="dispatcher">
+  <div class="section-heading">
+    <span class="section-index">02 / DISPATCHER</span>
+    <div>
+      <h2 id="dispatcher-title">Dispatch Is Bit Arithmetic</h2>
+      <p class="section-deck">A 64-bit key set per tensor, one union-subtract-index per call — and every grad mode is a different perturbation of the same arithmetic.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Every tensor carries a <strong>DispatchKeySet</strong>: a single 64-bit word stored in its TensorImpl. Two orthogonal halves — 16 low bits for backends (CPUBit, CUDABit, …), 47 bits above for functionality (Dense, Autograd, Python, …). A runtime key is a pair, never a bit: dispatching on CUDA means (Dense, CUDABit) — the functionality bit picks the layer, the backend bit picks the hardware.</p>
+    <p>Per call, dispatch is arithmetic, not search. Union the key sets of all tensor arguments (bitwise OR), OR in the thread-local include set, subtract the thread-local exclude set — exclusion wins — then extract the highest-priority bit: enum order <em>is</em> priority, computed as a count-leading-zeros. That bit converts directly into an index into the operator's 137-slot kernel table. No loop, no name matching: one OR, one subtraction, one bit count, one indexed jump.</p>
+    <p>The three modes you use daily are perturbations of exactly this arithmetic:</p>
+    <ul>
+      <li><code>torch.no_grad()</code> sets a TLS boolean and touches no keys — the Autograd kernel still runs, reads the flag, and skips recording.</li>
+      <li><code>torch.inference_mode()</code> is real set surgery: the TLS exclude set gains the Autograd keys, ADInplaceOrView drops out of the include set, and tensors created inside are stripped of autograd keys entirely — no version counters, so they error if grad-recording code later touches them.</li>
+      <li><code>torch.compile</code> includes the Python key, letting a TorchDispatchMode — FakeTensorMode underneath — intercept every op for tracing before the backend sees it.</li>
+    </ul>
+    <p>The priorities interleave on purpose: every Autocast key outranks every Autograd key, so casts get recorded; Python sits below Autograd and ADInplaceOrView, so dispatch modes observe ops after autograd.</p>
+    <figure class="widget-slot"><div class="widget" data-widget="key-calculator"></div><figcaption>One tensor, one op — flip no_grad, inference_mode, and torch.compile and watch exactly which bits of the union move.</figcaption></figure>
+    <p>Takeaway: <strong>one bitset union, one TLS subtraction, one indexed jump — the modes differ only in which piece they disturb.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#dispatcher" target="_blank" rel="noopener">the deep dive's chapter on the dispatcher</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="config">
+  <div class="section-heading">
+    <span class="section-index">03 / THE CONFIG</span>
+    <div>
+      <h2 id="config-title">PyTorch Computes the Launch</h2>
+      <p class="section-deck">TensorIterator picks every number CUDA will be told; the kernel body itself is one line of math.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Once dispatch lands on the CUDA kernel for <code>add</code>, <strong>TensorIterator</strong> does the planning. It broadcasts the shapes, promotes the dtypes, and reorders dimensions so the memory traffic comes out coalesced. Then it picks every number CUDA will be told: <strong>128 threads per block</strong>; <code>float4</code> vector loads (16 bytes per lane) when every operand pointer is 16-byte aligned; <strong>8 elements per thread</strong>; <strong>1,024 elements per block</strong>; <strong>grid = ceil(N / 1,024)</strong>.</p>
+    <p>The kernel body is one line — <code>self + alpha * other</code>. All the intelligence lives in the planned numbers. Thread <code>t</code> of block <code>b</code> computes <code class="math">idx = b·128 + t</code>; the vectorized path hands each thread 4 consecutive floats per slot, slots strided by 128 threads, so every warp's loads stay contiguous. Load, add, store — a dumb loop over handed indices. Even the vector width is decided per launch, from the operand pointers' alignment: planned numbers, not baked constants.</p>
+    <pre class="code-block"><code>&gt;&gt;&gt; N = 4_000_000                     # fp32 elements
+&gt;&gt;&gt; grid = (N + 1023) // 1024         # ceil(N / 1,024)
+&gt;&gt;&gt; grid, 8 * 128                    # blocks, elements per block
+# → (3907, 1024)</code></pre>
+    <p>Past 2³¹ elements the scheme changes, and not the way the folk story tells it: there is no grid-stride loop. TensorIterator detects that the element count or an operand's byte offsets would overflow 32-bit indices, recursively splits the iteration into sub-iterators, and issues one launch per piece.</p>
+    <figure class="diagram">
+      <div class="diagram-scroll">
+        <svg viewBox="0 0 560 84" role="img" aria-label="Three chips: TensorIterator computes the config, then the numbers, then the launch call">
+          <rect class="svg-accent" x="8" y="20" width="158" height="44" rx="6"/>
+          <text class="svg-label" x="87" y="38" text-anchor="middle">TensorIterator</text>
+          <text class="svg-small" x="87" y="54" text-anchor="middle">broadcast · dtype · coalescing</text>
+          <line class="svg-edge" x1="166" y1="42" x2="188" y2="42"/>
+          <rect class="svg-box" x="190" y="20" width="180" height="44" rx="6"/>
+          <text class="svg-label" x="280" y="38" text-anchor="middle">the numbers</text>
+          <text class="svg-small" x="280" y="54" text-anchor="middle">128 threads · 1,024/block · grid=⌈N/1,024⌉</text>
+          <line class="svg-edge" x1="370" y1="42" x2="392" y2="42"/>
+          <rect class="svg-box" x="394" y="20" width="158" height="44" rx="6"/>
+          <text class="svg-label" x="473" y="38" text-anchor="middle">the launch</text>
+          <text class="svg-small" x="473" y="54" text-anchor="middle">&lt;&lt;&lt;grid, 128, 0, stream&gt;&gt;&gt;</text>
+        </svg>
+      </div>
+      <figcaption>All three chips are PyTorch; CUDA receives only the rightmost one.</figcaption>
+    </figure>
+    <p>Takeaway: <strong>launch config is a PyTorch product, computed on the CPU; the kernel is a dumb loop over handed indices.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#kernel-code" target="_blank" rel="noopener">the deep dive's chapter on the kernel and its config</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="launch">
+  <div class="section-heading">
+    <span class="section-index">04 / THE LAUNCH</span>
+    <div>
+      <h2 id="launch-title">A Launch Is a Buffer Write</h2>
+      <p class="section-deck">cuLaunchKernel packs your arguments into one contiguous buffer; the GPU fetches the commands itself.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>The launch entry point is <code>cuLaunchKernel</code>: a function handle, three grid dims, three block dims, shared-memory bytes, a stream — and your kernel's arguments. The contract worth memorizing: the API packs <em>"all kernel parameters in one contiguous buffer."</em> There is no RPC into the GPU and no shared call stack: the CPU writes bytes, and the GPU later reads those same bytes — your <code>float*</code> pointers travel as plain data.</p>
+    <p>How the commands physically travel is known — per NVIDIA's open kernel driver and instrumentation research — deliberately not part of the documented contract: the driver translates the launch into command words written into a <strong>pushbuffer</strong> ring in pinned host memory, then rings a <strong>doorbell</strong> register; the GPU's front-end fetches the commands by DMA, and reports completion as a writeback the host polls. Back on documented ground, one structural fact survives: a launch is asynchronous <em>by construction</em>, because everything up to the doorbell is the CPU writing its own memory. The stream you know as a queue is the ordering discipline the hardware enforces on those fetched commands.</p>
+    <figure class="widget-slot"><div class="widget" data-widget="launch-pipeline"></div><figcaption>From Python call to DMA fetch — every stage before the doorbell is the CPU writing its own memory.</figcaption></figure>
+    <p>That CPU-side work is a tax, and it has no official figure. Measurements put it at 1.8–10 µs of CPU time per launch, with one core emitting commands at only 205–450 MiB/s. Run thousands of kernels shorter than their own launches and the GPU starves while a single core saturates in driver code. CUDA graphs are the amortization: record the launches once, replay the whole graph with a single submission, pay the packing once.</p>
+    <p>Completion flows back the expensive way. The host learns a stream finished by polling — spin, yield, or block, your choice of schedule flags. <code>.item()</code> is the full round trip made visible: allocate a pinned CPU scalar, enqueue a device-to-host copy, drain the stream, only then read the value. Every Python branch on a GPU value pays for one.</p>
+    <p>Takeaway: <strong>a launch is CPU-packaged commands the GPU fetches itself; sync is polling, and .item() is where you pay.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#launch" target="_blank" rel="noopener">the deep dive's chapter on the launch</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="warps">
+  <div class="section-heading">
+    <span class="section-index">05 / ON THE GPU</span>
+    <div>
+      <h2 id="warps-title">Warps and Bytes</h2>
+      <p class="section-deck">The warp is the unit of execution, the 32-byte sector is the unit of memory — the silicon serves one or the other.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>Each block from the launch lands on one <strong>SM</strong> and is immediately partitioned into <strong>warps of 32 threads</strong> — the SIMT execution unit. A warp has one program counter: each cycle, a warp scheduler issues one instruction for all 32 lanes. Divergent branches serialize — the warp walks each taken path with the other lanes disabled — though predication and independently scheduled warps blunt the cost in practice.</p>
+    <p>The memory counterpart is the <strong>32-byte sector</strong>. A warp loading 32 consecutive 4-byte words touches 128 B — exactly 4 sectors, one transaction each: fully coalesced. Give the same warp a strided access pattern and those 32 words land in 32 different sectors — 32 transactions for the same data, roughly an 8× bandwidth collapse. PyTorch's <code>float4</code> loads exist precisely to keep every warp access a clean 128 B group.</p>
+    <figure class="widget-slot"><div class="widget" data-widget="launch-anatomy"></div><figcaption>Switch contiguous → strided and watch 4 sectors become 32 transactions for the same 32 words.</figcaption></figure>
+    <p>Why so much machinery per byte: loads are slow, and the machine hides it. Shared memory answers in ~30 cycles, L2 in ~200–500, HBM in ~600 (Hopper microbenchmarks — approximations, not spec). No lane waits alone: the SM keeps many warps resident and issues from another whenever one stalls. That is <strong>occupancy</strong> — a latency-hiding reservoir, not a score. Past the point where latency is hidden, more resident warps just split registers and instruction-level parallelism thinner, and plenty of kernels run fastest below full occupancy.</p>
+    <p>One vocabulary correction: the chip never executes PTX. It executes <strong>SASS</strong>, the native instruction set; PTX is the forward-compatibility contract, JIT-compiled by the driver to SASS whenever no native binary matches the chip (section 06).</p>
+    <p>Takeaway: <strong>the warp is the execution unit, the sector is the memory unit — align your accesses with both.</strong></p>
+    <p class="go-deeper">Go deeper: <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#execution" target="_blank" rel="noopener">the deep dive's chapter on execution</a> unpacks this at full length.</p>
+  </div>
+</section>
+
+
+<section class="section" id="deeper">
+  <div class="section-heading">
+    <span class="section-index">06 / GO DEEPER</span>
+    <div>
+      <h2 id="deeper-title">Where Kernels Come From, and Where to Go</h2>
+      <p class="section-deck">Every kernel — built ahead of time or just in time — ends as SASS in a driver module.</p>
+    </div>
+  </div>
+  <div class="prose">
+    <p>The kernels launched above had to be built. <code>nvcc</code> did libtorch's at build time: CUDA C++ → <strong>PTX</strong>, a virtual ISA designed to span GPU generations → <strong>SASS</strong>, the native code → a <strong>fatbin</strong> embedded in libtorch, one SASS copy per architecture in the build list. On a GPU with no matching SASS, the driver JIT-compiles the embedded PTX — the first-run lag people blame on CUDA — caching results on disk (1 GiB default). Triton, the compiler behind <code>torch.compile</code>, is the runtime door: Python → TTIR → LLVM IR → PTX → <code>ptxas</code> → cubin, loaded through the same driver API. From there the launch path is the one you just read.</p>
+    <p>The deep dive, chapter by chapter:</p>
+    <ul>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#cast" target="_blank" rel="noopener">The cast</a> — the four layers</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#dispatcher" target="_blank" rel="noopener">The dispatcher</a> — key sets and kernels</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#kernel-code" target="_blank" rel="noopener">Kernel code</a> — TensorIterator and the config</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#launch" target="_blank" rel="noopener">The launch</a> — pushbuffer to doorbell</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#binaries" target="_blank" rel="noopener">Binaries</a> — PTX, SASS, fatbin, the JIT</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#execution" target="_blank" rel="noopener">Execution</a> — warps, sectors, occupancy</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#data" target="_blank" rel="noopener">Data</a> — copy engines, pinned memory</li>
+      <li><a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html#trace" target="_blank" rel="noopener">The trace</a> — one add, end to end</li>
+    </ul>
+    <p>Companions: <a href="https://chendi0x7c00.github.io/ebooks/books/pytorch-internals-101.html" target="_blank" rel="noopener">PyTorch Internals 101</a> and <a href="https://chendi0x7c00.github.io/ebooks/books/how-pytorch-works.html" target="_blank" rel="noopener">How PyTorch Works</a> cover everything above the CUDA boundary; <a href="https://chendi0x7c00.github.io/ebooks/books/how-cuda-works.html" target="_blank" rel="noopener">How CUDA Works</a> takes over below it, including tiling and matmul. Primary sources: ezyang's <a href="https://blog.ezyang.com/2020/09/lets-talk-about-the-pytorch-dispatcher/" target="_blank" rel="noopener">dispatcher post</a>; the <a href="https://docs.nvidia.com/cuda/cuda-programming-guide/02-basics/asynchronous-execution.html" target="_blank" rel="noopener">CUDA Programming Guide</a>; the <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html" target="_blank" rel="noopener">PTX ISA</a>.</p>
+    <p>From here on, the launch beneath <code>loss.backward()</code> — a dispatcher bit, a planned grid, a pushbuffer write, warps over sectors — is a mechanism too.</p>
+    <p class="colophon">Facts verified against PyTorch, CUDA, and Triton sources (Nov 2026); [3P] mechanisms are from open-driver research, not NVIDIA's documented contract. Latency figures are microbenchmark approximations.</p>
+  </div>
+</section>
+
+    <footer>
+      <div class="footer-row">
+        <span>TORCH.ADD → SILICON 101 · 2026</span>
+        <span>single-file HTML · no trackers · no network calls</span>
+      </div>
+      <p style="margin-top:14px; line-height:1.8">Fact-checked against the <a href="https://docs.pytorch.org/docs/stable/index.html" target="_blank" rel="noopener">PyTorch documentation</a>, the PyTorch source on GitHub, and Edward Z. Yang's <a href="https://blog.ezyang.com/2019/05/pytorch-internals/" target="_blank" rel="noopener">PyTorch Internals</a> posts. Behavior verified on PyTorch 2.10 and the CUDA 12.x stack; hardware details cite NVIDIA documentation. Errors are mine — the mechanisms belong to the PyTorch and CUDA teams. The full-length companion is <a href="https://chendi0x7c00.github.io/ebooks/books/torch-add-to-silicon.html" target="_blank" rel="noopener">From torch.add to Silicon</a>.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+/* theme toggle */
+(() => {
+  const btn = document.getElementById('theme-toggle');
+  const label = document.getElementById('theme-label');
+  const sync = () => { label.textContent = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; };
+  btn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('ptw-theme', next); } catch (_) {}
+    document.dispatchEvent(new CustomEvent('ptw-theme', { detail: { theme: next } }));
+    sync();
+  });
+  sync();
+})();
+
+/* scroll spy + progress */
+(() => {
+  const links = Array.from(document.querySelectorAll('#toc-nav a'));
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const sections = Array.from(map.keys()).map(id => document.getElementById(id)).filter(Boolean);
+  const fill = document.getElementById('progress-fill');
+  let ticking = false;
+  const onScroll = () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      const y = window.scrollY + 140;
+      let active = sections[0];
+      for (const s of sections) if (s.offsetTop <= y) active = s;
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + active.id));
+      const h = document.documentElement;
+      const p = h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight);
+      fill.style.width = (p * 100).toFixed(2) + '%';
+    });
+  };
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+
+/* reading settings: font family + size */
+(() => {
+  const wrap = document.querySelector('.settings-wrap');
+  if (!wrap) return;
+  const btn = document.getElementById('aa-toggle');
+  const panel = document.getElementById('aa-panel');
+  const segs = Array.from(panel.querySelectorAll('.aa-seg button'));
+  const sync = () => {
+    const d = document.documentElement.dataset;
+    segs.forEach(b => b.setAttribute('aria-pressed', String(d[b.dataset.set] === b.dataset.val)));
+  };
+  const close = () => { panel.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = panel.hidden;
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+    if (open) { sync(); (segs.find(b => b.getAttribute('aria-pressed') === 'true') || segs[0]).focus(); }
+  });
+  segs.forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.set, v = b.dataset.val;
+    document.documentElement.dataset[k] = v;
+    try { localStorage.setItem(k === 'font' ? 'ptw-font' : 'ptw-size', v); } catch (_) {}
+    sync();
+  }));
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) { close(); btn.focus(); } });
+  document.addEventListener('click', e => { if (!panel.hidden && !wrap.contains(e.target)) close(); });
+  sync();
+})();
+
+/* mount widgets */
+(() => {
+  const mountAll = () => {
+    document.querySelectorAll('.widget[data-widget]').forEach(el => {
+      if (el.dataset.mounted) return;
+      const name = el.dataset.widget;
+      const fn = window.PT_WIDGETS && window.PT_WIDGETS[name];
+      if (typeof fn === 'function') { fn(el); el.dataset.mounted = '1'; }
+      else if (!el.firstChild) { el.innerHTML = '<div class="widget-fallback">widget "' + name + '" could not load</div>'; }
+    });
+  };
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', mountAll);
+  else mountAll();
+})();
+</script>
+<script data-widget-src="key-calculator">
+/* W1 "key-calculator" (ch2): build the DispatchKeySet live from toggles. */
+(function (global) {
+  if (typeof window !== 'undefined') window.PT_WIDGETS = window.PT_WIDGETS || {};
+
+  /* =====================================================================
+     DATA BLOCK — CALIBRATED against book/research/dispatcher.md (Nov 2026,
+     pytorch main). Facts used:
+     - Priority = the DispatchKey enum order (higher bit = dispatched first):
+       AutocastCUDA(32) > AutocastCPU(24) > Tracer(23) > Autograd*(21) >
+       ADInplaceOrView(19) > Python(13) > BackendSelect(11) > Dense(1)xbackend.
+       ("Autocasting precedes VariableTypeId, to ensure casts are autograd-exposed.")
+     - Default TLS EXCLUDES all 10 Autocast keys: the tensor's Autocast bit is
+       a dead bit unless torch.autocast includes it (so Autocast never fires here).
+     - A tensor's key set ALWAYS carries Autograd* + ADInplaceOrView (requires_grad
+       irrelevant); requires_grad only arms the wrapper's recording.
+     - inference_mode: TLS excludes Autograd* and drops ADInplaceOrView from the
+       include set; tensors CREATED inside are {backend, Autocast<backend>} with
+       no version counter.
+     - Simplification kept: one-bit-per-key strip (real set = 16 backend bits
+       + 47 functionality bits; a runtime key like CUDA is the PAIR
+       (Dense bit, CUDABit), not its own bit).
+     ===================================================================== */
+  var KEY_DATA = {
+    priority: ['AutocastCUDA', 'AutocastCPU', 'Tracer', 'AutogradCUDA', 'AutogradCPU', 'ADInplaceOrView', 'Python', 'BackendSelect', 'CUDA', 'CPU', 'Meta'],
+    bitOverride: null, /* one-bit-per-key pedagogy: bit = 63 - priority rank */
+    keysetFor: {
+      cpu: ['CPU', 'ADInplaceOrView', 'AutogradCPU', 'AutocastCPU'],
+      cuda: ['CUDA', 'ADInplaceOrView', 'AutogradCUDA', 'AutocastCUDA'],
+      cpuNoGrad: ['CPU', 'ADInplaceOrView', 'AutogradCPU', 'AutocastCPU'], /* tensor unchanged under no_grad */
+      cudaNoGrad: ['CUDA', 'ADInplaceOrView', 'AutogradCUDA', 'AutocastCUDA'], /* tensor unchanged under no_grad */
+      cpuInference: ['CPU', 'AutocastCPU'], /* inference tensor: autograd keys + version counter stripped at creation */
+      cudaInference: ['CUDA', 'AutocastCUDA']
+    },
+    autogradPattern: 'Autograd*', /* keys matching this are "the autograd layer" */
+    tlsExclude: { /* subtracted from the union before lookup; all modes start from the DEFAULT exclude set (all Autocast keys) */
+      normal: ['Autocast*'],
+      no_grad: ['Autocast*'],
+      inference: ['Autocast*', 'Autograd*', 'ADInplaceOrView']
+    },
+    fallthroughUnless: { /* key -> state field that must be true for it to participate */
+      'ADInplaceOrView': 'inplace' /* no kernel for out-of-place ops: falls through */
+    },
+    kinds: { autograd: ['Autograd*'], adiv: ['ADInplaceOrView'], autocast: ['Autocast*'], backend: ['CUDA', 'CPU', 'Meta'] },
+    notes: {
+      requiresGradOff: 'requires_grad off does NOT remove the Autograd* key: the wrapper still runs, finds nothing requiring grad, records nothing, and redispatches. The bit set is identical either way.',
+      noGrad: 'no_grad is not a flag kernels check — but it is also not a key-set change: it is a thread-local boolean (GradMode) that the Autograd wrapper reads and no-ops on.',
+      inference: 'inference_mode actually mutates the TLS sets: Autograd* excluded, ADInplaceOrView dropped from the include set. Tensors created inside additionally get a reduced key set and no version counter.',
+      inplace: 'In-place / view ops consult ADInplaceOrView: it bumps the version counter that keeps a[0] += 1 from silently corrupting a saved-for-backward tensor.',
+      adivFall: 'ADInplaceOrView is in the key set but registers no kernel for out-of-place ops — it falls through (pre-masked by the dispatcher, zero overhead).',
+      autocastTls: 'Autocast keys are excluded by the DEFAULT thread-local set — the tensor\u2019s Autocast bit is dead until torch.autocast includes it. (Above Autograd in priority, so casts are autograd-exposed when on.)',
+      bitSimplify: 'Simplified one-bit-per-key strip (bit 63 = highest priority). The real DispatchKeySet is one 64-bit word: 16 backend bits + 47 functionality bits, and a runtime key like CUDA is the pair (Dense bit, CUDABit) — not its own bit.'
+    }
+  };
+
+  /* ---------------- core logic (pure, unit-testable) ---------------- */
+
+  function patternMatch(pat, key) {
+    if (pat.slice(-1) === '*') return key.indexOf(pat.slice(0, -1)) === 0;
+    return pat === key;
+  }
+  function excludeBy(list, patterns) {
+    return list.filter(function (k) { return !patterns.some(function (p) { return patternMatch(p, k); }); });
+  }
+  function bitFor(key, data) {
+    if (data.bitOverride && Object.prototype.hasOwnProperty.call(data.bitOverride, key)) return data.bitOverride[key];
+    var i = data.priority.indexOf(key);
+    return i < 0 ? null : 63 - i;
+  }
+  function keysetVariant(device, mode, data) {
+    var dev = String(device).toLowerCase(); /* UI sends 'CUDA'; data keys are 'cuda' */
+    var suffix = mode === 'inference' ? 'Inference' : (mode === 'no_grad' ? 'NoGrad' : '');
+    return (data.keysetFor[dev + suffix] || data.keysetFor[dev] || []).slice();
+  }
+  function kindOf(key, data) {
+    var ks = data.kinds || {};
+    var order = ['autograd', 'adiv', 'autocast', 'backend'];
+    for (var i = 0; i < order.length; i++) {
+      var pats = ks[order[i]] || [];
+      for (var j = 0; j < pats.length; j++) if (patternMatch(pats[j], key)) return order[i];
+    }
+    return 'other';
+  }
+  function byPriority(data) {
+    return function (a, b) { return data.priority.indexOf(a) - data.priority.indexOf(b); };
+  }
+
+  /* state = { device:'cuda', requiresGrad:bool, mode:'normal'|'no_grad'|'inference', inplace:bool } */
+  function computeDispatch(state, data) {
+    data = data || KEY_DATA;
+    var full = { device: state.device, requiresGrad: state.requiresGrad !== false, mode: state.mode || 'normal', inplace: !!state.inplace, autocastOn: false };
+    /* 1. union of every tensor argument's key set (real set union) */
+    var a = keysetVariant(full.device, full.mode, data);
+    var b = keysetVariant(full.device, full.mode, data);
+    var args = a.concat(b.filter(function (k) { return a.indexOf(k) < 0; }));
+    /* 2. requires_grad does NOT touch key sets — it only arms the wrapper's recording */
+    /* 3. TLS exclude set: set subtraction before the table lookup */
+    var tls = (data.tlsExclude[full.mode] || []).slice();
+    var excluded = args.filter(function (k) { return tls.some(function (p) { return patternMatch(p, k); }); });
+    var afterTls = excludeBy(args, tls);
+    /* 4. op-dependent fallthrough keys never answer the lookup */
+    var fallthrough = afterTls.filter(function (k) {
+      var gate = null;
+      Object.keys(data.fallthroughUnless).forEach(function (p) { if (patternMatch(p, k)) gate = data.fallthroughUnless[p]; });
+      return !!gate && !full[gate];
+    });
+    var lookup = excludeBy(afterTls, fallthrough);
+    /* 5. fixed total order: highest priority key wins */
+    var ordered = lookup.slice().sort(byPriority(data));
+    var winner = ordered[0] || null;
+    /* 6. dispatch walk: wrappers redispatch with themselves excluded until a backend answers */
+    var seq = [];
+    var work = lookup.slice();
+    while (work.length) {
+      work.sort(byPriority(data));
+      var w = work[0];
+      if (patternMatch(data.autogradPattern, w)) {
+        var armed = full.requiresGrad && full.mode !== 'no_grad'; /* GradMode is the arming boolean */
+        seq.push({ key: w, kind: 'autograd', text: armed
+          ? (w + ' wrapper — record grad_fn node' + (full.inplace ? ', save version counter' : ''))
+          : (w + ' wrapper — runs (the key is always present), but nothing requires grad: records nothing') });
+        seq.push({ key: null, kind: 'redispatch', text: 'redispatch — recompute the set with Autograd* excluded' });
+        work = excludeBy(work, [data.autogradPattern]);
+      } else if (kindOf(w, data) === 'adiv') {
+        seq.push({ key: w, kind: 'adiv', text: w + ' — bump the version counter (view / in-place bookkeeping)' });
+        seq.push({ key: null, kind: 'redispatch', text: 'redispatch — ADInplaceOrView excluded' });
+        work = excludeBy(work, [w]);
+      } else {
+        seq.push({ key: w, kind: 'backend', text: w + ' kernel — the real math runs' });
+        break;
+      }
+    }
+    return { args: args, tls: tls, excluded: excluded, fallthrough: fallthrough, lookup: lookup, ordered: ordered, winner: winner, sequence: seq, bitFor: function (k) { return bitFor(k, data); }, state: full };
+  }
+
+  /* export the pure logic for node-side unit tests */
+  if (typeof module !== 'undefined' && module.exports) module.exports = { computeDispatch: computeDispatch, KEY_DATA: KEY_DATA };
+
+  /* ---------------- widget UI ---------------- */
+
+  var CSS = [
+    '.kcw *{box-sizing:border-box;margin:0;padding:0}',
+    '.kcw button{font:inherit;cursor:pointer}',
+    '.kcw button:focus-visible,.kcw .kcw-cell:focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}',
+    '.kcw .kc-controls{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:12px}',
+    '.kcw .kc-seglab{font-family:var(--pt-mono);font-size:11px;color:var(--pt-faint)}',
+    '.kcw .kc-seg{display:inline-flex;border:1px solid var(--pt-line-strong);border-radius:6px;overflow:hidden}',
+    '.kcw .kc-seg button{border:0;border-left:1px solid var(--pt-line);background:var(--pt-surface);color:var(--pt-muted);padding:6px 10px;font-family:var(--pt-mono);font-size:12px}',
+    '.kcw .kc-seg button:first-child{border-left:0}',
+    '.kcw .kc-seg button:hover{color:var(--pt-text)}',
+    '.kcw .kc-seg button[aria-pressed="true"]{background:var(--pt-data-soft);color:var(--pt-data);font-weight:600}',
+    '.kcw .kc-status{font-family:var(--pt-mono);font-size:11.5px;color:var(--pt-muted);margin-bottom:12px;min-height:15px}',
+    '.kcw .kc-sec{border:1px solid var(--pt-line);border-radius:8px;padding:10px 12px;margin-bottom:12px;background:var(--pt-surface)}',
+    '.kcw .kc-h{font-family:var(--pt-mono);font-size:11px;letter-spacing:.06em;color:var(--pt-accent);margin-bottom:8px}',
+    '.kcw .kc-h small{color:var(--pt-faint);letter-spacing:0;font-weight:400}',
+    '.kcw .kc-strip{display:grid;grid-template-columns:repeat(32,1fr);gap:2px}',
+    '.kcw .kc-cell{aspect-ratio:1;border-radius:2px;background:var(--pt-surface-alt);border:1px solid var(--pt-line);cursor:default}',
+    '.kcw .kc-cell.off{background:transparent;border-style:dotted}',
+    '.kcw .kc-cell.on.autograd{background:var(--pt-accent);border-color:var(--pt-accent)}',
+    '.kcw .kc-cell.on.adiv{background:var(--pt-warn);border-color:var(--pt-warn)}',
+    '.kcw .kc-cell.on.autocast{background:var(--pt-data);border-color:var(--pt-data)}',
+    '.kcw .kc-cell.on.backend{background:var(--pt-ok);border-color:var(--pt-ok)}',
+    '.kcw .kc-cell.on.other{background:var(--pt-muted);border-color:var(--pt-muted)}',
+    '.kcw .kc-cell.cut{background:var(--pt-danger-soft);border:1px dashed var(--pt-danger)}',
+    '.kcw .kc-cell.fall{background:repeating-linear-gradient(45deg,transparent,transparent 2px,var(--pt-surface-alt) 2px,var(--pt-surface-alt) 4px);border:1px dashed var(--pt-line-strong)}',
+    '.kcw .kc-hov{font-family:var(--pt-mono);font-size:10.5px;color:var(--pt-faint);margin-top:7px;min-height:13px}',
+    '.kcw .kc-hov b{color:var(--pt-text);font-weight:600}',
+    '.kcw .kc-legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-family:var(--pt-mono);font-size:10px;color:var(--pt-muted)}',
+    '.kcw .kc-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}',
+    '.kcw .kc-math{font-family:var(--pt-mono);font-size:11.5px;line-height:1.7;color:var(--pt-muted);overflow-x:auto;white-space:nowrap}',
+    '.kcw .kc-math .kc-set{color:var(--pt-text)}',
+    '.kcw .kc-math .kc-op{color:var(--pt-accent);font-weight:600}',
+    '.kcw .kc-math .kc-minus{color:var(--pt-danger)}',
+    '.kcw .kc-note{font-size:12.5px;line-height:1.5;color:var(--pt-muted);margin-top:8px}',
+    '.kcw .kc-note.warn{color:var(--pt-warn)}',
+    '.kcw table.kc-short{width:100%;border-collapse:collapse;font-family:var(--pt-mono);font-size:12px}',
+    '.kcw .kc-short td{border-top:1px solid var(--pt-line);padding:5px 6px;color:var(--pt-text)}',
+    '.kcw .kc-short td.kc-rank{color:var(--pt-faint);width:26px}',
+    '.kcw .kc-short td.kc-kind{font-size:10px;color:var(--pt-muted);width:86px}',
+    '.kcw .kc-short tr.win td{background:var(--pt-accent-soft);color:var(--pt-accent);font-weight:600}',
+    '.kcw .kc-short tr.dim td{color:var(--pt-faint)}',
+    '.kcw .kc-short .kc-wintag{font-size:9.5px;letter-spacing:.05em;color:var(--pt-accent)}',
+    '.kcw .kc-seq{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}',
+    '.kcw .kc-step{border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface);padding:6px 9px;font-family:var(--pt-mono);font-size:11px;max-width:280px;color:var(--pt-text)}',
+    '.kcw .kc-step small{display:block;font-family:var(--pt-sans);font-size:11px;color:var(--pt-muted);margin-top:2px;line-height:1.4}',
+    '.kcw .kc-step.autograd{border-color:var(--pt-accent);background:var(--pt-accent-soft)}',
+    '.kcw .kc-step.adiv{border-color:var(--pt-warn);background:var(--pt-warn-soft)}',
+    '.kcw .kc-step.backend{border-color:var(--pt-ok);background:var(--pt-ok-soft)}',
+    '.kcw .kc-step.redis{border-style:dashed;color:var(--pt-faint);background:transparent}',
+    '.kcw .kc-arrow{align-self:center;color:var(--pt-line-strong);font-family:var(--pt-mono);font-size:12px}',
+    '.kcw details{margin-top:2px}',
+    '.kcw summary{cursor:pointer;font-family:var(--pt-mono);font-size:11.5px;letter-spacing:.04em;color:var(--pt-muted)}',
+    '.kcw details ul{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.55;color:var(--pt-muted)}'
+  ].join('\n');
+
+  function h(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function setSpan(set) { return '{ ' + (set.length ? set.join(', ') : '\u2205') + ' }'; }
+
+  if (typeof window === 'undefined') return; /* node: pure-logic exports only */
+
+  window.PT_WIDGETS['key-calculator'] = function mount(root) {
+    if (root.__kcMounted) return;
+    root.__kcMounted = true;
+    root.classList.add('kcw');
+
+    var style = document.createElement('style');
+    style.textContent = CSS;
+    root.appendChild(style);
+
+    var head = h('div', 'widget-head', 'INTERACTIVE \u00b7 KEY CALCULATOR');
+    var body = h('div', 'widget-body');
+    root.appendChild(head);
+    root.appendChild(body);
+
+    var state = { device: 'CUDA', requiresGrad: true, mode: 'normal', inplace: false };
+
+    /* controls */
+    var controls = h('div', 'kc-controls');
+    function seg(labelText, options, get, set) {
+      controls.appendChild(h('span', 'kc-segl', labelText));
+      var wrap = h('div', 'kc-seg');
+      wrap.setAttribute('role', 'group');
+      wrap.setAttribute('aria-label', labelText);
+      options.forEach(function (opt) {
+        var b = h('button', null, opt);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(get() === opt));
+        b.addEventListener('click', function () {
+          if (get() === opt) return;
+          set(opt);
+          Array.prototype.forEach.call(wrap.children, function (x) { x.setAttribute('aria-pressed', String(x.textContent === opt)); });
+          render();
+        });
+        wrap.appendChild(b);
+      });
+      controls.appendChild(wrap);
+    }
+    seg('device', ['CPU', 'CUDA'], function () { return state.device; }, function (v) { state.device = v; });
+    seg('requires_grad', ['off', 'on'], function () { return state.requiresGrad ? 'on' : 'off'; }, function (v) { state.requiresGrad = v === 'on'; });
+    seg('mode', ['normal', 'no_grad', 'inference'], function () { return state.mode; }, function (v) { state.mode = v; });
+    seg('in-place op', ['no', 'yes'], function () { return state.inplace ? 'yes' : 'no'; }, function (v) { state.inplace = v === 'yes'; });
+    body.appendChild(controls);
+
+    var status = h('div', 'kc-status');
+    status.setAttribute('aria-live', 'polite');
+    body.appendChild(status);
+
+    /* section 1: the 64-cell bitset strip */
+    var sec1 = h('div', 'kc-sec');
+    sec1.appendChild(h('div', 'kc-h', '\u2460 tensor key set \u2014 64 bits '));
+    var strip = h('div', 'kc-strip');
+    strip.setAttribute('role', 'img');
+    sec1.appendChild(strip);
+    var hov = h('div', 'kc-hov');
+    sec1.appendChild(hov);
+    var legend = h('div', 'kc-legend');
+    [['autograd', 'Autograd* layer'], ['adiv', 'ADInplaceOrView'], ['autocast', 'Autocast*'], ['backend', 'backend'], ['cut', 'subtracted by TLS'], ['fall', 'fallthrough for this op']].forEach(function (l) {
+      var s = h('span', null);
+      var i = h('i', null);
+      i.style.background = 'var(--pt-' + (l[0] === 'autograd' ? 'accent' : l[0] === 'adiv' ? 'warn' : l[0] === 'autocast' ? 'data' : l[0] === 'backend' ? 'ok' : l[0] === 'cut' ? 'danger-soft' : 'surface-alt') + ')';
+      if (l[0] === 'cut') i.style.border = '1px dashed var(--pt-danger)';
+      if (l[0] === 'fall') i.style.border = '1px dashed var(--pt-line-strong)';
+      s.appendChild(i);
+      s.appendChild(document.createTextNode(l[1]));
+      legend.appendChild(s);
+    });
+    sec1.appendChild(legend);
+    sec1.appendChild(h('div', 'kc-note', KEY_DATA.notes.bitSimplify));
+    body.appendChild(sec1);
+
+    /* section 2: the key math */
+    var sec2 = h('div', 'kc-sec');
+    sec2.appendChild(h('div', 'kc-h', '\u2461 key computation \u2014 union, then subtraction'));
+    var math = h('div', 'kc-math');
+    sec2.appendChild(math);
+    var note = h('div', 'kc-note');
+    sec2.appendChild(note);
+    body.appendChild(sec2);
+
+    /* section 3: priority shortlist */
+    var sec3 = h('div', 'kc-sec');
+    sec3.appendChild(h('div', 'kc-h', '\u2462 priority shortlist \u2014 highest remaining key wins'));
+    var shortT = document.createElement('table');
+    shortT.className = 'kc-short';
+    var shortB = document.createElement('tbody');
+    shortT.appendChild(shortB);
+    sec3.appendChild(shortT);
+    body.appendChild(sec3);
+
+    /* section 4: dispatch sequence */
+    var sec4 = h('div', 'kc-sec');
+    sec4.appendChild(h('div', 'kc-h', '\u2463 dispatch sequence'));
+    var seqRow = h('div', 'kc-seq');
+    sec4.appendChild(seqRow);
+    body.appendChild(sec4);
+
+    var teaches = document.createElement('details');
+    teaches.appendChild(h('summary', null, 'What this teaches'));
+    var ul = document.createElement('ul');
+    [
+      'Dispatch is set math: union the tensors\u2019 key sets, subtract the thread-local excludes, and the highest-priority key left wins \u2014 no loop over backends, no flag that kernels check.',
+      'no_grad and inference_mode change the lookup, not the kernels: inference_mode also drops ADInplaceOrView, so version counters stop bumping.',
+      'The autograd \u201clayer\u201d is just the winning key: it records a grad_fn node, then redispatches with Autograd excluded until a backend key answers.'
+    ].forEach(function (t) { ul.appendChild(h('li', null, t)); });
+    teaches.appendChild(ul);
+    body.appendChild(teaches);
+
+    /* ---- rendering (all values computed by computeDispatch) ---- */
+    var cells = [];
+    var keyByBit = null;
+    function buildKeyByBit() {
+      keyByBit = {};
+      KEY_DATA.priority.forEach(function (k) {
+        var b = bitFor(k, KEY_DATA);
+        if (b != null) keyByBit[b] = k;
+      });
+    }
+
+    function cellState(bit, res) {
+      var k = keyByBit[bit];
+      if (k == null) return { cls: '', key: null, why: 'bit ' + bit + ' \u2014 unmapped in this simplified vocabulary' };
+      var kind = kindOf(k, KEY_DATA);
+      if (res.lookup.indexOf(k) >= 0) return { cls: 'on ' + kind, key: k, why: 'in the final lookup set' };
+      if (res.excluded.indexOf(k) >= 0) return { cls: 'cut', key: k, why: 'in the union, subtracted by the ' + res.state.mode + ' TLS exclude set' };
+      if (res.fallthrough.indexOf(k) >= 0) return { cls: 'fall', key: k, why: kind === 'adiv' ? KEY_DATA.notes.adivFall : KEY_DATA.notes.autocastFall };
+      if (res.args.indexOf(k) >= 0) return { cls: 'on ' + kind, key: k, why: 'in the union' };
+      return { cls: 'off', key: k, why: 'mapped vocabulary key, not present for this configuration' };
+    }
+
+    function render() {
+      var res = computeDispatch(state, KEY_DATA);
+      buildKeyByBit();
+
+      /* strip */
+      strip.textContent = '';
+      cells = [];
+      for (var bit = 63; bit >= 0; bit--) {
+        (function (b) {
+          var st = cellState(b, res);
+          var c = h('div', 'kc-cell ' + st.cls);
+          c.setAttribute('tabindex', '0');
+          c.setAttribute('role', 'listitem');
+          c.title = st.key ? ('bit ' + b + ' \u2014 ' + st.key + ': ' + st.why) : st.why;
+          function say() { hov.innerHTML = ''; var s = h('b', null, st.key ? 'bit ' + b + ' \u2014 ' + st.key : 'bit ' + b); hov.appendChild(s); hov.appendChild(document.createTextNode(st.key ? ' \u00b7 ' + st.why : ' \u00b7 unmapped')); }
+          c.addEventListener('mouseenter', say);
+          c.addEventListener('focus', say);
+          strip.appendChild(c);
+          cells.push(c);
+        })(bit);
+      }
+      strip.setAttribute('aria-label', '64-bit dispatch key set. Final lookup set: ' + res.ordered.join(', ') + '. Winner: ' + (res.winner || 'none') + '.');
+      hov.textContent = 'hover / focus a cell \u00b7 bit 63 (top-left) = highest priority';
+
+      /* key math */
+      math.textContent = '';
+      function mline(op, set, opCls) {
+        var d = h('div');
+        var opEl = h('span', opCls, op);
+        d.appendChild(opEl);
+        d.appendChild(document.createTextNode(' '));
+        d.appendChild(h('span', 'kc-set', setSpan(set)));
+        math.appendChild(d);
+      }
+      mline('args \u222a', res.args, 'kc-op');
+      if (res.excluded.length) mline('\u2212 TLS exclude (' + res.state.mode + ')', res.excluded, 'kc-minus');
+      if (res.fallthrough.length) mline('\u2212 fallthrough', res.fallthrough, 'kc-minus');
+      mline('= lookup set', res.lookup, 'kc-op');
+
+      /* contextual note */
+      var n = KEY_DATA.notes;
+      note.textContent = res.state.mode === 'inference' ? n.inference : res.state.mode === 'no_grad' ? n.noGrad : (res.state.requiresGrad ? '' : n.requiresGradOff);
+      note.classList.toggle('warn', res.state.mode !== 'normal');
+      if (state.inplace) {
+        var extra = h('div', 'kc-note warn', n.inplace);
+        note.appendChild(extra);
+      }
+      if (!note.textContent && !state.inplace) note.textContent = 'Normal mode: every bit the tensors carry is live \u2014 the top key answers first.';
+
+      /* shortlist */
+      shortB.textContent = '';
+      res.ordered.forEach(function (k, i) {
+        var tr = document.createElement('tr');
+        if (i === 0) tr.className = 'win';
+        tr.appendChild(h('td', 'kc-rank', String(i + 1) + '.'));
+        tr.appendChild(h('td', null, k));
+        var kd = h('td', 'kc-kind', kindOf(k, KEY_DATA));
+        tr.appendChild(kd);
+        var lastTd = h('td');
+        if (i === 0) lastTd.appendChild(h('span', 'kc-wintag', 'WINNER \u2192 dispatches first'));
+        tr.appendChild(lastTd);
+        shortB.appendChild(tr);
+      });
+      res.fallthrough.concat(res.excluded).forEach(function (k) {
+        var why = res.excluded.indexOf(k) >= 0 ? 'excluded by ' + res.state.mode : 'fallthrough for this op';
+        var tr = document.createElement('tr');
+        tr.className = 'dim';
+        tr.appendChild(h('td', 'kc-rank', '\u2013'));
+        tr.appendChild(h('td', null, k));
+        tr.appendChild(h('td', 'kc-kind', kindOf(k, KEY_DATA)));
+        tr.appendChild(h('td', null, why));
+        shortB.appendChild(tr);
+      });
+
+      /* sequence */
+      seqRow.textContent = '';
+      res.sequence.forEach(function (s, i) {
+        if (i > 0) seqRow.appendChild(h('div', 'kc-arrow', '\u2192'));
+        var step = h('div', 'kc-step ' + s.kind);
+        step.appendChild(h('div', null, s.key || (s.kind === 'redispatch' ? 'redispatch' : '')));
+        step.appendChild(h('small', null, s.text));
+        seqRow.appendChild(step);
+      });
+      if (!res.sequence.length) seqRow.appendChild(h('div', 'kc-note', 'Empty lookup set \u2014 nothing dispatches.'));
+
+      var stopWord = res.winner && kindOf(res.winner, KEY_DATA) !== 'backend' ? ' stops' : ' stop';
+      status.textContent = 'winner: ' + (res.winner || 'none') + (res.sequence.length ? ' \u00b7 ' + res.sequence.length + stopWord + ' to the backend kernel' : '');
+    }
+
+    render();
+  };
+})();
+
+</script>
+<script data-widget-src="launch-pipeline">
+/* W3 "launch-pipeline" — "From torch.add to Silicon", ch 4 (#launch).
+   ONE kernel launch (y = a + b, two scalar CUDA tensors) as 8 stations:
+   Python line → dispatcher CUDA row → TensorIterator config → cuLaunchKernel
+   → pushbuffer write → doorbell → SASS execution → semaphore writeback + sync
+   poll. Three zones: CPU lane / pinned pushbuffer ring (host RAM) / GPU.
+   Stepper (Prev/Next + chips + autoplay) and a station-8 sync-poll demo.
+   DOM/CSS only, no deps. All factual text and costs live in STATIONS/NOTES. */
+(function () {
+  'use strict';
+  window.PT_WIDGETS = window.PT_WIDGETS || {};
+
+  /* Calibrated against book/research/launch-driver.md + tensoriterator-compilers.md (Nov 2026).
+     Per-station µs figures are deliberately coarse: no official per-stage numbers exist;
+     measured whole-launch cost is ~1.8–10 µs, CPU-side. Stations 5/6/8 mechanisms are
+     [3P]: from NVIDIA's open kernel driver + instrumentation research, NOT in CUDA's docs. */
+  const STATIONS = [
+    { id: 'python', chip: 'Python', title: '1 · Python: y = a + b',
+      cost: 'host-side, fast',
+      text: 'Two scalar CUDA tensors — a = 2.0, b = 3.0 — meet the + operator. ' +
+        '__add__ does no math: it packages the schema and args and drops into C++. ' +
+        'Each tensor carries its dispatch key set along; here that says CUDA + AutogradCUDA.' },
+    { id: 'dispatch', chip: 'Dispatch', title: '2 · Dispatcher picks the CUDA row',
+      cost: 'sub-µs — one array index',
+      text: 'The dispatcher unions the key sets of a and b, applies the thread-local include/exclude sets, and jumps straight to one cell of the per-op table — no loop. ' +
+        'The highest-priority key (AutogradCUDA) wraps first — nothing requires grad, so the wrapper records nothing — and redispatches with autograd excluded. ' +
+        'The CUDA row wins: add_out_cuda.' },
+    { id: 'config', chip: 'Config', title: '3 · TensorIterator computes the config',
+      cost: 'host-side',
+      text: 'PyTorch — not CUDA — plans the launch: broadcast shapes, promote dtypes, count elements. ' +
+        'Here N = 1: one float, and still a full kernel launch. (A real vector op: 128 threads per block, 1024 elements per block, grid = ceil(N/1024).) ' +
+        'The kernel itself is just a dumb loop over indices planned here.',
+      cfg: 'N = 1 · block = 128 · grid = 1' },
+    { id: 'launch', chip: 'Launch', title: '4 · cuLaunchKernel validates & packs',
+      cost: 'µs-scale (4–6 together)',
+      text: 'The runtime resolves the compiled function handle and validates grid, block, shared memory and stream. ' +
+        'The arguments — pointers to a, b, y plus N — are packed into a single contiguous parameter buffer baked into the command. ' +
+        'There is no RPC: parameters travel as bytes in a buffer.' },
+    { id: 'pushbuf', chip: 'Pushbuf', title: '5 · Driver writes the pushbuffer ring',
+      cost: 'µs-scale (4–6 together) · [3P]',
+      text: 'The driver appends the launch as a few dozen command words to a ring buffer in pinned host memory — a channel tied to the stream; the tail pointer just advanced. ' +
+        'This write is essentially everything the CPU must do for the launch, which is why launches are async and cheap-ish.' },
+    { id: 'doorbell', chip: 'Doorbell', title: '6 · Doorbell: one MMIO write',
+      cost: 'µs-scale (4–6 together) · [3P]',
+      text: 'A single write to a GPU register mapped into the driver address space — the doorbell — announces new work in the channel. ' +
+        'Around here y = a + b has already returned to Python, and the GPU has not executed a single instruction of it yet.' },
+    { id: 'exec', chip: 'Execute', title: '7 · Host interface fetches; SASS runs',
+      cost: 'ns–µs on-device (N = 1: trivial)',
+      text: 'The GPU host interface fetches the command over PCIe/NVLink and the front end lands the block on SMs. ' +
+        'Threads run as warps of 32 lanes executing SASS: load a, load b, add, store y. ' +
+        'For N = 1 the math is nearly free — the pipeline you just walked dwarfed it. That is the point.' },
+    { id: 'sync', chip: 'Sync', title: '8 · Writeback & the sync poll',
+      cost: 'writeback: ns · poll: until it lands · [3P]',
+      text: 'When the block retires, the GPU writes a completion value to a semaphore in memory the CPU can read. ' +
+        'y.item() needs the actual bytes, so a tiny D2H copy is enqueued and the runtime polls the semaphore until the value flips. ' +
+        'Press "run sync poll" to watch the CPU spin.' }
+  ];
+  const NOTES = {
+    graphs: 'CUDA graphs: record all 8 stations once, then replay with a single traversal of stations 4–6 — one packed submission instead of the whole per-op CPU-side walk.',
+    evidence: 'Documented contract (CUDA docs): a launch asynchronously enqueues work on a stream. Stations 5–6 and the semaphore writeback are how it works under the hood, per NVIDIA\u2019s open kernel driver and instrumentation research — deliberately not part of the documented API.'
+  };
+  /* ----------------------------------------------------------------------- */
+  const AUTO_MS = 1400;      // autoplay cadence per station
+  const POLL_MS = 1300;      // how long the sync poll spins before writeback
+  const SEM_FROM = '0x0000', SEM_TO = '0x5f3a';
+  const N_CELLS = 7;         // ring cells; 0..1 hold older commands, 2 gets ours
+
+  window.PT_WIDGETS['launch-pipeline'] = function mount(root) {
+    if (root.dataset.mounted) return; // safe to call once
+    root.dataset.mounted = '1';
+
+    var el = function (tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    };
+
+    /* ---------- scoped styles: only --pt-* design tokens ---------- */
+    var styleEl = el('style');
+    styleEl.textContent = [
+      '.lpw *{box-sizing:border-box}',
+      '.lpw button{font-family:var(--pt-mono);cursor:pointer}',
+      '.lpw :focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}',
+      '.lp-controls{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}',
+      '.lp-btn{font-size:12px;font-weight:600;line-height:1;padding:7px 10px;border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface);color:var(--pt-text)}',
+      '.lp-btn:hover:not(:disabled){border-color:var(--pt-accent);color:var(--pt-accent)}',
+      '.lp-btn:active:not(:disabled){transform:translateY(1px)}',
+      '.lp-btn:disabled{opacity:.35;cursor:not-allowed}',
+      '.lp-btn-warn{border-color:var(--pt-warn);color:var(--pt-warn)}',
+      '.lp-btn-warn:hover:not(:disabled){border-color:var(--pt-warn);color:var(--pt-warn);background:var(--pt-warn-soft)}',
+      '.lp-btn[aria-pressed="true"]{background:var(--pt-warn-soft);border-color:var(--pt-warn);color:var(--pt-warn)}',
+      '.lp-btn-live{background:var(--pt-accent);border-color:var(--pt-accent);color:var(--pt-on-accent)}',
+      '.lp-btn-ghost{background:var(--pt-surface-alt)}',
+      '.lp-chips{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 12px}',
+      '.lp-chip{display:inline-flex;align-items:center;gap:5px;font:600 11px/1 var(--pt-mono);padding:6px 9px;border:1px solid var(--pt-line);border-radius:999px;background:var(--pt-surface);color:var(--pt-muted)}',
+      '.lp-chip i{font-style:normal;font-size:10px;width:16px;height:16px;border:1px solid var(--pt-line-strong);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--pt-faint)}',
+      '.lp-chip.done{color:var(--pt-faint)}',
+      '.lp-chip.done i{background:var(--pt-ok-soft);border-color:var(--pt-ok);color:var(--pt-ok)}',
+      '.lp-chip.on{border-color:var(--pt-accent);color:var(--pt-accent);background:var(--pt-accent-soft);font-weight:700}',
+      '.lp-chip.on i{border-color:var(--pt-accent);color:var(--pt-accent)}',
+      '.lp-main{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}',
+      '@media (min-width:880px){.lp-main{grid-template-columns:minmax(0,1fr) minmax(240px,300px)}}',
+      '.lp-stage{border:1px solid var(--pt-line);border-radius:8px;background:var(--pt-surface);overflow:hidden}',
+      '.lp-zone{padding:8px 10px;border-bottom:1px solid var(--pt-line)}',
+      '.lp-stage> :last-child{border-bottom:0}',
+      '.lp-zlab{font:700 9px/1.4 var(--pt-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pt-faint);margin:0 0 6px}',
+      '.lp-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}',
+      '.lp-node{border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface-alt);padding:6px 8px;flex:1 1 92px;min-width:0;transition:box-shadow .25s,border-color .25s}',
+      '.lp-node .nm{display:block;font:700 11px/1.3 var(--pt-mono);color:var(--pt-text)}',
+      '.lp-node .sb{display:block;font:10px/1.35 var(--pt-mono);color:var(--pt-faint);margin-top:2px}',
+      '.lp-node.done{border-color:var(--pt-ok);box-shadow:inset 2px 0 0 var(--pt-ok)}',
+      '.lp-node.on{border-color:var(--pt-accent);animation:lp-pulse 1.2s ease-in-out infinite}',
+      '@keyframes lp-pulse{0%,100%{box-shadow:0 0 0 2px var(--pt-accent-soft)}50%{box-shadow:0 0 0 6px var(--pt-accent-soft)}}',
+      '.lp-kt{display:none;margin-top:5px;border:1px solid var(--pt-line);border-radius:4px;overflow:hidden;padding:3px 0}',
+      '.lp-kt.show{display:block;animation:lp-flash 1s}',
+      '.lp-kt div{font:9px/1.7 var(--pt-mono);padding:1px 6px;color:var(--pt-faint);background:var(--pt-surface)}',
+      '.lp-kt div.hit{background:var(--pt-accent-soft);color:var(--pt-accent);font-weight:700}',
+      '@keyframes lp-flash{from{background-color:var(--pt-accent-soft)}}',
+      '.lp-cfg{display:none;margin-top:5px;font:9.5px/1.4 var(--pt-mono);color:var(--pt-data);background:var(--pt-data-soft);border-radius:4px;padding:2px 6px}',
+      '.lp-cfg.show{display:inline-block;animation:lp-flash 1s}',
+      '.lp-statline{margin-top:7px;font:10.5px/1.5 var(--pt-mono);color:var(--pt-muted);min-height:16px;display:flex;gap:6px;align-items:center}',
+      '.lp-spin{display:none;width:10px;height:10px;border:2px solid var(--pt-line-strong);border-top-color:var(--pt-warn);border-radius:50%;animation:lp-rot .7s linear infinite;flex:none}',
+      '.lp-statline.poll .lp-spin{display:inline-block}',
+      '@keyframes lp-rot{to{transform:rotate(360deg)}}',
+      '.lp-ramrow{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}',
+      '.lp-ring{display:flex;gap:4px;flex:1 1 200px;min-width:0;padding-bottom:15px}',
+      '.lp-cell{flex:1 1 0;min-width:0;height:30px;border:1px dashed var(--pt-line-strong);border-radius:4px;display:flex;align-items:center;justify-content:center;font:8.5px/1 var(--pt-mono);color:var(--pt-faint);position:relative;background:var(--pt-surface);overflow:visible}',
+      '.lp-cell.old{border-style:solid;background:var(--pt-surface-alt)}',
+      '.lp-cell.filled{border-style:solid;border-color:var(--pt-accent);background:var(--pt-accent-soft);color:var(--pt-accent);font-weight:700}',
+      '.lp-cell.newpop{animation:lp-pop .4s}',
+      '@keyframes lp-pop{from{transform:scale(.6);opacity:0}}',
+      '.lp-cell.tail::after{content:"tail";position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);font:700 8px/1 var(--pt-mono);letter-spacing:.05em;color:var(--pt-accent);border-top:2px solid var(--pt-accent);padding-top:1px;text-align:center}',
+      '.lp-sem{border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface-alt);padding:5px 9px;flex:0 1 auto;transition:border-color .25s,box-shadow .25s}',
+      '.lp-sem .nm{display:block;font:700 10px/1.3 var(--pt-mono);color:var(--pt-text)}',
+      '.lp-sem .sb{display:block;font:9px/1.4 var(--pt-mono);color:var(--pt-faint)}',
+      '.lp-semv{font:700 13px/1.5 var(--pt-mono);color:var(--pt-faint)}',
+      '.lp-sem.landed .lp-semv{color:var(--pt-ok)}',
+      '.lp-sem.on{border-color:var(--pt-warn);animation:lp-pulse 1.2s ease-in-out infinite}',
+      '.lp-bus{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--pt-line);background:var(--pt-surface-alt)}',
+      '.lp-buslab{font:700 9px/1 var(--pt-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pt-faint)}',
+      '.lp-busarrows{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}',
+      '.lp-arr{font:9.5px/1 var(--pt-mono);padding:4px 8px;border:1px solid var(--pt-line);border-radius:999px;color:var(--pt-faint);background:var(--pt-surface)}',
+      '.lp-arr.bell.on,.lp-arr.bell.done{border-color:var(--pt-accent);color:var(--pt-accent);background:var(--pt-accent-soft)}',
+      '.lp-arr.fetch.on,.lp-arr.fetch.done{border-color:var(--pt-data);color:var(--pt-data);background:var(--pt-data-soft)}',
+      '.lp-arr.wb.on,.lp-arr.wb.done{border-color:var(--pt-ok);color:var(--pt-ok);background:var(--pt-ok-soft)}',
+      '.lp-arr.on{animation:lp-pulse 1.2s ease-in-out infinite}',
+      '.lp-arr.done{opacity:.8}',
+      '.lp-gpu-row{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}',
+      '.lp-smbox{border:1px solid var(--pt-line-strong);border-radius:6px;background:var(--pt-surface-alt);padding:6px 8px;flex:1 1 120px;min-width:0;transition:box-shadow .25s,border-color .25s}',
+      '.lp-smbox.done{border-color:var(--pt-ok);box-shadow:inset 2px 0 0 var(--pt-ok)}',
+      '.lp-smbox.on{border-color:var(--pt-accent);animation:lp-pulse 1.2s ease-in-out infinite}',
+      '.lp-sms{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:5px}',
+      '.lp-sm{height:12px;border-radius:3px;background:var(--pt-surface);border:1px solid var(--pt-line);transition:background .3s,border-color .3s}',
+      '.lp-sms.lit .lp-sm{background:var(--pt-data);border-color:var(--pt-data)}',
+      '.lp-sms.lit .lp-sm:nth-child(2n){transition-delay:.15s}',
+      '.lp-sms.lit .lp-sm:nth-child(3n){transition-delay:.25s}',
+      '.lp-card{border:1px solid var(--pt-line);border-radius:8px;background:var(--pt-surface);padding:10px 12px;align-self:start}',
+      '.lp-kick{font:700 9px/1 var(--pt-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pt-faint)}',
+      '.lp-title{font:700 14px/1.35 var(--pt-sans);margin:7px 0 8px;color:var(--pt-text)}',
+      '.lp-cost{display:inline-block;font:600 10.5px/1.4 var(--pt-mono);color:var(--pt-warn);background:var(--pt-warn-soft);border:1px solid var(--pt-warn);border-radius:999px;padding:3px 9px;margin:0 0 8px}',
+      '.lp-text{font:13px/1.6 var(--pt-sans);color:var(--pt-muted);margin:0}',
+      '.lp-note{display:none;margin-top:12px;border:1px dashed var(--pt-warn);border-radius:6px;background:var(--pt-warn-soft);color:var(--pt-warn);font:11.5px/1.5 var(--pt-mono);padding:7px 10px}',
+      '.lp-note.show{display:block}',
+      '.lp-teach{margin-top:12px;border-top:1px solid var(--pt-line);padding-top:10px}',
+      '.lp-teach summary{cursor:pointer;font:700 11px/1.4 var(--pt-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--pt-accent)}',
+      '.lp-teach ul{margin:8px 0 0;padding-left:18px;font:13px/1.55 var(--pt-sans);color:var(--pt-muted)}',
+      '.lp-teach li+li{margin-top:4px}',
+      '.lp-teach code{font:12px var(--pt-mono);color:var(--pt-text)}',
+      '@media (prefers-reduced-motion:reduce){.lpw *{animation:none!important;transition:none!important}}'
+    ].join('\n');
+    root.appendChild(styleEl);
+
+    root.appendChild(el('div', 'widget-head', 'INTERACTIVE · LAUNCH PIPELINE'));
+    var body = el('div', 'widget-body lpw');
+    root.appendChild(body);
+
+    /* ---------- controls ---------- */
+    var controls = el('div', 'lp-controls');
+    function mkBtn(cls, label) {
+      var b = el('button', cls, label);
+      b.type = 'button';
+      controls.appendChild(b);
+      return b;
+    }
+    var prevB = mkBtn('lp-btn lp-prev', 'Prev');
+    var nextB = mkBtn('lp-btn lp-next', 'Next');
+    var autoB = mkBtn('lp-btn lp-auto', 'Autoplay');
+    var syncB = mkBtn('lp-btn lp-btn-warn lp-sync', 'run sync poll');
+    syncB.setAttribute('aria-pressed', 'false');
+    var resetB = mkBtn('lp-btn lp-btn-ghost lp-reset', 'reset & compare');
+    body.appendChild(controls);
+
+    /* ---------- station chips ---------- */
+    var chips = el('div', 'lp-chips');
+    var chipEls = STATIONS.map(function (s, i) {
+      var b = el('button', 'lp-chip');
+      b.type = 'button';
+      b.appendChild(el('i', null, String(i + 1)));
+      b.appendChild(el('span', null, s.chip));
+      b.addEventListener('click', function () { manualGo(i); });
+      chips.appendChild(b);
+      return b;
+    });
+    body.appendChild(chips);
+
+    /* ---------- layout: stage (3 zones + bus) + card ---------- */
+    var main = el('div', 'lp-main');
+    var stage = el('div', 'lp-stage');
+    var card = el('aside', 'lp-card');
+    main.appendChild(stage); main.appendChild(card);
+    body.appendChild(main);
+
+    var V = {}; // element registry
+    function zone(cls, label) {
+      var z = el('div', 'lp-zone ' + cls);
+      z.appendChild(el('div', 'lp-zlab', label));
+      stage.appendChild(z);
+      return z;
+    }
+    function node(parent, id, nm, sb) {
+      var n = el('div', 'lp-node');
+      n.appendChild(el('span', 'nm', nm));
+      if (sb) n.appendChild(el('span', 'sb', sb));
+      V[id] = n;
+      parent.appendChild(n);
+      return n;
+    }
+
+    /* CPU lane */
+    var cpu = zone('lp-cpu', 'CPU · python thread → dispatcher → runtime → driver');
+    var flow = el('div', 'lp-flow');
+    cpu.appendChild(flow);
+    node(flow, 'n-py', 'Python', 'y = a + b');
+    var disp = node(flow, 'n-disp', 'dispatcher', 'per-op table');
+    V.kt = el('div', 'lp-kt');
+    ['CPU', 'CUDA', 'Meta'].forEach(function (r) {
+      var row = el('div', null, r);
+      if (r === 'CUDA') V.ktcuda = row;
+      V.kt.appendChild(row);
+    });
+    disp.appendChild(V.kt);
+    var ti = node(flow, 'n-ti', 'TensorIterator', 'shape → config');
+    V.cfg = el('span', 'lp-cfg');
+    ti.appendChild(V.cfg);
+    node(flow, 'n-rt', 'cudaLaunchKernel', 'runtime · validate, pack');
+    node(flow, 'n-drv', 'driver', 'libcuda · channel');
+    V.statline = el('div', 'lp-statline');
+    V.statline.appendChild(el('span', 'lp-spin'));
+    V.stat = el('span', 'lp-stat');
+    V.statline.appendChild(V.stat);
+    cpu.appendChild(V.statline);
+
+    /* HOST RAM (pinned) — the ring + semaphore */
+    var ram = zone('lp-ram', 'host RAM (pinned) · pushbuffer ring — one channel per stream');
+    var ramrow = el('div', 'lp-ramrow');
+    ram.appendChild(ramrow);
+    var ring = el('div', 'lp-ring');
+    ramrow.appendChild(ring);
+    var cellEls = [];
+    for (var c = 0; c < N_CELLS; c++) {
+      var cell = el('div', 'lp-cell' + (c < 2 ? ' old' : ''), c < 2 ? 'cmd' : '');
+      if (c === 2) { cell.textContent = 'add'; V.cellNew = cell; }
+      ring.appendChild(cell);
+      cellEls.push(cell);
+    }
+    V.sem = el('div', 'lp-sem');
+    V.sem.appendChild(el('span', 'nm', 'sync semaphore'));
+    V.semv = el('span', 'lp-semv', SEM_FROM);
+    V.sem.appendChild(V.semv);
+    V.sem.appendChild(el('span', 'sb', 'GPU writes · CPU polls'));
+    ramrow.appendChild(V.sem);
+
+    /* bus strip */
+    var bus = el('div', 'lp-bus');
+    bus.appendChild(el('span', 'lp-buslab', 'PCIe / NVLink'));
+    var arrows = el('div', 'lp-busarrows');
+    [['a-bell', 'bell', 'doorbell ↓ MMIO'], ['a-fetch', 'fetch', 'cmd fetch ↓'], ['a-wb', 'wb', 'writeback ↑']]
+      .forEach(function (a) { V[a[0]] = el('span', 'lp-arr ' + a[1], a[2]); arrows.appendChild(V[a[0]]); });
+    bus.appendChild(arrows);
+    stage.appendChild(bus);
+
+    /* GPU zone */
+    var gpu = zone('lp-gpu', 'GPU · host interface → SMs → VRAM');
+    var gpuRow = el('div', 'lp-gpu-row');
+    gpu.appendChild(gpuRow);
+    node(gpuRow, 'n-hi', 'host interface', 'front end · fetches cmds');
+    var smbox = el('div', 'lp-smbox');
+    V['n-sms'] = smbox;
+    smbox.appendChild(el('span', 'nm', 'SM grid'));
+    V.smsgrid = el('div', 'lp-sms');
+    for (var s = 0; s < 8; s++) V.smsgrid.appendChild(el('div', 'lp-sm'));
+    smbox.appendChild(V.smsgrid);
+    smbox.appendChild(el('span', 'sb', 'SASS executes'));
+    gpuRow.appendChild(smbox);
+    node(gpuRow, 'n-vram', 'VRAM', 'a · b → y');
+
+    /* ---------- explanation card ---------- */
+    var kick = el('div', 'lp-kick');
+    var ttl = el('h4', 'lp-title');
+    ttl.setAttribute('aria-live', 'polite');
+    var cost = el('span', 'lp-cost');
+    var txt = el('p', 'lp-text');
+    card.appendChild(kick); card.appendChild(ttl);
+    card.appendChild(cost); card.appendChild(txt);
+
+    /* footnote (revealed after the first full run) */
+    V.note = el('div', 'lp-note', NOTES.graphs + ' — ' + NOTES.evidence);
+    body.appendChild(V.note);
+
+    /* ---------- "What this teaches" ---------- */
+    var teach = el('details', 'lp-teach');
+    teach.appendChild(el('summary', null, 'What this teaches'));
+    var ul = el('ul');
+    [
+      '<b>The launch is CPU work.</b> Stations 1–6 all run on the host. The GPU is involved only through command bytes in the pinned ring and one doorbell write.',
+      '<b>Async by construction.</b> <code>y = a + b</code> returns around station 6, before any SASS runs. A launch is cheap-ish (µs) but not free — thousands of tiny launches make you CPU-bound.',
+      '<b>The sync tax.</b> Nothing blocks until something needs the values: <code>.item()</code> enqueues a tiny D2H copy and polls the semaphore (station 8).',
+      '<b>Why CUDA graphs.</b> Record the whole sequence once, then replay it with a single pushbuffer write + doorbell (stations 5+6).'
+    ].forEach(function (t) {
+      var li = el('li'); li.innerHTML = t; ul.appendChild(li);
+    });
+    teach.appendChild(ul);
+    body.appendChild(teach);
+
+    /* ---------- state + station→visual mapping ---------- */
+    var st = { i: 0, max: 0, auto: null, timers: [], polling: false, synced: false };
+    var finishedOnce = false;
+    var ACT = [ // which visuals glow per station index
+      ['n-py'], ['n-disp'], ['n-ti'], ['n-rt'],
+      ['n-drv', 'cellNew'],
+      ['n-drv', 'a-bell', 'n-hi'],
+      ['a-fetch', 'n-hi', 'n-sms', 'n-vram'],
+      ['a-wb', 'n-sem', 'n-hi']
+    ];
+    var DONE_AT = { 'n-py': 0, 'n-disp': 1, 'n-ti': 2, 'n-rt': 3, 'n-drv': 4, 'n-hi': 6, 'n-vram': 6, 'n-sms': 6, 'a-bell': 5, 'a-fetch': 6, 'a-wb': 99 };
+
+    function later(fn, ms) { st.timers.push(setTimeout(fn, ms)); }
+    function clearTimers() { st.timers.forEach(clearTimeout); st.timers = []; }
+
+    function statline() {
+      if (st.polling) return 'cudaStreamSynchronize(): polling the semaphore (spin-wait)…';
+      if (st.synced) return '.item() → 5.0 — Python finally has its scalar';
+      if (st.max >= 5) return 'y = a + b already returned — nothing has run on the GPU yet';
+      return 'python thread · a and b live in VRAM';
+    }
+
+    function render() {
+      var act = {};
+      ACT[st.i].forEach(function (id) { act[id] = 1; });
+      chipEls.forEach(function (b, k) {
+        b.classList.toggle('on', k === st.i);
+        b.classList.toggle('done', k < st.i);
+        if (k === st.i) b.setAttribute('aria-current', 'step');
+        else b.removeAttribute('aria-current');
+      });
+      Object.keys(DONE_AT).forEach(function (id) {
+        var n = V[id];
+        var on = !!act[id];
+        n.classList.toggle('on', on);
+        n.classList.toggle('done', !on && st.max > DONE_AT[id]);
+      });
+      V['a-wb'].classList.toggle('done', st.synced);
+      V.kt.classList.toggle('show', st.max >= 1);
+      V.ktcuda.classList.toggle('hit', st.max >= 1);
+      V.cfg.classList.toggle('show', st.max >= 2);
+      V.cfg.textContent = STATIONS[2].cfg;
+      V.cellNew.classList.toggle('filled', st.max >= 4);
+      V.cellNew.classList.toggle('newpop', st.max === 4);
+      var tailIdx = st.max >= 4 ? 3 : 2;
+      cellEls.forEach(function (cell, k) { cell.classList.toggle('tail', k === tailIdx); });
+      V.smsgrid.classList.toggle('lit', st.max >= 6);
+      V.sem.classList.toggle('on', !!act['n-sem']);
+      V.sem.classList.toggle('landed', st.synced);
+      V.semv.textContent = st.synced ? SEM_TO : SEM_FROM;
+      kick.textContent = 'station ' + (st.i + 1) + ' / ' + STATIONS.length;
+      ttl.textContent = STATIONS[st.i].title;
+      cost.textContent = 'typical cost · ' + STATIONS[st.i].cost;
+      txt.textContent = STATIONS[st.i].text;
+      V.stat.textContent = statline();
+      V.statline.classList.toggle('poll', st.polling);
+      prevB.disabled = st.i === 0 || st.polling;
+      nextB.disabled = st.i === STATIONS.length - 1 || st.polling;
+      autoB.textContent = st.auto ? 'Pause' : 'Autoplay';
+      autoB.classList.toggle('lp-btn-live', !!st.auto);
+      autoB.disabled = st.polling;
+      syncB.disabled = st.i !== STATIONS.length - 1 || st.polling;
+      syncB.textContent = st.polling ? 'polling…' : (st.synced ? 'replay sync' : 'run sync poll');
+      syncB.setAttribute('aria-pressed', st.polling ? 'true' : 'false');
+    }
+
+    function go(k) {
+      k = Math.max(0, Math.min(STATIONS.length - 1, k));
+      if (k === st.i) return;
+      st.i = k;
+      st.max = Math.max(st.max, k);
+      render();
+    }
+    function manualGo(k) {
+      if (st.polling) return;
+      setAuto(false);
+      go(k);
+    }
+    function setAuto(on) {
+      if (on && !st.auto) {
+        st.auto = setInterval(function () {
+          if (st.i >= STATIONS.length - 1) setAuto(false);
+          else go(st.i + 1);
+        }, AUTO_MS);
+      } else if (!on && st.auto) {
+        clearInterval(st.auto);
+        st.auto = null;
+      }
+      render();
+    }
+    function runPoll() {
+      if (st.polling || st.i !== STATIONS.length - 1) return;
+      setAuto(false);
+      st.synced = false;
+      st.polling = true;
+      render();
+      later(function () {
+        st.polling = false;
+        st.synced = true;
+        finishedOnce = true;
+        V.note.classList.add('show');
+        render();
+      }, POLL_MS);
+    }
+    function reset() {
+      clearTimers();
+      setAuto(false);
+      st.i = 0; st.max = 0; st.polling = false; st.synced = false;
+      render(); // footnote (V.note) intentionally persists once earned
+    }
+
+    prevB.addEventListener('click', function () { manualGo(st.i - 1); });
+    nextB.addEventListener('click', function () { manualGo(st.i + 1); });
+    autoB.addEventListener('click', function () { if (st.polling) return; setAuto(!st.auto); });
+    syncB.addEventListener('click', runPoll);
+    resetB.addEventListener('click', reset);
+
+    render();
+  };
+})();
+
+</script>
+<script data-widget-src="launch-anatomy">
+/* W2 "launch-anatomy" — "From torch.add to Silicon", ch 6 (execution).
+   Controls: N (log slider, 1k–1M), blockDim (64/128/256/512), access pattern
+   (contiguous | strided ×8). Panel A: element strip (first 4,096 elements)
+   with alternating block tiles + one expanded block card (warps as rows of
+   32 lane-chips, element index = blockIdx×blockDim + threadIdx). Panel B:
+   the selected warp's lane addresses and the 32 B-sector transactions they
+   generate (4 coalesced vs 32 strided). Every number comes from the access
+   math — no sampling, no fake benchmarks. Canvas colors are read from --pt-*
+   tokens at draw time, so theme flips recolor both panels. */
+(function () {
+  'use strict';
+  window.PT_WIDGETS = window.PT_WIDGETS || {};
+
+  window.PT_WIDGETS['launch-anatomy'] = function mount(root) {
+    if (root.dataset.mounted) return; // safe to call once
+    root.dataset.mounted = '1';
+
+    var el = function (tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    };
+    var fmt = function (n) { return n.toLocaleString('en-US'); };
+    var pct = function (x) { var v = Math.round(x * 1000) / 10; return v % 1 ? v.toFixed(1) : String(v); };
+
+    /* ---------- scoped styles: only --pt-* design tokens ---------- */
+    var styleEl = el('style');
+    styleEl.textContent = [
+      '.pt-la *{box-sizing:border-box}',
+      '.pt-la button:focus-visible,.pt-la input:focus-visible,.pt-la canvas:focus-visible,.pt-la summary:focus-visible{outline:2px solid var(--pt-accent);outline-offset:2px}',
+      '.la-controls{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:flex-end;margin:0 0 10px}',
+      '.la-ctl{display:flex;flex-direction:column;gap:5px;min-width:150px;flex:1}',
+      '.la-ctl label{font:700 10px/1.3 var(--pt-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pt-faint)}',
+      '.la-ctl output{font:700 12px/1 var(--pt-mono);color:var(--pt-text);white-space:nowrap}',
+      '.la-ctl input[type=range]{width:100%;accent-color:var(--pt-accent);margin:2px 0}',
+      '.la-seg{display:flex;border:1px solid var(--pt-line-strong);border-radius:6px;overflow:hidden;width:max-content}',
+      '.la-seg button{font:600 11px/1 var(--pt-mono);padding:7px 10px;border:0;border-right:1px solid var(--pt-line);background:var(--pt-surface);color:var(--pt-muted);cursor:pointer}',
+      '.la-seg button:last-child{border-right:0}',
+      '.la-seg button:hover{color:var(--pt-accent)}',
+      '.la-seg button[aria-pressed=true]{background:var(--pt-accent-soft);color:var(--pt-accent-strong)}',
+      '.la-status{margin:0 0 12px;font:11px/1.7 var(--pt-mono);color:var(--pt-muted);border:1px dashed var(--pt-line-strong);border-radius:6px;padding:6px 10px;background:var(--pt-surface-alt)}',
+      '.la-panels{display:grid;grid-template-columns:minmax(0,58fr) minmax(0,42fr);gap:12px}',
+      '@media (max-width:900px){.la-panels{grid-template-columns:minmax(0,1fr)}}',
+      '.la-panel{border:1px solid var(--pt-line);border-radius:8px;background:var(--pt-surface);padding:10px;min-width:0}',
+      '.la-plabel{font:700 10px/1.4 var(--pt-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--pt-faint);margin:0 0 8px}',
+      '.la-canvas{display:block;width:100%;border-radius:6px}',
+      '.la-cva{cursor:pointer}',
+      '.la-infoline{margin:8px 0 0;font:11px/1.8 var(--pt-mono);color:var(--pt-muted)}',
+      '.la-badge{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:99px;border:1px solid var(--pt-warn);background:var(--pt-warn-soft);color:var(--pt-warn);font-weight:700}',
+      '.la-badge[hidden]{display:none}',
+      '.la-mapcode{display:block;margin-top:8px;padding:6px 10px;border-radius:6px;background:var(--pt-surface-alt);border:1px solid var(--pt-line);font:12px/1.5 var(--pt-mono);color:var(--pt-code);overflow-x:auto;white-space:nowrap}',
+      '.la-counters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}',
+      '.la-stat{border:1px solid var(--pt-line);border-radius:6px;background:var(--pt-surface-alt);padding:5px 9px;font:10px/1.3 var(--pt-mono);letter-spacing:.04em;color:var(--pt-faint)}',
+      '.la-stat b{display:block;font:700 12px/1.4 var(--pt-mono);color:var(--pt-text);letter-spacing:0}',
+      '.la-stat.ok b{color:var(--pt-ok)}',
+      '.la-stat.bad b{color:var(--pt-danger)}',
+      '.la-teach{margin-top:14px;border-top:1px solid var(--pt-line);padding-top:10px}',
+      '.la-teach summary{cursor:pointer;font:700 11px/1.4 var(--pt-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--pt-accent)}',
+      '.la-teach ul{margin:8px 0 0;padding-left:18px;font:13px/1.55 var(--pt-sans);color:var(--pt-muted)}',
+      '.la-teach li+li{margin-top:4px}',
+      '.la-teach code{font:12px var(--pt-mono);color:var(--pt-text)}'
+    ].join('\n');
+    root.appendChild(styleEl);
+    root.appendChild(el('div', 'widget-head', 'INTERACTIVE · LAUNCH-ANATOMY'));
+    var body = el('div', 'widget-body pt-la');
+    root.appendChild(body);
+
+    /* ---------- controls ---------- */
+    var controls = el('div', 'la-controls');
+    body.appendChild(controls);
+
+    var cN = el('div', 'la-ctl');
+    var labN = el('label', null, 'N — elements to add');
+    labN.setAttribute('for', 'la-n');
+    cN.appendChild(labN);
+    var slider = document.createElement('input');
+    slider.type = 'range'; slider.id = 'la-n';
+    slider.min = 0; slider.max = 1000; slider.step = 1; slider.value = 706;
+    cN.appendChild(slider);
+    var outN = el('output');
+    outN.setAttribute('for', 'la-n');
+    cN.appendChild(outN);
+    controls.appendChild(cN);
+
+    var cB = el('div', 'la-ctl');
+    var labB = el('label', null, 'blockDim — threads / block');
+    labB.setAttribute('for', 'la-bs');
+    cB.appendChild(labB);
+    var segB = el('div', 'la-seg'); segB.id = 'la-bs';
+    var blkBtns = [64, 128, 256, 512].map(function (v) {
+      var b = el('button', null, String(v));
+      b.type = 'button'; b.dataset.v = String(v);
+      b.addEventListener('click', function () { st.bs = v; schedule(); });
+      segB.appendChild(b);
+      return b;
+    });
+    cB.appendChild(segB);
+    controls.appendChild(cB);
+
+    var cP = el('div', 'la-ctl');
+    var labP = el('label', null, 'access pattern — per warp');
+    labP.setAttribute('for', 'la-pat');
+    cP.appendChild(labP);
+    var segP = el('div', 'la-seg'); segP.id = 'la-pat';
+    var patBtns = [['contig', 'contiguous'], ['strided', 'strided ×8']].map(function (pv) {
+      var b = el('button', null, pv[1]);
+      b.type = 'button'; b.dataset.v = pv[0];
+      b.addEventListener('click', function () { st.pat = pv[0]; schedule(); });
+      segP.appendChild(b);
+      return b;
+    });
+    cP.appendChild(segP);
+    controls.appendChild(cP);
+
+    var status = el('p', 'la-status', '');
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    body.appendChild(status);
+
+    /* ---------- panels ---------- */
+    var panels = el('div', 'la-panels');
+    body.appendChild(panels);
+
+    var panelA = el('div', 'la-panel');
+    panelA.appendChild(el('p', 'la-plabel', 'grid & mapping — click a block tile · click a warp row'));
+    var cvA = el('canvas', 'la-canvas la-cva');
+    cvA.setAttribute('role', 'img');
+    cvA.setAttribute('aria-label', 'Element strip with block tiles and one expanded block card showing warps as rows of 32 lane-chips. Arrow keys: up and down change the expanded block, left and right change the selected warp.');
+    cvA.tabIndex = 0;
+    panelA.appendChild(cvA);
+    var infoA = el('p', 'la-infoline');
+    var badge = el('span', 'la-badge', 'grid-stride loop needed');
+    badge.hidden = true;
+    badge.title = 'gridDim.x limit: 65,535 blocks on older devices (2^31-1 on newer). Past it, the kernel clamps the grid and loops with stride gridDim.x × blockDim.x.';
+    panelA.appendChild(infoA);
+    panelA.appendChild(el('code', 'la-mapcode', 'i = blockIdx.x * blockDim.x + threadIdx.x (+ stride loop)'));
+    panels.appendChild(panelA);
+
+    var panelB = el('div', 'la-panel');
+    panelB.appendChild(el('p', 'la-plabel', 'memory transactions — per selected warp'));
+    var counters = el('div', 'la-counters');
+    var stat = function (label) {
+      var s = el('div', 'la-stat', label);
+      var b = el('b');
+      s.appendChild(b);
+      counters.appendChild(s);
+      return b;
+    };
+    var stWarps = stat('warps in launch'), stTx = stat('transactions / warp'),
+        stReq = stat('bytes requested / warp'), stMov = stat('bytes moved / warp'),
+        stEff = stat('efficiency');
+    panelB.appendChild(counters);
+    var cvB = el('canvas', 'la-canvas');
+    cvB.setAttribute('role', 'img');
+    cvB.setAttribute('aria-label', 'Lane addresses and the 32-byte-sector memory transactions of the selected warp.');
+    panelB.appendChild(cvB);
+    panels.appendChild(panelB);
+
+    var teach = el('details', 'la-teach');
+    teach.appendChild(el('summary', null, 'What this teaches'));
+    var ul = el('ul');
+    [
+      '<b>Coalescing.</b> The GPU never serves 32 tiny lane requests. It groups a warp\u2019s accesses into 32-byte sectors: 32 consecutive float32 lanes cover exactly 128 B = 4 sectors, so a whole warp\u2019s load is 4 fully-used transactions — 128 B moved for 128 B requested.',
+      '<b>Warp granularity.</b> <code>blockDim</code> only bundles warps (32 lanes each) into blocks; the warp is the unit of execution <i>and</i> of memory requests. Every lane\u2019s element comes from the same formula — only the substituted numbers change.',
+      '<b>Why stride kills bandwidth.</b> With stride ×8 (32 B between lanes), every lane lands in its own 32 B sector: 32 transactions move 1,024 B to honor 128 B of requests — 12.5% efficiency. The bus still moves the other 896 B; nobody uses them.',
+      '<b>Grid-stride.</b> <code>grid = ceil(N / blockDim)</code>. When that would exceed the 1-D grid limit (65,535 blocks on older devices, 2^31−1 on newer), the kernel clamps the grid and loops with stride <code>gridDim.x × blockDim.x</code> — the same formula, plus a loop.'
+    ].forEach(function (t) {
+      var li = el('li'); li.innerHTML = t; ul.appendChild(li);
+    });
+    teach.appendChild(ul);
+    body.appendChild(teach);
+
+    /* ---------- state + access math (all numbers derive from here) ---------- */
+    var st = { t: 0.706, N: 0, bs: 128, pat: 'contig', block: 0, warp: 0 };
+    var nFromT = function (t) {           // log slider 1k..1M, snapped to 3 significant digits
+      var raw = Math.pow(10, 3 + 3 * t);
+      var mag = Math.pow(10, Math.floor(Math.log10(raw)) - 2);
+      return Math.max(1000, Math.round(raw / mag) * mag);
+    };
+    st.N = nFromT(st.t);
+    var grid = function () { return Math.ceil(st.N / st.bs); };          // ceil(N/blockSize)
+    var cells = function () { return Math.min(4096, st.N); };            // strip shows the first 4096
+    var visBlocks = function () { return Math.ceil(cells() / st.bs); };  // tiles drawn in the strip
+    var warpsPerBlock = function () { return st.bs / 32; };
+    function warpMath() {                                                // selected warp's access math
+      var base = st.block * st.bs + st.warp * 32, lanes = [], sec = {}, req = 0, minA = Infinity;
+      for (var l = 0; l < 32; l++) {
+        var e = st.pat === 'strided' ? base + l * 8 : base + l, rec = null;
+        if (e < st.N) {
+          var a = e * 4;                                                  // element index × 4 B
+          rec = { e: e, a: a }; req += 4;
+          sec[Math.floor(a / 32)] = (sec[Math.floor(a / 32)] || 0) + 4;   // 32 B sectors
+          if (a < minA) minA = a;
+        }
+        lanes.push(rec);
+      }
+      var ks = Object.keys(sec).map(Number).sort(function (x, y) { return x - y; });
+      var moved = ks.length * 32;
+      return { base: base, lanes: lanes, req: req, sectors: sec, order: ks, moved: moved,
+               tx: ks.length, eff: moved ? req / moved : 0, winStart: Math.floor(minA / 32) * 32 };
+    }
+
+    /* ---------- draw machinery: --pt-* tokens read at draw time ---------- */
+    function pal() {
+      var cs = getComputedStyle(root);
+      var v = function (n) { return cs.getPropertyValue(n).trim(); };
+      return { text: v('--pt-text'), muted: v('--pt-muted'), faint: v('--pt-faint'),
+        line: v('--pt-line'), lineS: v('--pt-line-strong'), accent: v('--pt-accent'),
+        accentS: v('--pt-accent-soft'), data: v('--pt-data'), dataS: v('--pt-data-soft'),
+        danger: v('--pt-danger'), dangerS: v('--pt-danger-soft'), ok: v('--pt-ok'),
+        surface: v('--pt-surface'), alt: v('--pt-surface-alt'),
+        mono: v('--pt-mono'), sans: v('--pt-sans') };
+    }
+    function fit(cv, cssH) {              // dpr-aware sizing; returns context + CSS width
+      var w = Math.max(80, Math.round(cv.clientWidth || cv.parentNode.clientWidth || 320));
+      var dpr = window.devicePixelRatio || 1;
+      var W = Math.round(w * dpr), H = Math.round(cssH * dpr);
+      if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+      var ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, cssH);
+      return { ctx: ctx, w: w };
+    }
+
+    var hitSegs = [], hitRows = [];       // rebuilt on every drawA; shared with click handler
+
+    /* ---------- panel A: element strip + expanded block card ---------- */
+    function drawA() {
+      var p = pal(), pad = 10, perRow = 128;
+      var vb = visBlocks(), wpb = warpsPerBlock(), c = cells();
+      if (st.block > vb - 1) st.block = vb - 1;
+      if (st.warp > wpb - 1) st.warp = wpb - 1;
+      var wG = cvA.clientWidth || 320;
+      var cw = Math.max(1.3, (wG - 2 * pad) / perRow);                   // strip cell size
+      var ch = Math.min(7, Math.max(2.2, cw * 0.9)), rowH = ch + 1.6;
+      var rows = Math.ceil(c / perRow);
+      var chipG = 1, gutter = 20;
+      var chipW = Math.max(3, (wG - 2 * pad - gutter - 31 * chipG) / 32);
+      var chipH = Math.min(15, Math.max(7, chipW));
+      var base = st.block * st.bs;
+      var stripY = pad + 18;
+      var ry = stripY + rows * rowH + 18 + 12;                           // first warp row top
+      var fy = ry + wpb * (chipH + 6) + 6;                               // formula lines
+      var H = Math.round(fy + 25 + pad);
+      cvA.style.height = H + 'px';
+      var f = fit(cvA, H), ctx = f.ctx, w = f.w;
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+
+      ctx.font = '9px ' + p.mono; ctx.fillStyle = p.faint;
+      ctx.fillText('element strip — first ' + fmt(c) + (st.N > c ? ' of ' + fmt(st.N) : '') +
+        ' elements · float32 · 4 B each', pad, pad + 8);
+      for (var i = 0; i < c; i++) {                                      // cells, tinted by block parity
+        ctx.fillStyle = (((i / st.bs) | 0) % 2) ? p.accentS : p.dataS;
+        ctx.fillRect(pad + (i % perRow) * cw, stripY + ((i / perRow) | 0) * rowH, Math.max(1, cw - 0.7), ch);
+      }
+      hitSegs.length = 0;
+      var lblStep = Math.max(1, Math.ceil(52 / (st.bs * cw)));           // sparse block labels
+      for (var b = 0; b < vb; b++) {                                     // block tiles: outline + label
+        var s = b * st.bs, e = Math.min((b + 1) * st.bs, c);
+        for (var rr = (s / perRow) | 0; rr <= ((e - 1) / perRow) | 0; rr++) {
+          var c0 = Math.max(s, rr * perRow), c1 = Math.min(e, (rr + 1) * perRow);
+          var x0 = pad + (c0 - rr * perRow) * cw, x1 = pad + (c1 - rr * perRow) * cw;
+          var y0 = stripY + rr * rowH;
+          if (b === st.block) {                // selection frame sits OUTSIDE the tile,
+            ctx.lineWidth = 1;                 // so thin rows keep their tint visible
+            ctx.strokeStyle = p.accent;
+            ctx.strokeRect(x0 - .5, y0 - .5, (x1 - x0) + 1, ch + 1);
+          } else {
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = p.lineS;
+            ctx.strokeRect(x0 + .5, y0 + .5, Math.max(2, x1 - x0 - 1), Math.max(2, ch - 1));
+          }
+          hitSegs.push({ x0: x0, x1: x1, y0: y0, y1: y0 + ch, b: b });
+          if (b % lblStep === 0 && ch >= 5.5 && x1 - x0 >= 30) {
+            ctx.font = '7.5px ' + p.mono; ctx.fillStyle = p.muted;
+            ctx.fillText(String(b), x0 + 3, y0 + ch - 1.5);
+          }
+        }
+      }
+      ctx.font = '10px ' + p.mono; ctx.fillStyle = p.text;
+      ctx.fillText('expanded block ' + st.block + ' · ' + st.bs + ' threads = ' + wpb +
+        ' warps × 32 lanes · elements ' + fmt(base) + '–' + fmt(Math.min(base + st.bs, st.N) - 1), pad, stripY + rows * rowH + 18);
+      hitRows.length = 0;
+      var fs = Math.max(6, Math.min(8, chipH - 2));
+      ctx.font = fs + 'px ' + p.mono;
+      var labW = ctx.measureText(String(Math.min(base + st.bs, c) - 1)).width;
+      var labFits = labW <= chipW - 1;
+      var stride = Math.max(1, Math.ceil((labW + 3) / (chipW + chipG))); // sparse labels when chips are narrow
+      for (var wi = 0; wi < wpb; wi++) {                                 // warp rows of 32 lane-chips
+        var y = ry + wi * (chipH + 6), sel = wi === st.warp;
+        if (sel) {
+          ctx.fillStyle = p.accentS; ctx.fillRect(pad - 4, y - 2, w - 2 * pad + 8, chipH + 4);
+          ctx.fillStyle = p.accent; ctx.fillRect(pad - 4, y - 2, 3, chipH + 4);
+        }
+        ctx.font = '8px ' + p.mono; ctx.fillStyle = sel ? p.accent : p.faint;
+        ctx.fillText('w' + wi, pad, y + chipH - 1);
+        ctx.font = fs + 'px ' + p.mono;
+        for (var l = 0; l < 32; l++) {
+          var e2 = base + wi * 32 + l, x = pad + gutter + l * (chipW + chipG), act = e2 < st.N;
+          ctx.fillStyle = act ? p.dataS : p.alt;                         // alt = lane idles (i >= N)
+          ctx.fillRect(x, y, chipW, chipH);
+          ctx.lineWidth = 1; ctx.strokeStyle = sel ? p.accent : p.line;
+          ctx.strokeRect(x + .5, y + .5, chipW - 1, chipH - 1);
+          if (act && (labFits || (sel && (l % stride === 0 || l === 31)))) {
+            ctx.fillStyle = p.text; ctx.textAlign = 'center';
+            ctx.fillText(String(e2), x + chipW / 2, y + chipH - 1.5);    // global element index
+            ctx.textAlign = 'left';
+          }
+        }
+        hitRows.push({ y0: y - 2, y1: y + chipH + 2, w: wi });
+      }
+      var guard = base + 31 >= st.N ? '  (i ≥ N → lane idles)' : '';
+      var f31 = 'lane 31: i = ' + st.block + ' × ' + st.bs + ' + 31 = ' + fmt(base + 31) + guard;
+      ctx.font = '10px ' + p.mono;
+      if (guard && ctx.measureText(f31).width > w - 2 * pad) f31 = f31.slice(0, -guard.length);
+      ctx.fillStyle = p.data;  ctx.fillText('lane 0 : i = ' + st.block + ' × ' + st.bs + ' + 0  = ' + fmt(base), pad, fy + 8);
+      ctx.fillStyle = p.accent; ctx.fillText(f31, pad, fy + 21);
+    }
+
+    /* ---------- panel B: lane addresses + sector transactions ---------- */
+    function drawB() {
+      var p = pal(), pad = 10, m = warpMath(), tx = m.tx;
+      var bh = tx <= 8 ? 15 : 5, bg = tx <= 8 ? 4 : 1.5;                 // wide bars vs thin slivers
+      var tY = pad + 34, aY = tY + 11, by0 = aY + 20;
+      var H = Math.round(by0 + tx * (bh + bg) + 4 + 26 + pad);
+      cvB.style.height = H + 'px';
+      var f = fit(cvB, H), ctx = f.ctx, w = f.w;
+      var x0 = pad + 2, x1 = w - pad - 2, span = Math.max(32, tx * 32);
+      var xOf = function (byt) { return x0 + (byt - m.winStart) / span * (x1 - x0); };
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+
+      var l0 = m.lanes[0], l31 = m.lanes[31];
+      ctx.font = '10px ' + p.mono; ctx.fillStyle = p.text;
+      ctx.fillText('warp ' + st.warp + ' of block ' + st.block + ' — ' +
+        (st.pat === 'strided' ? 'strided ×8' : 'contiguous'), pad, pad + 8);
+      ctx.font = '9px ' + p.mono; ctx.fillStyle = p.faint;
+      ctx.fillText('addr = elem × 4 B · lane 0: ' + (l0 ? l0.e + ' × 4 = ' + l0.a + ' B' : 'guard') +
+        ' · lane 31: ' + (l31 ? l31.a + ' B' : 'guard'), pad, pad + 21);
+
+      var prevX = -99;                                                    // lane ticks + addresses
+      for (var l = 0; l < 32; l++) {
+        var rec = m.lanes[l];
+        if (!rec) continue;
+        var x = xOf(rec.a);
+        ctx.fillStyle = p.data; ctx.fillRect(x - .75, tY, 1.5, 7);
+        if (x - prevX > 26) {
+          ctx.font = '7.5px ' + p.mono; ctx.fillStyle = p.muted; ctx.textAlign = 'center';
+          ctx.fillText(String(rec.a), x, tY - 3);
+          ctx.textAlign = 'left'; prevX = x;
+        }
+      }
+      ctx.strokeStyle = p.lineS; ctx.lineWidth = 1;                       // byte axis + sector ticks
+      ctx.beginPath(); ctx.moveTo(x0, aY + .5); ctx.lineTo(x1, aY + .5); ctx.stroke();
+      ctx.strokeStyle = p.line;
+      for (var k = 0; k <= tx; k++) {
+        var gx = xOf(m.winStart + k * 32);
+        ctx.beginPath(); ctx.moveTo(gx + .5, aY); ctx.lineTo(gx + .5, aY + 4); ctx.stroke();
+      }
+      ctx.font = '8px ' + p.mono; ctx.fillStyle = p.faint;
+      ctx.fillText(m.winStart + ' B', x0, aY + 13);
+      ctx.textAlign = 'right'; ctx.fillText(m.winStart + span + ' B', x1, aY + 13); ctx.textAlign = 'left';
+
+      m.order.forEach(function (s, i) {                                   // transaction bars
+        var bx = xOf(s * 32), bw = Math.max(2, 32 / span * (x1 - x0) - 1);
+        var y = by0 + i * (bh + bg), used = m.sectors[s];
+        ctx.strokeStyle = p.line; ctx.strokeRect(bx + .5, y + .5, bw - 1, bh - 1);
+        ctx.fillStyle = p.dangerS; ctx.fillRect(bx + 1, y + 1, Math.max(1, bw - 2), Math.max(1, bh - 2)); // 32 B moved
+        ctx.fillStyle = p.data;                                            // bytes actually used,
+        ctx.fillRect(bx + 1, y + 1, Math.max(1.5, (bw - 2) * used / 32), Math.max(1, bh - 2)); // min 1.5 px so
+      });                                                                  // a 4 B sliver stays visible
+      var sy = by0 + tx * (bh + bg) + 4;
+      ctx.font = '10px ' + p.mono; ctx.fillStyle = p.muted;
+      ctx.fillText(m.tx + ' transaction' + (m.tx === 1 ? '' : 's') + ' × 32 B = ' + m.moved +
+        ' B moved for ' + m.req + ' B requested', pad, sy + 9);
+      ctx.fillStyle = m.eff >= 0.5 ? p.ok : p.danger;
+      ctx.fillText('efficiency ' + pct(m.eff) + '% — ' + (st.pat === 'strided' ?
+        'each lane hits a different 32 B sector' : 'lanes pack into 4 sectors: fully coalesced'), pad, sy + 22);
+    }
+
+    /* ---------- readouts, counters, aria-live status ---------- */
+    function updateReadouts() {
+      var m = warpMath(), g = grid(), wpb = warpsPerBlock(), tw = g * wpb;
+      outN.textContent = fmt(st.N) + ' elements';
+      slider.setAttribute('aria-valuetext', fmt(st.N) + ' elements');
+      blkBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(+b.dataset.v === st.bs)); });
+      patBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === st.pat)); });
+      infoA.textContent = '';
+      infoA.appendChild(document.createTextNode('grid = ceil(N / blockDim) = ceil(' + fmt(st.N) + ' / ' +
+        st.bs + ') = ' + fmt(g) + ' blocks · ' + fmt(g) + ' × ' + wpb + ' warps = ' + fmt(tw) + ' warps × 32 lanes'));
+      badge.hidden = !(g > 65535 || g > 2147483647);                     // 1-D grid limits (pure math)
+      infoA.appendChild(badge);
+      stWarps.textContent = fmt(tw);
+      stTx.textContent = m.tx + ' × 32 B';
+      stReq.textContent = m.req + ' B';
+      stMov.textContent = m.moved + ' B';
+      stEff.textContent = pct(m.eff) + '%';
+      stEff.parentNode.className = 'la-stat ' + (m.eff >= 0.5 ? 'ok' : 'bad');
+      status.textContent = 'N = ' + fmt(st.N) + ' · blockDim = ' + st.bs + ' · grid = ' + fmt(g) +
+        ' blocks · ' + fmt(tw) + ' warps · ' + (st.pat === 'strided' ? 'strided ×8' : 'contiguous') +
+        ' · selected warp ' + st.warp + ' of block ' + st.block + ': ' + m.tx + ' transactions, ' +
+        m.req + ' B requested, ' + m.moved + ' B moved, ' + pct(m.eff) + '% efficiency';
+    }
+
+    /* ---------- throttled redraw (one rAF per frame, however many events) ---------- */
+    var raf = 0;
+    function schedule() {
+      if (!raf) raf = requestAnimationFrame(function () { raf = 0; drawAll(); });
+    }
+    function drawAll() { updateReadouts(); drawA(); drawB(); }
+
+    /* ---------- events ---------- */
+    slider.addEventListener('input', function () {
+      st.t = +slider.value / 1000;
+      st.N = nFromT(st.t);
+      schedule();
+    });
+    cvA.addEventListener('click', function (ev) {                         // pick warp row, else block tile
+      var r = cvA.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+      for (var i = 0; i < hitRows.length; i++)
+        if (y >= hitRows[i].y0 && y <= hitRows[i].y1) { st.warp = hitRows[i].w; schedule(); return; }
+      for (var j = 0; j < hitSegs.length; j++) {
+        var s = hitSegs[j];
+        if (x >= s.x0 - 1 && x <= s.x1 + 1 && y >= s.y0 - 1 && y <= s.y1 + 1) { st.block = s.b; schedule(); return; }
+      }
+    });
+    cvA.addEventListener('keydown', function (ev) {                       // keyboard alternative to clicks
+      var wpb = warpsPerBlock(), vb = visBlocks(), k = ev.key;
+      if (k === 'ArrowRight' || k === 'ArrowLeft')
+        st.warp = (st.warp + (k === 'ArrowRight' ? 1 : -1) + wpb) % wpb;
+      else if (k === 'ArrowDown' || k === 'ArrowUp')
+        st.block = Math.min(vb - 1, Math.max(0, st.block + (k === 'ArrowDown' ? 1 : -1)));
+      else return;
+      ev.preventDefault();
+      schedule();
+    });
+    if (window.ResizeObserver) new ResizeObserver(function () { schedule(); }).observe(root);
+    try {                                                                 // theme flips recolor at next draw
+      new MutationObserver(function () { schedule(); })
+        .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
+    } catch (e) { /* older engines recolor on the next control change */ }
+
+    drawAll();
+  };
+})();
+
+</script>
+</body>
+</html>
