@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A 40-minute, developer-focused distillation of The Elements of Computing Systems: from NAND gates to a working high-level software stack.">
+<title>From NAND to Software — The Elements of Computing Systems in 40 Minutes</title>
+<style>
+:root{
+  --p-ink:oklch(0.24 0.018 245);
+  --p-muted:oklch(0.46 0.018 245);
+  --p-paper:oklch(0.975 0.006 220);
+  --p-panel:oklch(0.94 0.009 220);
+  --p-line:oklch(0.86 0.012 220);
+  --p-accent:oklch(0.56 0.16 35);
+  --p-teal:oklch(0.48 0.09 190);
+  --p-code:oklch(0.22 0.018 245);
+  --ink:var(--p-ink); --muted:var(--p-muted); --paper:var(--p-paper);
+  --panel:var(--p-panel); --line:var(--p-line); --accent:var(--p-accent);
+  --teal:var(--p-teal); --code:var(--p-code);
+  --radius:12px; --measure:70ch;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:80px}
+body{min-height:100dvh;background:var(--paper);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+a:not(.button):not(.toplink):hover{text-decoration:underline;text-underline-offset:3px}
+button,summary,a{touch-action:manipulation}
+:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:3px}
+::selection{background:oklch(0.86 0.09 65);color:var(--ink)}
+.skip{position:fixed;left:16px;top:8px;z-index:20;background:var(--ink);color:var(--paper);padding:10px 16px;transform:translateY(-160%)}
+.skip:focus{transform:translateY(0)}
+.progress{position:fixed;inset:0 0 auto;height:4px;background:transparent;z-index:30;pointer-events:none}
+.progress span{display:block;width:100%;height:100%;background:var(--accent);transform:scaleX(0);transform-origin:left;transition:transform 100ms linear}
+.topbar{position:sticky;top:0;z-index:10;background:color-mix(in oklch,var(--paper) 94%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.topbar-inner{max-width:1240px;margin:auto;min-height:64px;padding:8px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.toplink{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:800;letter-spacing:.12em}
+.toplink svg{flex:none}
+.topbar-note{font-size:13px;color:var(--muted)}
+.hero{max-width:1240px;margin:auto;padding:80px 24px 56px;display:grid;gap:32px}
+.hero-mark{font-size:13px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(42px,7vw,84px);line-height:1.02;letter-spacing:-.055em;max-width:950px;font-weight:780}
+.hero p{font-size:clamp(18px,2vw,22px);line-height:1.5;max-width:65ch;color:var(--muted)}
+.hero-bottom{display:flex;flex-wrap:wrap;align-items:center;gap:20px}
+.button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:12px 20px;border-radius:8px;background:var(--ink);color:var(--paper);font-weight:700;transition:transform 160ms ease-out,background 160ms ease-out}
+.button:hover{background:var(--accent);transform:translateY(-2px);text-decoration:none!important}
+.hero-meta{font-size:14px;color:var(--muted)}
+.stack-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;max-width:1100px}
+.stack-strip span{border:1px solid var(--line);border-radius:7px;padding:12px 8px;text-align:center;font-size:12px;font-weight:750;letter-spacing:.04em;background:var(--panel)}
+.stack-strip span:nth-child(2n){background:transparent}
+.mobile-contents{margin:0 16px 32px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.mobile-contents summary{cursor:pointer;min-height:48px;padding:12px 16px;font-weight:750}
+.mobile-contents nav{padding:0 16px 12px}
+.mobile-contents ol{list-style:none;display:grid;gap:4px}
+.mobile-contents a{display:block;padding:8px;border-radius:5px;font-size:14px}
+.shell{max-width:1240px;margin:auto;padding:0 24px 80px;display:grid;grid-template-columns:220px minmax(0,var(--measure));justify-content:space-between;gap:64px}
+.sidebar{align-self:start;position:sticky;top:96px}
+.sidebar-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:750;margin-bottom:12px}
+.toc{list-style:none;display:grid;gap:3px}
+.toc a{display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:baseline;padding:7px 8px;border-radius:6px;color:var(--muted);font-size:13px;line-height:1.35;transition:background 140ms,color 140ms}
+.toc a:hover{background:var(--panel);text-decoration:none}
+.toc a[aria-current="location"]{background:var(--panel);color:var(--ink);font-weight:750}
+.toc .n{font-variant-numeric:tabular-nums;color:var(--accent)}
+.toc .t{font-size:11px;font-variant-numeric:tabular-nums}
+main{min-width:0}
+section{margin-bottom:72px}
+.section-intro{max-width:var(--measure);margin-bottom:64px}
+h2{font-size:clamp(30px,4vw,44px);letter-spacing:-.035em;line-height:1.12;margin-bottom:16px}
+h3{font-size:21px;line-height:1.3;letter-spacing:-.015em;margin:32px 0 12px}
+p{margin-bottom:16px;max-width:var(--measure)}
+ul,ol:not(.toc){padding-left:22px;margin-bottom:16px}
+li{margin-bottom:7px}
+strong{font-weight:750}
+.small{font-size:14px;color:var(--muted)}
+.chapter{border-top:1px solid var(--line);padding-top:32px}
+.chapter-head{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;margin-bottom:24px}
+.chapter-label{display:block;font-size:12px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.chapter-head h2{margin:0}
+.time{white-space:nowrap;font-size:12px;font-weight:750;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 10px;margin-top:4px}
+.lead{font-size:20px;line-height:1.55;color:var(--ink);margin-bottom:24px}
+.key{border-left:3px solid var(--accent);padding:4px 0 4px 18px;margin:24px 0;font-size:17px}
+.key strong{color:var(--accent)}
+.note{background:var(--panel);border-radius:var(--radius);padding:20px;margin:24px 0}
+.note p:last-child{margin-bottom:0}
+.code{background:var(--code);color:oklch(0.93 0.01 220);border-radius:var(--radius);margin:24px 0;overflow:hidden}
+.code figcaption{padding:10px 16px;border-bottom:1px solid oklch(0.35 0.018 245);font-size:12px;letter-spacing:.06em;color:oklch(0.75 0.015 220);text-transform:uppercase}
+pre{overflow:auto;padding:18px 20px;font:14px/1.65 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;tab-size:2}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace}
+p code,li code,td code{background:var(--panel);border-radius:4px;padding:2px 5px;font-size:.88em}
+.comment{color:oklch(0.67 0.04 170)}
+.figure{margin:28px 0}
+.figure svg{display:block;width:100%;height:auto;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);color:var(--ink)}
+figcaption.caption,.figure>figcaption{font-size:13px;color:var(--muted);margin-top:10px}
+.table-wrap{overflow:auto;margin:24px 0;border:1px solid var(--line);border-radius:var(--radius)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:color-mix(in oklch,var(--paper) 80%,var(--panel))}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--panel)}
+tr:last-child td{border-bottom:0}
+.flow{list-style:none!important;padding:0!important;display:grid;gap:8px;margin:24px 0!important}
+.flow li{display:grid;grid-template-columns:minmax(100px,.8fr) 24px minmax(140px,1.5fr);align-items:center;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;margin:0;background:var(--panel)}
+.flow .arrow{color:var(--accent);font-weight:800;text-align:center}
+.flow code{background:transparent;padding:0;color:inherit}
+details.deep{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:24px 0;padding:0}
+details.deep summary{cursor:pointer;min-height:48px;padding:13px 4px;font-weight:750;color:var(--teal)}
+details.deep summary::after{content:"+";float:right;font-size:20px;line-height:1}
+details.deep[open] summary::after{content:"−"}
+details.deep>div{padding:0 4px 20px}
+.checkpoint{display:grid;grid-template-columns:auto 1fr;gap:12px;margin-top:28px;padding-top:18px;border-top:1px dashed var(--line)}
+.checkpoint .checkmark{color:var(--accent);font-weight:900;font-size:20px;line-height:1.4}
+.checkpoint p{margin:0;font-size:15px}
+.pipeline{display:grid;gap:8px;margin:28px 0}
+.pipeline-row{display:grid;grid-template-columns:minmax(120px,1fr) 32px minmax(150px,1.4fr);gap:8px;align-items:center}
+.pipeline-row .box{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px;font-weight:700;font-size:14px}
+.pipeline-row .via{font-size:12px;color:var(--accent);text-align:center}
+.final{background:var(--ink);color:var(--paper);padding:32px;border-radius:var(--radius);margin-top:32px}
+.final h2{color:var(--paper)}
+.final p,.final li{color:oklch(0.88 0.012 220)}
+.final .key{border-color:oklch(0.72 0.15 65)}
+.final .key strong{color:oklch(0.78 0.13 65)}
+.footer{max-width:1240px;margin:auto;padding:32px 24px 64px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:24px;font-size:13px;color:var(--muted)}
+.footer a{text-decoration:underline;text-underline-offset:3px}
+@media(min-width:700px){.hero{padding-top:104px}.mobile-contents{display:none}.pipeline{gap:10px}}
+@media(max-width:1050px){.shell{grid-template-columns:190px minmax(0,var(--measure));gap:32px}.sidebar{font-size:12px}}
+@media(max-width:899px){.shell{display:block;max-width:760px}.sidebar{display:none}.hero{padding-top:64px}.stack-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.chapter{scroll-margin-top:72px}}
+@media(max-width:520px){.topbar-inner{padding:8px 16px}.topbar-note{display:none}.hero{padding:48px 20px 40px}.hero-bottom{align-items:flex-start;flex-direction:column}.shell{padding:0 20px 56px}.chapter-head{display:block}.time{display:inline-block;margin-top:12px}.lead{font-size:18px}.flow li{grid-template-columns:1fr}.flow .arrow{text-align:left;transform:rotate(90deg);width:20px}.pipeline-row{grid-template-columns:1fr}.pipeline-row .via{transform:rotate(90deg);width:24px}.footer{padding:28px 20px;flex-direction:column}.final{padding:24px}.stack-strip{gap:6px}.stack-strip span{font-size:11px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}.button:hover{transform:none}}
+@media print{.topbar,.progress,.sidebar,.mobile-contents,.button,.skip{display:none}.hero,.shell,.footer{max-width:none;padding:20px 0}.shell{display:block}.chapter{break-inside:avoid}.code{print-color-adjust:exact;-webkit-print-color-adjust:exact}details.deep>div{display:block}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the guide</a>
+<div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="toplink" href="#top" aria-label="Back to the top">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      NAND → SOFTWARE
+    </a>
+    <span class="topbar-note">A 40-minute systems refresher</span>
+  </div>
+</header>
+
+<header class="hero" id="top">
+  <span class="hero-mark">The Elements of Computing Systems · Second Edition</span>
+  <h1>One computer.<br>Twelve layers.<br>Zero magic.</h1>
+  <p>A guided distillation of Nisan and Schocken’s book for experienced developers. Follow one working thread from a logic gate to machine code, a virtual machine, a compiler, and an operating system.</p>
+  <div class="hero-bottom">
+    <a class="button" href="#map">Start the 40-minute read <span aria-hidden="true">&nbsp;↓</span></a>
+    <span class="hero-meta">12 chapters · 5,400 words · diagrams + code</span>
+  </div>
+  <div class="stack-strip" aria-label="The six kinds of system built in the book">
+    <span>GATES</span><span>CHIPS</span><span>ASSEMBLY</span><span>VM</span><span>COMPILER</span><span>OS</span>
+  </div>
+</header>
+
+<details class="mobile-contents">
+  <summary>Reading path · 40 minutes</summary>
+  <nav aria-label="Mobile table of contents">
+    <ol>
+      <li><a href="#map">The whole system on one page</a></li>
+      <li><a href="#ch1">1 · Boolean Logic <span class="small">3 min</span></a></li>
+      <li><a href="#ch2">2 · Boolean Arithmetic <span class="small">3 min</span></a></li>
+      <li><a href="#ch3">3 · Memory <span class="small">3 min</span></a></li>
+      <li><a href="#ch4">4 · Machine Language <span class="small">4 min</span></a></li>
+      <li><a href="#ch5">5 · Computer Architecture <span class="small">4 min</span></a></li>
+      <li><a href="#ch6">6 · Assembler <span class="small">2 min</span></a></li>
+      <li><a href="#ch7">7 · VM I: Processing <span class="small">4 min</span></a></li>
+      <li><a href="#ch8">8 · VM II: Control <span class="small">4 min</span></a></li>
+      <li><a href="#ch9">9 · High-Level Language <span class="small">3 min</span></a></li>
+      <li><a href="#ch10">10 · Compiler I: Syntax <span class="small">3 min</span></a></li>
+      <li><a href="#ch11">11 · Compiler II: Code <span class="small">4 min</span></a></li>
+      <li><a href="#ch12">12 · Operating System <span class="small">3 min</span></a></li>
+      <li><a href="#recap">Final recap</a></li>
+    </ol>
+  </nav>
+</details>
+
+<div class="shell">
+<aside class="sidebar">
+  <div class="sidebar-title">Reading path</div>
+  <nav aria-label="Table of contents">
+    <ol class="toc">
+      <li><a href="#map"><span class="n">→</span><span>The big picture</span><span class="t">0:00</span></a></li>
+      <li><a href="#ch1"><span class="n">01</span><span>Boolean Logic</span><span class="t">3m</span></a></li>
+      <li><a href="#ch2"><span class="n">02</span><span>Arithmetic</span><span class="t">3m</span></a></li>
+      <li><a href="#ch3"><span class="n">03</span><span>Memory</span><span class="t">3m</span></a></li>
+      <li><a href="#ch4"><span class="n">04</span><span>Machine Language</span><span class="t">4m</span></a></li>
+      <li><a href="#ch5"><span class="n">05</span><span>Architecture</span><span class="t">4m</span></a></li>
+      <li><a href="#ch6"><span class="n">06</span><span>Assembler</span><span class="t">2m</span></a></li>
+      <li><a href="#ch7"><span class="n">07</span><span>VM: Processing</span><span class="t">4m</span></a></li>
+      <li><a href="#ch8"><span class="n">08</span><span>VM: Control</span><span class="t">4m</span></a></li>
+      <li><a href="#ch9"><span class="n">09</span><span>Jack Language</span><span class="t">3m</span></a></li>
+      <li><a href="#ch10"><span class="n">10</span><span>Syntax Analysis</span><span class="t">3m</span></a></li>
+      <li><a href="#ch11"><span class="n">11</span><span>Code Generation</span><span class="t">4m</span></a></li>
+      <li><a href="#ch12"><span class="n">12</span><span>Operating System</span><span class="t">3m</span></a></li>
+      <li><a href="#recap"><span class="n">✓</span><span>Final recap</span><span class="t">40m</span></a></li>
+    </ol>
+  </nav>
+</aside>
+
+<main id="main">
+<section class="section-intro" id="map" data-section="map">
+  <span class="chapter-label">Read this first</span>
+  <h2>The book’s real subject is contracts between layers.</h2>
+  <p class="lead">You start with NAND, a gate that outputs 0 only when both inputs are 1. You finish with games written in a Java-like language. The path between them is not a pile of trivia. It is a series of small, testable interfaces.</p>
+  <p>Each layer answers two questions: <strong>What does this module promise?</strong> and <strong>How can I build that promise using only the layer below?</strong> Once the implementation works, you put it back in the box and use its interface.</p>
+
+  <div class="pipeline" role="img" aria-label="Jack source code compiles to VM commands, then Hack assembly, then binary instructions executed by hardware">
+    <div class="pipeline-row"><div class="box">Jack application</div><div class="via">compiler →</div><div class="box">Objects, expressions, statements</div></div>
+    <div class="pipeline-row"><div class="box">VM program</div><div class="via">translator →</div><div class="box">Stack, segments, functions</div></div>
+    <div class="pipeline-row"><div class="box">Hack assembly</div><div class="via">assembler →</div><div class="box">A/D/M registers, jumps</div></div>
+    <div class="pipeline-row"><div class="box">16-bit binary</div><div class="via">CPU executes →</div><div class="box">ALU, memory, clock</div></div>
+    <div class="pipeline-row"><div class="box">NAND + DFF</div><div class="via">hardware →</div><div class="box">Boolean logic + saved state</div></div>
+  </div>
+
+  <div class="note">
+    <p><strong>How to use this guide.</strong> Read the main text in order. Open the “Implementation notes” only when you want more detail. The examples are deliberately small; the book’s projects are where you prove the ideas by building them.</p>
+  </div>
+  <p class="small">Time budget: chapters 1–3 = 9 min · 4–6 = 10 min · 7–9 = 11 min · 10–12 = 10 min.</p>
+</section>
+
+<section class="chapter" id="ch1" data-section="ch1">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 1 · 0:00–3:00</span><h2>Boolean logic: one gate is enough</h2></div><span class="time">3 min</span></div>
+  <p class="lead">NAND is functionally complete: any Boolean function can be built from NAND gates alone. Everything else is composition.</p>
+  <p>A <strong>combinational</strong> chip is just a function of its current inputs. Give it the same bits, get the same output. A truth table specifies that function. An HDL file describes a wiring diagram that implements it.</p>
+  <p>The first useful construction is an inverter. Tie NAND’s two inputs together: <code>Not(x) = Nand(x, x)</code>. Then <code>And(x, y) = Not(Nand(x, y))</code>. With Not and And, De Morgan’s laws give you Or. From there, every Boolean function is within reach.</p>
+
+  <figure class="code">
+    <figcaption>HDL · building Not and a selector</figcaption>
+    <pre><code>CHIP Not {
+  IN in; OUT out;
+  PARTS:
+  Nand(a=in, b=in, out=out);
+}
+
+<span class="comment">// Mux: sel=0 chooses a; sel=1 chooses b</span>
+CHIP Mux {
+  IN a, b, sel; OUT out;
+  PARTS:
+  Not(in=sel, out=notSel);
+  And(a=a, b=notSel, out=aSelected);
+  And(a=b, b=sel, out=bSelected);
+  Or(a=aSelected, b=bSelected, out=out);
+}</code></pre>
+  </figure>
+
+  <p>HDL is <strong>declarative</strong>, not a list of time-ordered statements. The lines under <code>PARTS</code> describe connected parts. Reordering them does not change execution order; there is no execution order. Named internal pins are the wires.</p>
+
+  <h3>Two parts you will reuse everywhere</h3>
+  <ul>
+    <li><strong>Multiplexer (Mux):</strong> chooses one input. Think “hardware if/else for data.”</li>
+    <li><strong>Demultiplexer (DMux):</strong> routes one input to one output and zeros the other. Think “select a destination.”</li>
+  </ul>
+  <p>Multi-bit chips repeat one-bit logic across a bus. Multi-way chips use several selector bits. The project builds Not, And, Or, Xor, Mux, DMux, and their multi-bit or multi-way variants.</p>
+
+  <details class="deep"><summary>Implementation notes: from truth table to chip</summary><div>
+    <p>For each truth-table row whose output is 1, AND together each input or its negation. OR those row terms. This disjunctive normal form proves that any truth table can become a circuit. It may be huge, so Boolean simplification matters: fewer gates usually means lower cost, energy, and delay.</p>
+    <p>Test small chips exhaustively. For larger ones, use targeted input scenarios and compare actual outputs with a known-good file. A built-in chip gives the same interface with a software implementation, so you can keep building higher layers before every lower layer is complete.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> an interface hides an implementation. NAND is only the first place the book uses that idea.</p></div>
+</section>
+
+<section class="chapter" id="ch2" data-section="ch2">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 2 · 3:00–6:00</span><h2>Arithmetic: addition does the heavy lifting</h2></div><span class="time">3 min</span></div>
+  <p class="lead">Bits become numbers by convention. Two’s complement makes signed subtraction reuse the same adder as unsigned addition.</p>
+  <p>An <em>n</em>-bit word holds one of 2<sup>n</sup> patterns. For unsigned integers, those patterns mean 0 through 2<sup>n</sup>−1. For signed integers, two’s complement uses the range −2<sup>n−1</sup> through 2<sup>n−1</sup>−1. Negate a value by flipping every bit and adding 1.</p>
+  <div class="note"><p><strong>Example in 4 bits.</strong> <code>0101</code> is 5. Flip it to <code>1010</code>, add 1, and get <code>1011</code> = −5. Then 7 + (−5) produces <code>0010</code> after the final carry is discarded. Fixed-width arithmetic is arithmetic modulo 2<sup>n</sup>.</p></div>
+
+  <h3>From one bit to an ALU</h3>
+  <ul>
+    <li>A <strong>half-adder</strong> adds two bits: <code>sum = a Xor b</code>, <code>carry = a And b</code>.</li>
+    <li>A <strong>full-adder</strong> adds two bits plus an incoming carry.</li>
+    <li>A <strong>16-bit adder</strong> chains sixteen full-adders, passing carry from right to left.</li>
+  </ul>
+  <p>The Hack ALU does not hard-wire eighteen separate operations. It transforms its inputs, chooses addition or bitwise AND, then optionally negates the result. Six control bits specify those micro-operations.</p>
+
+  <figure class="code">
+    <figcaption>ALU pseudocode · order matters</figcaption>
+    <pre><code>if zx: x = 0       <span class="comment">// zero x</span>
+if nx: x = ~x      <span class="comment">// bitwise negate x</span>
+if zy: y = 0
+if ny: y = ~y
+
+out = f ? (x + y) : (x &amp; y)
+if no: out = ~out
+
+zr = (out == 0)    <span class="comment">// status flags for jumps</span>
+ng = (out &lt; 0)     <span class="comment">// true when the sign bit is 1</span></code></pre>
+  </figure>
+  <p>For example, control bits <code>zx nx zy ny f no = 00 11 1 0</code> leave x alone, turn y into −1, add, and leave the result alone: <strong>x − 1</strong>. The ALU also emits <code>zr</code> and <code>ng</code>, which the CPU later uses for conditional branches.</p>
+
+  <details class="deep"><summary>Implementation notes: what “overflow” means here</summary><div>
+    <p>The basic adder discards the carry beyond the word width. That is correct modulo arithmetic, but it does not distinguish every signed-overflow case. The book’s contract is simple: the low <em>n</em> bits are the result.</p>
+    <p>The chained adder is called a ripple-carry adder. Its worst-case delay grows with word width because a carry may travel through every bit. Real processors use faster carry schemes. Hack also omits multiplication and division from hardware; the OS implements them later.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> subtraction is addition with a cleverly chosen representation. Hardware minimalism pushes richer math into software.</p></div>
+</section>
+
+<section class="chapter" id="ch3" data-section="ch3">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 3 · 6:00–9:00</span><h2>Memory: add time to logic</h2></div><span class="time">3 min</span></div>
+  <p class="lead">Combinational logic computes. Sequential logic remembers. The data flip-flop (DFF) is the primitive that separates “now” from “before.”</p>
+  <p>A DFF follows one rule: <code>out(t) = in(t−1)</code>. At the end of a clock cycle, it commits to the input from the previous cycle. All DFFs share a master clock, so state changes happen together at cycle boundaries.</p>
+
+  <figure class="figure">
+    <svg viewBox="0 0 720 250" role="img" aria-labelledby="clock-title clock-desc">
+      <title id="clock-title">Clocked state changes</title><desc id="clock-desc">A clock divides time into cycles. Combinational logic settles within a cycle; the DFF commits new state at the boundary.</desc>
+      <path d="M60 70 H160 V35 H260 V70 H360 V35 H460 V70 H560 V35 H660" fill="none" stroke="currentColor" stroke-width="3"/>
+      <g fill="currentColor" font-size="15" font-family="sans-serif"><text x="60" y="105">cycle 1</text><text x="260" y="105">cycle 2</text><text x="460" y="105">cycle 3</text><text x="60" y="150">signals settle during the cycle →</text><text x="60" y="205">DFF commits</text></g>
+      <g stroke="oklch(0.56 0.16 35)" stroke-width="3"><path d="M160 175v35 M360 175v35 M560 175v35"/></g>
+      <g fill="oklch(0.56 0.16 35)" font-size="14" font-family="sans-serif"><text x="173" y="200">boundary</text><text x="373" y="200">boundary</text><text x="573" y="200">boundary</text></g>
+    </svg>
+    <figcaption>The clock cycle must be long enough for the slowest signal path to settle. Shorter cycles mean a faster machine, but only if that promise still holds.</figcaption>
+  </figure>
+
+  <p>A 1-bit register adds a <code>load</code> control. If <code>load=1</code>, accept the new input; otherwise feed the old output back. A Mux makes that choice, and the DFF makes the feedback safe by delaying it one cycle.</p>
+  <figure class="code">
+    <figcaption>HDL · a register is a Mux plus delayed feedback</figcaption>
+    <pre><code>CHIP Bit {
+  IN in, load; OUT out;
+  PARTS:
+  Mux(a=out, b=in, sel=load, out=next);
+  DFF(in=next, out=out);
+}</code></pre>
+  </figure>
+  <p>Sixteen Bit chips make a 16-bit register. Banks of registers make RAM. For reads, multiplexers select one register’s output. For writes, demultiplexers route <code>load</code> to exactly one register. Addresses are selection logic, not labels physically attached to cells.</p>
+  <p>The <strong>program counter</strong> is a register with three operations: increment, load a jump target, or reset to zero. It is the small piece of state that turns a stored sequence into an executing program.</p>
+
+  <details class="deep"><summary>Implementation notes: why feedback is safe here</summary><div>
+    <p>A direct combinational loop can depend on itself within the same instant. A loop through a DFF depends on the previous cycle instead. This breaks the logical circle and gives the rest of the circuit time to settle.</p>
+    <p>RAM is built hierarchically: RAM8, RAM64, RAM512, RAM4K, then RAM16K. High address bits select a lower-level bank; low bits select a register inside it. Random access means the address does not change the access contract, though real physical timing is more nuanced.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> a clock plus a one-cycle delay turns pure functions into stateful machines.</p></div>
+</section>
+
+<section class="chapter" id="ch4" data-section="ch4">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 4 · 9:00–13:00</span><h2>Machine language: the hardware/software contract</h2></div><span class="time">4 min</span></div>
+  <p class="lead">Hack programs use three names: D is a data register, A is an address/data register, and M is the RAM word currently selected by A.</p>
+  <p>Hack is a 16-bit machine with separate instruction memory (ROM) and data memory (RAM). Every instruction is either an <strong>A-instruction</strong> or a <strong>C-instruction</strong>.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Form</th><th>Meaning</th><th>Binary layout</th></tr></thead>
+    <tbody>
+      <tr><td><code>@value</code></td><td>Set A to a 15-bit value. This also selects RAM[A].</td><td><code>0vvvvvvvvvvvvvvv</code></td></tr>
+      <tr><td><code>dest=comp;jump</code></td><td>Compute with the ALU, optionally store, optionally jump.</td><td><code>111accccccdddjjj</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The C-instruction’s three fields answer three questions. <strong>comp</strong>: what should the ALU compute? <strong>dest</strong>: where should the result go among A, D, and M? <strong>jump</strong>: should the next instruction come from ROM[A] instead of PC+1? Both <code>dest</code> and <code>jump</code> may be omitted.</p>
+
+  <figure class="code">
+    <figcaption>Hack assembly · sum = 1 + 2 + … + RAM[0]</figcaption>
+    <pre><code>@i
+M=1             <span class="comment">// i = 1</span>
+@sum
+M=0             <span class="comment">// sum = 0</span>
+
+(LOOP)
+@i
+D=M
+@R0
+D=D-M
+@END
+D;JGT           <span class="comment">// if i &gt; n, stop</span>
+
+@i
+D=M
+@sum
+M=D+M           <span class="comment">// sum += i</span>
+@i
+M=M+1
+@LOOP
+0;JMP
+
+(END)
+@sum
+D=M
+@R1
+M=D             <span class="comment">// RAM[1] = sum</span>
+(STOP)
+@STOP
+0;JMP           <span class="comment">// deliberate halt</span></code></pre>
+  </figure>
+
+  <p>Memory access usually takes two instructions: <code>@address</code> selects the location, then a C-instruction reads or writes <code>M</code>. Loading a constant also starts with <code>@constant</code>. A jump uses A as a ROM address instead. That dual role is compact but easy to misread.</p>
+
+  <h3>Symbols and I/O</h3>
+  <p>Labels like <code>(LOOP)</code> name instruction addresses. Unknown symbols like <code>i</code> become RAM variables, allocated from address 16. Predefined names include <code>R0…R15</code>, <code>SP=0</code>, <code>LCL=1</code>, <code>ARG=2</code>, <code>THIS=3</code>, <code>THAT=4</code>, <code>SCREEN=16384</code>, and <code>KBD=24576</code>.</p>
+  <p>The screen is memory-mapped: 512 × 256 monochrome pixels packed into 8K 16-bit words. Writing bits changes pixels. The keyboard is one memory word: it holds the current key code, or 0 when no key is pressed.</p>
+
+  <details class="deep"><summary>Implementation notes: decoding and pointer idioms</summary><div>
+    <p>In a C-instruction, the <code>a</code> bit chooses whether the ALU’s second input is A or M. The six <code>c</code> bits choose the ALU operation. Three <code>d</code> bits independently enable writes to A, D, and M. Three <code>j</code> bits request a jump when the ALU result is negative, zero, or positive.</p>
+    <p>The pointer idiom is <code>A=address</code> followed by an operation on <code>M</code>. Arrays and object fields later compile to this same pattern. Avoid combining a memory reference with a jump in one C-instruction: A would be serving two conflicting purposes.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> an ISA is not just syntax. It is the exact control interface the CPU must implement.</p></div>
+</section>
+
+<section class="chapter" id="ch5" data-section="ch5">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 5 · 13:00–17:00</span><h2>Architecture: the fetch–execute loop</h2></div><span class="time">4 min</span></div>
+  <p class="lead">A general-purpose computer is fixed hardware running replaceable instructions. The program is stored in memory; changing it changes what the machine does.</p>
+  <p>The Hack computer joins three modules: a CPU, ROM32K for instructions, and a Memory chip that combines ordinary RAM with screen and keyboard maps. Its CPU contains the ALU plus registers A, D, and PC.</p>
+
+  <figure class="figure">
+    <svg viewBox="0 0 760 430" role="img" aria-labelledby="cpu-title cpu-desc">
+      <title id="cpu-title">Hack computer data paths</title><desc id="cpu-desc">The program counter addresses ROM. ROM sends an instruction to the CPU. The CPU reads and writes data memory, which includes RAM, screen, and keyboard.</desc>
+      <defs><marker id="arrow5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <g fill="var(--paper)" stroke="currentColor" stroke-width="2">
+        <rect x="280" y="45" width="200" height="115" rx="10"/>
+        <rect x="45" y="250" width="190" height="100" rx="10"/>
+        <rect x="525" y="240" width="190" height="150" rx="10"/>
+      </g>
+      <g fill="currentColor" font-family="sans-serif" text-anchor="middle">
+        <text x="380" y="78" font-size="20" font-weight="700">ROM32K</text><text x="380" y="105" font-size="14">instruction memory</text><text x="380" y="132" font-size="13">ROM[PC] → instruction</text>
+        <text x="140" y="282" font-size="20" font-weight="700">CPU</text><text x="140" y="310" font-size="14">A · D · ALU · PC</text><text x="140" y="334" font-size="13">decode + execute</text>
+        <text x="620" y="273" font-size="20" font-weight="700">Memory</text><text x="620" y="304" font-size="14">RAM16K</text><text x="620" y="330" font-size="14">Screen · 8K words</text><text x="620" y="356" font-size="14">Keyboard · 1 word</text>
+      </g>
+      <g fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arrow5)">
+        <path d="M280 120H170V240"/><path d="M140 160V90H270"/><path d="M235 300H515"/>
+      </g>
+      <g fill="oklch(0.56 0.16 35)" font-family="sans-serif" font-size="13">
+        <text x="180" y="200">instruction</text><text x="148" y="120">PC</text><text x="350" y="286">outM / addressM / writeM</text>
+      </g>
+      <path d="M515 340H235" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arrow5)"/>
+      <text x="350" y="366" fill="oklch(0.48 0.09 190)" font-family="sans-serif" font-size="13">inM = RAM[A]</text>
+    </svg>
+    <figcaption>Hack uses separate instruction and data memories (a Harvard-style variant), so fetch and data access can happen without sharing one memory port.</figcaption>
+  </figure>
+
+  <h3>One cycle, three jobs</h3>
+  <ol>
+    <li><strong>Fetch:</strong> ROM emits the instruction at the current PC.</li>
+    <li><strong>Decode and execute:</strong> the instruction’s bits become control signals. An A-instruction loads A. A C-instruction drives the ALU and destination registers.</li>
+    <li><strong>Choose the next PC:</strong> increment by default; load A when the jump condition holds; reset to 0 when the machine resets.</li>
+  </ol>
+  <p>The jump decision combines the instruction’s three jump bits with the ALU’s <code>ng</code> and <code>zr</code> flags. That tiny piece of Boolean logic is the bridge from arithmetic to control flow.</p>
+
+  <div class="table-wrap"><table>
+    <thead><tr><th>Data address</th><th>What the CPU sees</th></tr></thead>
+    <tbody>
+      <tr><td><code>0 … 16383</code></td><td>General-purpose RAM</td></tr>
+      <tr><td><code>16384 … 24575</code></td><td>Screen memory map</td></tr>
+      <tr><td><code>24576</code></td><td>Keyboard character code, or 0</td></tr>
+    </tbody>
+  </table></div>
+  <p><strong>Memory-mapped I/O</strong> means the CPU needs no special screen or keyboard instructions. It reads and writes addresses; external refresh logic synchronizes those addresses with physical devices.</p>
+
+  <details class="deep"><summary>Implementation notes: build the control, not new arithmetic</summary><div>
+    <p>The CPU project is mostly wiring and Boolean decoding. A-instruction loading, C-instruction destinations, ALU input selection, writeM, and PC control all come from instruction bits. The ALU, registers, and PC already exist.</p>
+    <p>Hack’s separate ROM and RAM simplify single-cycle execution. A classic single-memory von Neumann machine must juggle instruction and data addresses on the same memory interface, often using separate fetch and execute stages. Real machines add caches, pipelines, and many other optimizations that Hack intentionally omits.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> “running code” is a feedback loop: PC selects an instruction; instruction updates state and selects the next PC.</p></div>
+</section>
+
+<section class="chapter" id="ch6" data-section="ch6">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 6 · 17:00–19:00</span><h2>Assembler: names become addresses</h2></div><span class="time">2 min</span></div>
+  <p class="lead">An assembler is a small translator plus a symbol table. Two passes solve forward references: first learn where labels point, then emit binary.</p>
+  <p>Strip whitespace and comments. For each real instruction, translate its fields. A-instructions become a leading 0 plus a 15-bit value. C-instructions concatenate <code>111</code>, the computation bits, destination bits, and jump bits.</p>
+
+  <figure class="code">
+    <figcaption>Assembler pseudocode · two passes</figcaption>
+    <pre><code>symbols = predefinedSymbols()  <span class="comment">// R0…R15, SP, SCREEN, KBD…</span>
+romAddress = 0
+
+<span class="comment">// Pass 1: labels only; emit nothing.</span>
+for line in cleanedSource:
+  if line is "(LABEL)":
+    symbols[LABEL] = romAddress
+  else:
+    romAddress += 1           <span class="comment">// labels do not occupy ROM</span>
+
+ramAddress = 16
+<span class="comment">// Pass 2: variables and code generation.</span>
+for instruction in instructions:
+  if instruction is "@name" and name is not numeric:
+    if name not in symbols:
+      symbols[name] = ramAddress
+      ramAddress += 1
+    emit16(symbols[name])
+  else:
+    emit(encode(instruction, symbols))</code></pre>
+  </figure>
+
+  <p>Why two passes? <code>@LOOP</code> may appear before <code>(LOOP)</code>. Pass 1 counts only actual A- and C-instructions and binds each label to the next instruction’s ROM address. Pass 2 can then resolve every label. New variable symbols receive RAM addresses 16, 17, 18, and so on in first-seen order.</p>
+  <p>The clean implementation split is <strong>Parser</strong> (what the fields are), <strong>Code</strong> (their bit patterns), <strong>SymbolTable</strong> (name-to-address mapping), and a main driver. This separation returns in larger form in the VM translator and compiler.</p>
+
+  <details class="deep"><summary>Implementation notes: build in two stages</summary><div>
+    <p>First support programs with numeric constants and no symbols. Then add labels and variables. Test by comparing your <code>.hack</code> output with the supplied assembler, and by executing it on the CPU emulator.</p>
+    <p>The Hack output format is deliberately plain: each line is sixteen ASCII 0/1 characters. Line <em>n</em> loads at ROM address <em>n</em>, counting from zero.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> assemblers make code readable and relocatable by replacing human names with machine addresses.</p></div>
+</section>
+
+<section class="chapter" id="ch7" data-section="ch7">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 7 · 19:00–23:00</span><h2>VM I: expressions become stack operations</h2></div><span class="time">4 min</span></div>
+  <p class="lead">The virtual machine is a deliberate midpoint: high enough to make compilation clean, low enough to translate mechanically into assembly.</p>
+  <p>A two-tier compiler splits the problem. The front end translates Jack into VM commands. The back end translates VM commands into a particular machine language. Change the target CPU and you replace the back end, not the Jack compiler.</p>
+
+  <h3>The stack is the expression’s working memory</h3>
+  <p>Infix source like <code>(7 + 5) * 2</code> becomes postfix commands. Push operands, then apply operators to the stack top. Binary operations pop two values and push one result; unary operations replace one value with one result.</p>
+
+  <figure class="code">
+    <figcaption>VM code · every expression leaves one value on top</figcaption>
+    <pre><code>push constant 7    <span class="comment">// stack: 7</span>
+push constant 5    <span class="comment">// stack: 7 5</span>
+add                <span class="comment">// stack: 12</span>
+push constant 2    <span class="comment">// stack: 12 2</span>
+call Math.multiply 2
+                   <span class="comment">// stack: 24</span></code></pre>
+  </figure>
+
+  <p>On Hack, the stack begins at RAM address 256. <code>SP</code> points to the next free stack slot, not the current top. Push means <code>RAM[SP]=value; SP++</code>. Pop means <code>SP--; value=RAM[SP]</code>.</p>
+
+  <figure class="code">
+    <figcaption>Generated Hack assembly · the VM command “add”</figcaption>
+    <pre><code>@SP
+AM=M-1      <span class="comment">// SP--; A points at the top value</span>
+D=M         <span class="comment">// D = second operand</span>
+A=A-1       <span class="comment">// address of the first operand</span>
+M=D+M       <span class="comment">// overwrite it with the sum; SP is correct</span></code></pre>
+  </figure>
+
+  <h3>Variables become indexed segments</h3>
+  <p>The VM has no variable names. The compiler maps declarations into <code>local</code>, <code>argument</code>, <code>this</code>, <code>that</code>, <code>static</code>, and other segments. The VM translator maps each segment plus index onto RAM.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>VM segment</th><th>Hack realization</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>local i</code></td><td><code>RAM[LCL+i]</code></td><td>Current function’s locals</td></tr>
+      <tr><td><code>argument i</code></td><td><code>RAM[ARG+i]</code></td><td>Current function’s arguments</td></tr>
+      <tr><td><code>this i</code>, <code>that i</code></td><td><code>RAM[THIS+i]</code>, <code>RAM[THAT+i]</code></td><td>Object fields and array access</td></tr>
+      <tr><td><code>pointer 0/1</code></td><td>RAM 3 / 4</td><td>Set THIS / THAT base pointers</td></tr>
+      <tr><td><code>temp i</code></td><td>RAM 5 + i, for i = 0…7</td><td>Fixed scratch space</td></tr>
+      <tr><td><code>constant i</code></td><td>No storage</td><td>The literal value i</td></tr>
+      <tr><td><code>static i</code></td><td>Assembly symbol <code>File.i</code></td><td>File-scoped static variables</td></tr>
+    </tbody>
+  </table></div>
+  <p>All VM values are signed 16-bit integers. Booleans use <code>false=0</code> and <code>true=-1</code> (all bits set), which works naturally with bitwise operations.</p>
+
+  <details class="deep"><summary>Implementation notes: translation is local, state is global</summary><div>
+    <p>A Parser classifies each VM command; a CodeWriter emits its assembly template. Test templates by hand with concrete RAM and pointer values before writing generator code. Emit the source VM command as an assembly comment to make generated code easier to debug.</p>
+    <p>The price of the intermediate layer is extra instructions. A translator can later optimize patterns such as a push immediately followed by a pop. The book prioritizes a correct, clear mapping over efficient output.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> postfix evaluation removes the need for temporary expression registers. The stack encodes the expression tree’s evaluation order.</p></div>
+</section>
+
+<section class="chapter" id="ch8" data-section="ch8">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 8 · 23:00–27:00</span><h2>VM II: functions are stack discipline</h2></div><span class="time">4 min</span></div>
+  <p class="lead">Calls, returns, nested functions, and recursion all work because the same global stack holds arguments, saved frames, locals, and temporary values.</p>
+  <p>Branching is simple: <code>label</code> marks a location, <code>goto</code> jumps always, and <code>if-goto</code> pops a condition and jumps when it is nonzero. Compilers build <code>if</code> and <code>while</code> from those primitives.</p>
+
+  <h3>The call contract</h3>
+  <p>The caller pushes <em>n</em> arguments and executes <code>call f n</code>. The VM saves a return-address label plus LCL, ARG, THIS, and THAT. It points ARG at the pushed arguments, makes LCL the new stack top, and jumps to f.</p>
+
+  <figure class="figure">
+    <svg viewBox="0 0 720 390" role="img" aria-labelledby="frame-title frame-desc">
+      <title id="frame-title">Global stack during a function call</title><desc id="frame-desc">The caller's working stack is followed by arguments, a five-word saved frame, the callee's locals, and the callee's working stack.</desc>
+      <g font-family="sans-serif" font-size="15">
+        <rect x="210" y="20" width="300" height="58" fill="var(--paper)" stroke="currentColor"/><text x="230" y="55" fill="currentColor">caller’s working stack</text>
+        <rect x="210" y="78" width="300" height="48" fill="var(--panel)" stroke="currentColor"/><text x="230" y="108" fill="currentColor">arguments · ARG points here</text>
+        <rect x="210" y="126" width="300" height="88" fill="var(--paper)" stroke="currentColor"/><text x="230" y="153" fill="currentColor">saved return address</text><text x="230" y="179" fill="currentColor">saved LCL · ARG · THIS · THAT</text><text x="230" y="202" fill="oklch(0.56 0.16 35)">five-word frame</text>
+        <rect x="210" y="214" width="300" height="54" fill="var(--panel)" stroke="currentColor"/><text x="230" y="247" fill="currentColor">callee locals · zeros</text>
+        <rect x="210" y="268" width="300" height="70" fill="var(--paper)" stroke="currentColor"/><text x="230" y="303" fill="currentColor">callee working stack</text><text x="230" y="327" fill="oklch(0.48 0.09 190)">SP → next free slot</text>
+      </g>
+      <g stroke="oklch(0.56 0.16 35)" stroke-width="2" fill="none"><path d="M520 101h60"/><path d="M520 320h60"/></g>
+      <g fill="oklch(0.56 0.16 35)" font-family="sans-serif" font-size="14"><text x="588" y="106">ARG</text><text x="588" y="325">SP</text></g>
+      <text x="210" y="372" fill="currentColor" font-family="sans-serif" font-size="14">Only the callee is active; callers wait below it on the same stack.</text>
+    </svg>
+  </figure>
+
+  <figure class="code">
+    <figcaption>Call / return pseudocode · the runtime protocol</figcaption>
+    <pre><code><span class="comment">// call f nArgs</span>
+push returnAddress
+push LCL; push ARG; push THIS; push THAT
+ARG = SP - nArgs - 5
+LCL = SP
+goto f
+
+<span class="comment">// function f nVars</span>
+(f)
+repeat nVars times: push constant 0
+
+<span class="comment">// return</span>
+frame = LCL
+returnAddress = RAM[frame - 5]
+SP--                         <span class="comment">// pop return value…</span>
+RAM[ARG] = RAM[SP]           <span class="comment">// …onto argument 0</span>
+SP = ARG + 1
+THAT = RAM[frame - 1]
+THIS = RAM[frame - 2]
+ARG  = RAM[frame - 3]
+LCL  = RAM[frame - 4]
+goto returnAddress</code></pre>
+  </figure>
+
+  <p>Returning copies the callee’s result to <code>ARG[0]</code>. From the caller’s perspective, the arguments disappear and exactly one return value replaces them. Restoring the saved pointers revives the caller’s segments. Recursion needs no special rule: each call adds another independent frame.</p>
+  <p>Startup is part of the same runtime: generated bootstrap code sets <code>SP=256</code> and calls <code>Sys.init</code>. The OS’s <code>Sys.init</code> later calls <code>Main.main</code>.</p>
+
+  <details class="deep"><summary>Implementation notes: names, frames, and failure modes</summary><div>
+    <p>Function names are global and use <code>Class.function</code>. Labels are function-local, so generated assembly names must include the current function. Return-address labels must be unique across the whole generated file.</p>
+    <p>The VM contract always returns a value. Void Jack functions compile to a dummy <code>push constant 0; return</code>; <code>do</code> statements discard that value. Deep recursion consumes real RAM for every frame, which is why stack overflow is a physical resource failure, not a language mystery.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> function abstraction is a precise caller/callee contract implemented by saving and restoring a frame.</p></div>
+</section>
+
+<section class="chapter" id="ch9" data-section="ch9">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 9 · 27:00–30:00</span><h2>Jack: a small language on purpose</h2></div><span class="time">3 min</span></div>
+  <p class="lead">Jack looks like a tiny Java, but every simplification serves the next projects: writing a compiler and an OS without hiding the important ideas.</p>
+  <p>Jack is object-based: it has classes and objects, but no inheritance. A program is one or more classes in a folder. Execution begins at <code>Main.main</code>. Each class has fields and static variables plus constructors, methods, and functions.</p>
+
+  <figure class="code">
+    <figcaption>Jack · objects expose behavior and hide representation</figcaption>
+    <pre><code>class Point {
+  field int x, y;       <span class="comment">// one pair per object</span>
+  static int count;     <span class="comment">// one value per class</span>
+
+  constructor Point new(int ax, int ay) {
+    let x = ax;
+    let y = ay;
+    return this;
+  }
+
+  method int getX() {
+    return x;
+  }
+}
+
+<span class="comment">// In some Main class:</span>
+<span class="comment">// var Point p; let p = Point.new(2, 3);</span></code></pre>
+  </figure>
+
+  <ul>
+    <li><strong>Constructor:</strong> allocates and initializes an object, then explicitly returns <code>this</code>.</li>
+    <li><strong>Method:</strong> operates on a current object. <strong>Function:</strong> belongs to the class but has no current object.</li>
+    <li><strong>Statements:</strong> <code>let</code>, <code>do</code>, <code>if</code>, <code>while</code>, and <code>return</code>.</li>
+    <li><strong>Primitive types:</strong> <code>int</code>, <code>char</code>, and <code>boolean</code>, all represented by one 16-bit word.</li>
+  </ul>
+  <p>Arrays and strings come from the OS library rather than being built-in runtime machinery. <code>Array.new(length)</code> allocates storage; <code>arr[i]</code> accesses it. String literals compile into a <code>String</code> object followed by <code>appendChar</code> calls.</p>
+  <p>Jack is weakly typed and has no garbage collection. Object variables hold addresses. Programmers should dispose objects when finished, usually through a class’s <code>dispose</code> method. There is also no standard operator precedence beyond parentheses; write parentheses when order matters.</p>
+
+  <details class="deep"><summary>Implementation notes: awkward syntax, easy parsing</summary><div>
+    <p>Leading keywords such as <code>let</code> and <code>do</code> tell the parser exactly which statement follows. Explicit <code>return</code> and simple type rules keep the compiler small. These choices are not meant as language-design recommendations; they expose the machinery.</p>
+    <p>The OS API provides Math, Memory, String, Array, Screen, Output, Keyboard, and Sys. A Jack application can treat them as ordinary class calls while remaining unaware of allocation, bitmap fonts, pixel maps, or keyboard polling.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> a high-level language is not magic added to hardware. It is a set of conventions whose runtime cost is implemented elsewhere.</p></div>
+</section>
+
+<section class="chapter" id="ch10" data-section="ch10">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 10 · 30:00–33:00</span><h2>Compiler I: turn text into structure</h2></div><span class="time">3 min</span></div>
+  <p class="lead">Syntax analysis happens in two steps: tokenize characters, then recursively match tokens against a grammar.</p>
+  <p>The <strong>tokenizer</strong> removes whitespace and comments, then emits keywords, symbols, integer constants, string constants, and identifiers. The <strong>parser</strong> groups those tokens into classes, declarations, statements, and expressions.</p>
+
+  <figure class="code">
+    <figcaption>From characters to a parse tree</figcaption>
+    <pre><code>while (x &lt; 10) { let x = x + 1; }
+
+tokens:
+while  (  x  &lt;  10  )  {  let  x  =  x  +  1  ;  }
+
+whileStatement
+├── while ( expression )
+│             └── x &lt; 10
+└── { statements }
+              └── letStatement: x = x + 1</code></pre>
+  </figure>
+
+  <p>A grammar rule such as <code>whileStatement: 'while' '(' expression ')' '{' statements '}'</code> is both a specification and an implementation outline. Recursive-descent parsing gives each nontrivial rule a routine with the same shape.</p>
+
+  <figure class="code">
+    <figcaption>Recursive descent · the code mirrors the grammar</figcaption>
+    <pre><code>compileWhile():
+  expect("while")
+  expect("(")
+  compileExpression()   <span class="comment">// recursive structure</span>
+  expect(")")
+  expect("{")
+  compileStatements()   <span class="comment">// may contain another while</span>
+  expect("}")</code></pre>
+  </figure>
+
+  <p>Each routine consumes exactly its construct and leaves the tokenizer at the next token. Jack is nearly <strong>LL(1)</strong>: one current token usually selects the rule. An identifier at the start of a term needs one extra lookahead: <code>[</code> means array access, <code>(</code> or <code>.</code> indicates a call, and otherwise it is a variable.</p>
+  <p>In project 10, the parser emits XML that mirrors the parse tree. This makes structure visible before code generation exists. The same CompilationEngine routines survive in project 11; only their output changes.</p>
+
+  <details class="deep"><summary>Implementation notes: no giant syntax tree required</summary><div>
+    <p>The recursive routines can emit XML or VM code as they go; they need not store a full explicit tree. That keeps the design small. It also means good error reporting is harder, and the project assumes valid source code.</p>
+    <p>A clean build order is tokenizer → statements without expressions → expressions → array syntax. The returned count from <code>compileExpressionList</code> becomes important later because VM calls need an argument count.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> parsing is not “understanding” in a human sense. It is recovering a precise recursive structure that code generation can trust.</p></div>
+</section>
+
+<section class="chapter" id="ch11" data-section="ch11">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 11 · 33:00–37:00</span><h2>Compiler II: structure becomes behavior</h2></div><span class="time">4 min</span></div>
+  <p class="lead">Code generation walks the same syntax as the parser, but now emits VM commands. Symbol tables supply meaning; the VM supplies runtime mechanics.</p>
+
+  <h3>Names get locations</h3>
+  <p>The compiler keeps two nested symbol tables: class scope for <code>static</code> and <code>field</code>, subroutine scope for <code>local</code> and <code>argument</code>. Each entry records name, type, kind, and index. Lookup checks subroutine scope first, then class scope.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Jack kind</th><th>VM mapping</th><th>Lifetime</th></tr></thead>
+    <tbody>
+      <tr><td>static</td><td><code>static 0, 1, …</code></td><td>Program lifetime</td></tr>
+      <tr><td>field</td><td><code>this 0, 1, …</code></td><td>One set per object</td></tr>
+      <tr><td>local</td><td><code>local 0, 1, …</code></td><td>One set per call</td></tr>
+      <tr><td>parameter</td><td><code>argument 0, 1, …</code></td><td>One set per call</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Expressions become postfix</h3>
+  <p>Compile the left term, then the right term, then emit the operator. The result stays on the stack. Multiplication and division become OS calls because the Hack ALU does not implement them.</p>
+  <figure class="code">
+    <figcaption>Jack → VM · let x = (y + 2) * 3</figcaption>
+    <pre><code>push local 1          <span class="comment">// suppose y → local 1</span>
+push constant 2
+add
+push constant 3
+call Math.multiply 2
+pop local 0           <span class="comment">// suppose x → local 0</span></code></pre>
+  </figure>
+  <p>Control flow becomes labels and jumps. <code>if</code> negates its condition and branches past the true block. <code>while</code> adds a backward jump. Unique generated labels keep nested statements from colliding. A <code>do</code> statement discards the subroutine’s return value with <code>pop temp 0</code>.</p>
+
+  <h3>Objects and arrays are addresses with conventions</h3>
+  <ul>
+    <li><strong>Constructor:</strong> push the number of fields, call <code>Memory.alloc 1</code>, then <code>pop pointer 0</code> so <code>this</code> aligns with the new block. End with <code>push pointer 0; return</code>.</li>
+    <li><strong>Method call:</strong> push the target object before the explicit arguments, so the callee receives it as <code>argument 0</code>.</li>
+    <li><strong>Method entry:</strong> <code>push argument 0; pop pointer 0</code> aligns <code>this</code> with the target object.</li>
+    <li><strong>Array access:</strong> compute <code>arr+i</code>, pop it into <code>pointer 1</code>, then use <code>that 0</code>.</li>
+  </ul>
+
+  <figure class="code">
+    <figcaption>VM · let arr[i] = value, without losing the address</figcaption>
+    <pre><code>push arr; push i; add   <span class="comment">// target address on stack</span>
+push value
+pop temp 0              <span class="comment">// save value; expose target address</span>
+pop pointer 1           <span class="comment">// THAT = arr + i</span>
+push temp 0
+pop that 0              <span class="comment">// RAM[THAT] = value</span></code></pre>
+  </figure>
+  <p>The temporary is necessary. If you set <code>pointer 1</code> before evaluating the right-hand expression, a nested array access can overwrite it and lose the original destination. This is a small example of why code generation needs an evaluation-order contract, not just plausible snippets.</p>
+
+  <details class="deep"><summary>Implementation notes: the complete front end</summary><div>
+    <p>The modules are JackTokenizer, SymbolTable, VMWriter, and CompilationEngine, coordinated by JackCompiler. A subroutine begins with <code>function Class.name nVars</code>. Void functions push a dummy 0 before returning. Constants map to <code>false/null = 0</code>, <code>true = -1</code>, and <code>this = pointer 0</code>.</p>
+    <p>Jack’s uniform word size, weak typing, and lack of inheritance make classes independently compilable and method binding static. Production compilers must also handle richer types, dynamic dispatch, optimization, diagnostics, and linking.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> objects, methods, and arrays do not exist in the VM. The compiler creates those illusions using symbol mappings, pointer alignment, and calling conventions.</p></div>
+</section>
+
+<section class="chapter" id="ch12" data-section="ch12">
+  <div class="chapter-head"><div><span class="chapter-label">Chapter 12 · 37:00–40:00</span><h2>OS: package the hardware’s rough edges</h2></div><span class="time">3 min</span></div>
+  <p class="lead">The Jack OS is a standard library written in Jack itself. It fills gaps in the hardware and gives applications clean services for math, memory, text, graphics, and input.</p>
+  <p>Its eight classes are <strong>Math, Memory, String, Array, Screen, Output, Keyboard, and Sys</strong>. This is not a modern kernel: there is no process scheduling, file system, protection, or networking. The book’s focus is the algorithms beneath familiar library calls.</p>
+
+  <h3>Math should scale with bit width, not value</h3>
+  <p>Repeated-addition multiplication takes time proportional to y. Shift-and-add multiplication takes 16 iterations for 16-bit inputs, regardless of their values. Division uses binary long division; square root uses a bounded search. All run in O(n), where n is the number of bits.</p>
+
+  <figure class="code">
+    <figcaption>Binary multiplication · conceptual pseudocode</figcaption>
+    <pre><code>product = 0
+shifted = x
+repeat 16 times:          <span class="comment">// once per bit of y</span>
+  if currentBitOf(y) == 1:
+    product = product + shifted
+  shifted = shifted + shifted
+  advanceToNextBit(y)
+return product</code></pre>
+  </figure>
+  <p>Jack has no shift operator, so the implementation uses a precomputed powers-of-two array to test bits. Addition and subtraction come from hardware; multiplication, division, and square root come from this software layer.</p>
+
+  <h3>Memory, pixels, and text</h3>
+  <ul>
+    <li><strong>Heap allocation:</strong> the basic allocator only advances a free pointer. The improved allocator keeps a linked free list, using first-fit or best-fit, and recycles deallocated blocks. Adjacent free blocks may need merging to limit fragmentation.</li>
+    <li><strong>Pixel drawing:</strong> pixel (row, col) lives in word <code>SCREEN + 32*row + col/16</code>, at bit <code>col % 16</code>. Change that bit with read–modify–write; leave the other fifteen bits alone.</li>
+    <li><strong>Text output:</strong> each character is an 8 × 11 bitmap. Output prints its rows into the screen map and advances a cursor. Integers first become decimal strings.</li>
+    <li><strong>Keyboard input:</strong> read <code>RAM[KBD]</code>, wait for press and release, echo the character, and handle backspace and Enter when building a line.</li>
+  </ul>
+
+  <div class="note"><p><strong>The bootstrapping loop closes.</strong> VM startup sets SP and calls <code>Sys.init</code>. Sys initializes the other OS classes, calls <code>Main.main</code>, and halts when the application returns. The OS is written in Jack, compiled by the Jack compiler, translated by the VM implementation, assembled into Hack binary, and executed by the hardware you began with.</p></div>
+
+  <details class="deep"><summary>Implementation notes: the deliberate escape hatch</summary><div>
+    <p><code>Memory.peek</code> and <code>Memory.poke</code> use Jack’s weak typing: assign address 0 to an Array reference, then access <code>memory[address]</code>. The compiler’s array machinery turns that into direct RAM access. It is elegant for this project and unsafe by design; real operating systems protect such privileges.</p>
+    <p>The standard mapping places the heap at RAM 2048, after the stack region. Each OS class can be tested independently because the VM emulator falls back to built-in implementations for OS functions not yet supplied by your code.</p>
+  </div></details>
+  <div class="checkpoint"><span class="checkmark" aria-hidden="true">↳</span><p><strong>Keep this:</strong> system software turns “write these bits” into “draw a line,” and “find free RAM” into “create an object.”</p></div>
+</section>
+
+<section id="recap" data-section="recap">
+  <div class="final">
+    <span class="chapter-label">The 60-second recap</span>
+    <h2>Follow one object all the way down.</h2>
+    <p>When Jack runs <code>let p = Point.new(2, 3)</code>, the compiler resolves p and Point.new, emits VM commands, and asks Memory.alloc for two words. The VM translator turns those commands into Hack assembly and manages the call frame. The assembler resolves symbols into binary. The CPU fetches each instruction, routes its control bits, and uses the ALU, registers, RAM, and clock to change state.</p>
+    <p>Nothing in that chain is mysterious once the contracts are visible.</p>
+    <div class="key"><strong>The book’s core lesson:</strong> complex systems become understandable when every layer has a small interface, a known implementation strategy, and tests that connect the two.</div>
+    <h3>What this first read intentionally compresses</h3>
+    <p>The appendices are references for HDL, chip APIs, test scripts, character codes, and OS calls. The book’s perspective sections also point beyond Hack: transistor-level implementation, faster arithmetic, FPGA realization, richer languages, translator optimization, storage, communications, and modern OS services.</p>
+    <p><strong>The right next step is not more reading.</strong> Pick one layer and implement its project. Building a Mux, writing an assembler pass, or translating one VM command will expose more than another hour of summaries.</p>
+  </div>
+</section>
+</main>
+</div>
+
+<footer class="footer">
+  <span>Distilled from <em>The Elements of Computing Systems</em>, 2nd ed. · Noam Nisan &amp; Shimon Schocken</span>
+  <a href="#top">Back to top ↑</a>
+</footer>
+<script>
+const progressBar = document.querySelector('#progress-bar');
+const navLinks = [...document.querySelectorAll('.toc a')];
+const sections = [...document.querySelectorAll('[data-section]')];
+const mobileContents = document.querySelector('.mobile-contents');
+const linksById = new Map(
+  navLinks.map((link) => [link.getAttribute('href').slice(1), link])
+);
+
+function updateActiveChapter() {
+  const readingLine = Math.min(220, window.innerHeight * 0.3);
+  let current = sections[0];
+  for (const section of sections) {
+    if (section.getBoundingClientRect().top <= readingLine) current = section;
+    else break;
+  }
+  navLinks.forEach((link) => link.removeAttribute('aria-current'));
+  linksById.get(current.id)?.setAttribute('aria-current', 'location');
+}
+
+let ticking = false;
+function updateScrollState() {
+  const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = scrollable > 0 ? window.scrollY / scrollable : 0;
+  progressBar.style.transform = `scaleX(${Math.min(1, Math.max(0, progress))})`;
+  updateActiveChapter();
+  ticking = false;
+}
+
+function requestScrollUpdate() {
+  if (!ticking) {
+    requestAnimationFrame(updateScrollState);
+    ticking = true;
+  }
+}
+
+document.querySelectorAll('.mobile-contents a').forEach((link) => {
+  link.addEventListener('click', () => mobileContents.removeAttribute('open'));
+});
+
+window.addEventListener('scroll', requestScrollUpdate, { passive: true });
+window.addEventListener('resize', requestScrollUpdate);
+updateScrollState();
+</script>
+</body>
+</html>

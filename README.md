@@ -5,6 +5,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
+| [From NAND to Software — The Elements of Computing Systems in 40 Minutes](books/elements-computing-systems.html) | English | 65 KB |
 | [nano-vLLM 架构与源码导读](books/nano-vllm-architecture.html) | 中文 / English | 340 KB |
 | [The Reversible Harness: Inside DeepSeek Harness](books/the-reversible-harness.html) | English | 1.0 MB |
 | [Inside DeepSeek Harness](books/inside-deepseek-harness.html) | English | 381 KB |
