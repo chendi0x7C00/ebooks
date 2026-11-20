@@ -11,6 +11,7 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 | [DeepInfer from source](books/deepinfer-from-source.html) | English | 534 KB |
 | [Codex from Source](books/codex-source-book.html) | English | 4.8 MB |
 | [手把手教你构建 C 语言编译器](books/build-a-c-compiler.html) | 中文 | 272 KB |
+| [Following a Function Through LLVM](books/following-a-function-through-llvm.html) | English | 277 KB |
 | [Down to the Wire — Python Sockets from First Principles](books/python-sockets-from-first-principles.html) | English | 180 KB |
 | [Writing Modern Python](books/writing-modern-python.html) | English | 162 KB |
 | [Netcode From First Principles](books/netcode-from-first-principles.html) | English | 98 KB |
