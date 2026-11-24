@@ -5,6 +5,8 @@ vibe coding 期间生成的 HTML 电子书，发布在 GitHub Pages：
 
 | 书名 | 语言 | 大小 |
 |---|---|---|
+| [Two requests. How many jobs? Fourteen open questions about LLMs](books/llm-open-questions-deep-dive-en.html) | English | 63 KB |
+| [大语言模型的十四个开放问题](books/llm-open-questions-deep-dive.html) | 中文 | 64 KB |
 | [From NAND to Software — The Elements of Computing Systems in 40 Minutes](books/elements-computing-systems.html) | English | 65 KB |
 | [nano-vLLM 架构与源码导读](books/nano-vllm-architecture.html) | 中文 / English | 340 KB |
 | [The Reversible Harness: Inside DeepSeek Harness](books/the-reversible-harness.html) | English | 1.0 MB |
